@@ -111,3 +111,19 @@ Claude Code のスキル（`/kiro-*` コマンド）を使い、要件 → 設�
 - 要件 → 設計 → タスク → 実装 の各フェーズで人が承認してから次へ進みます。`-y` での承認省略は意図して使う場合だけにします。
 - ステアリングは常に最新に保ち、`/kiro-spec-status` で整合を確認します。
 - 詳しくは [`CLAUDE.md`](CLAUDE.md) を参照してください。
+
+## ライセンス
+
+[GNU General Public License v3.0 or later](LICENSE)（SPDX: `GPL-3.0-or-later`）
+
+### 第三者のソフトウェアとデータ
+
+このリポジトリには含めず、実機の初期設定で取得または導入します。
+
+| 名前 | 用途 | ライセンス |
+| --- | --- | --- |
+| [SunFounder robot-hat](https://github.com/sunfounder/robot-hat) | Robot HAT の操作 | GPL-3.0 |
+| [HTS voice tohoku-f01](https://github.com/icn-lab/htsvoice-tohoku-f01) | 声。© 2015 Intelligent Communication Network (Ito-Nose) Laboratory, Tohoku University | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| [Open JTalk](https://open-jtalk.sourceforge.net/) | 音声合成 | Modified BSD |
+| [YuNet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet)（OpenCV Zoo） | 顔検出のモデル | MIT |
+| [SFace](https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface)（OpenCV Zoo） | 顔認識のモデル | Apache-2.0 |
