@@ -67,7 +67,7 @@
 ### Revalidation Triggers
 次の変更をしたら、下流の機能のスペックで、つなぎ目を確かめ直す。
 - `Feature`・`FeatureSpec`・`FeatureContext`・`Lease`・各 Handle の形や意味の変更
-- `Resource` の種類の追加と削除、優先度の規則、中断の猶予（2 秒）の変更
+- `Resource` の種類の追加と削除、優先度の帯（`Priority`）の値と意味、中断の猶予（2 秒）の変更
 - イベント（`QuietChanged`、`TimeSynced`）の追加と変更
 - 設定ファイルの構造（トップレベルのキーの規則、`enabled` の扱い）の変更
 - 状態とキャッシュの保存先、`StateStore` の書式の変更
@@ -170,7 +170,7 @@ src/osekkai/
 ├── version.py                         # 版の文字列（git describe、だめならパッケージの版）
 ├── core/
 │   ├── __init__.py                    # 機能に公開する型の再公開（Feature、FeatureSpec、FeatureContext、Resource、Lease など）
-│   ├── types.py                       # 共通の値の型（Resource、Face、Glyph、ButtonPress、FeatureId）と例外
+│   ├── types.py                       # 共通の値の型（Resource、Priority、Face、Glyph、ButtonPress、FeatureId）と例外（LeaseRevoked、ResourceBusy、DeviceUnavailable、MotionAborted）
 │   ├── ports.py                       # デバイスのポート（Protocol）
 │   ├── paths.py                       # XDG のパス（config、state、cache、data、runtime）
 │   ├── config.py                      # ConfigLoader、CoreConfig、FeatureConfig、ConfigReport
@@ -414,7 +414,15 @@ stateDiagram-v2
 
 **Responsibilities & Constraints**
 - 機能は `FeatureSpec`（名前・優先度・使う資源・設定のモデル）を持つクラスとして、エントリーポイント `osekkai.features` に登録する
-- 優先度は 1 以上の整数。数が大きいほど優先する。0 は基盤の内部（待機画面）が使う
+- 優先度は、基盤が定める**優先度の帯**（`Priority`）から選ぶ。数が大きいほど優先する。帯は機能の名前を含まない、振る舞いの種類による分類である
+  | 帯 | 値 | 使う場面（例） |
+  |----|----|----------------|
+  | `SCHEDULED` | 80 | 決まった時刻の声かけ・予告（毎日の習慣を守る。`product.md` の原則 3） |
+  | `INTERACTIVE` | 50 | 子どもとのその場のやり取り（会話・遊び） |
+  | `REMOTE` | 30 | 遠隔からの操作（ラジコン） |
+  | `BACKGROUND` | 10 | 見守り・待機中の振る舞い（顔を見つけて首を向ける、あいさつ） |
+  | `IDLE` | 0 | 基盤の内部だけ（待機画面）。機能は使えない |
+- 同じ帯の中で順番を付けたいときは、帯の値に 1〜9 を足してよい（例: `Priority.SCHEDULED + 1`）。帯をまたぐ値は使わない
 - `run()` は機能専用のスレッドで呼ばれる。`stop` のイベントが立ったら、速やかに戻る
 
 **Contracts**: Service [x]
@@ -425,10 +433,13 @@ class FeatureConfig(BaseModel):
     model_config = ConfigDict(extra="allow")   # 知らない項目は警告にする（11.6）
     enabled: bool = True
 
+class Priority(IntEnum):
+    IDLE = 0; BACKGROUND = 10; REMOTE = 30; INTERACTIVE = 50; SCHEDULED = 80
+
 @dataclass(frozen=True)
 class FeatureSpec:
     name: str                                   # 設定のトップレベルのキー、状態の保存先の名前
-    priority: int                               # 1 以上
+    priority: int                               # Priority の帯（10〜89）。IDLE（0）は使えない
     resources: frozenset[Resource]              # 使う可能性のある資源（申告。acquire はこの中だけ）
     config_model: type[FeatureConfig] = FeatureConfig
 
@@ -466,7 +477,7 @@ class FeatureContext(Protocol):
 
 **Implementation Notes**
 - Integration: エントリーポイントの値は `"osekkai.features.routine:RoutineFeature"` の形。テストでは、Feature のクラスのリストを直接 `FeatureRegistry` に渡す
-- Validation: `spec.name` は `^[a-z][a-z0-9_]*$`、`core` は予約。優先度は 1 以上
+- Validation: `spec.name` は `^[a-z][a-z0-9_]*$`、`core` は予約。優先度は `Priority` の帯の値に 0〜9 を足した値（10〜89）でなければ登録を断り、ログに残す
 - Risks: 機能の作者が `stop` を見ない。FeatureSupervisor の停止の待ちに時間の上限を設けて対処する（2.3）
 
 #### FeatureRegistry
@@ -600,6 +611,7 @@ class Arbiter:
 
 **Responsibilities & Constraints**
 - Handle は Lease の中でだけ作られ、操作のたびにリースが有効かを確かめる。無効なら `LeaseRevoked` を投げる
+- 複数の段階がある動き（`nod`、`look_around`、`dance`）は、**段階ごとに**リースが有効か、中断が通知されていないかを確かめる。中断が通知されたら残りの段階を行わず、`LeaseRevoked` を投げる（呼び出しの始めだけの確認にしない）
 - デバイスが使えない（1.6）ときは `DeviceUnavailable` を投げる。機能はそれを捕まえて、機能を縮めて続けてよい
 
 **Contracts**: Service [x]
@@ -712,6 +724,9 @@ def center(text: str, width: int = 16) -> str: ...
   - **look_around**: パン −30 → 30 → 0 を 0.35 秒ずつ
   - **sleepy**: パン 0、チルト −30
   - **dance**: 6 拍、0.25 秒ずつ。パンは ±30、ステアリングは ∓25、チルトは 15。`allow_drive_in_dance` が真かつ DRIVE を借りているときだけ、速さ 20 で前後に動く。最後にモーターを止め、home に戻る（8.3）
+- 複数の段階がある動きは、呼び出し元から渡された「続けてよいか」の判定（`should_continue: Callable[[], bool]`。Handle がリースの状態から作る）を、段階ごとに確かめる
+  - 偽になったら、その時点でモーターを止めて中止し、`MotionAborted` を投げる（Handle が `LeaseRevoked` に変える）
+  - 中止のときは home に戻さない。首は次の持ち主か、Arbiter の「首が空いたら正面に戻す」（4.8）に任せる
 - `emergency_stop()`:
   - ロックを待たずに、モーターの PWM を 0 にする
   - シグナルハンドラと Arbiter の中断から呼ぶ（2.1、4.5）
@@ -722,10 +737,10 @@ def center(text: str, width: int = 16) -> str: ...
 class MotionService:
     def look(self, pan: float, tilt: float) -> None: ...
     def home(self) -> None: ...
-    def nod(self, times: int = 2) -> None: ...
-    def look_around(self) -> None: ...
+    def nod(self, times: int, should_continue: Callable[[], bool]) -> None: ...
+    def look_around(self, should_continue: Callable[[], bool]) -> None: ...
     def sleepy(self) -> None: ...
-    def dance(self, *, wheels: bool) -> None: ...
+    def dance(self, *, wheels: bool, should_continue: Callable[[], bool]) -> None: ...
     def drive(self, steering: float, speed: int) -> None: ...
     def stop(self) -> None: ...
     def emergency_stop(self) -> None: ...
@@ -954,7 +969,10 @@ class CacheManager:
   - 各段階の失敗はログに残し、次の段階に進む
 - `safe_stop`（`python -m osekkai.core.safe_stop`）:
   - systemd の `ExecStopPost=` 用
-  - 設定と機能を読まず、HAT のモーターの PWM（P12、P13）を 0 にし、方向ピンを Low にして終える
+  - 設定と機能を読まない。モーターの方式によらず止まるよう、次を順に行う。各段階の失敗は記録して次へ進む
+    1. モーターに関わりうる PWM のチャンネル（タイマーの組 P12〜P15）をすべて 0 にする
+    2. 方向ピン（D4、D5）を Low にする
+    3. MCU をリセットする
   - 実機のアダプタがなければ、何もせずに終える
 
 **Contracts**: Service [x] / State [x]
@@ -1035,7 +1053,8 @@ class Unavailable:
   - 左モーターは P13＋D4（BCM 23）、右モーターは P12＋D5（BCM 24）。PWM は周期 4095、プリスケーラ 10
   - 速さの変換: 速さ s を、デューティ `|s|/2 + 50` %（0 は 0 %）にする
   - モーターの方式: `motor_driver` が `auto` なら、HAT の版で `pwm_dir`（v4）か `dual_pwm`（v5）を選ぶ
-  - `stop_now()` は、ロックの取得を 50 ms で諦め、それでも P12 と P13 に 0 を書く（シグナルハンドラから呼ぶため）
+  - `stop_now()` は、ロックの取得を 50 ms で諦め、それでもモーターの PWM（方式が `dual_pwm` なら、その方式で使うすべてのチャンネル）に 0 を書く（シグナルハンドラから呼ぶため）
+  - **実装の順番の制約**: モーターのアダプタ（`PiCarXBody` のモーター部分と `safe_stop`）は、実機で HAT の版とモーターの割り当て（v5 の PWM 2 本のチャンネル）を確かめる調査の後に作る。調査の結果は `research.md` に記録し、この節の割り当てを確定させる
 - `gpio.py`:
   - lgpio で gpiochip を開く（環境変数 `ROBOT_HAT_GPIOCHIP` があればその番号）
   - USR（BCM 25、プルアップ）と追加のボタン（`D0`〜`D16` の割り当て表）の立ち下がりを、callback で通知する
@@ -1188,6 +1207,8 @@ core:
   - 範囲の外の向きを端に収める（8.1）
   - 調整値を加える（8.5）
   - 許可がなければダンスでモーターに速さを出さない（8.3）
+  - 段階のある動きの途中で中断が通知されたら、残りの段階を行わずに止まる（4.4、4.9）
+- `FeatureRegistry`: 帯の外の優先度（例: 0、95）の機能を断る（3.1）
 
 ### Integration Tests
 - Runtime の起動（偽のデバイス一式）:
@@ -1220,6 +1241,7 @@ core:
 - 実機:
   - 起動で正面・待機画面・起動の声が出る
   - `systemctl --user stop` でモーターが止まり、首が正面に戻る
+  - HAT の版とモーターの割り当てを確かめる（モーターのアダプタを作る前の調査）
   - 走行中に `kill -9` しても、`ExecStopPost` でモーターが止まる
   - USR ボタンの押下がログに出る
 

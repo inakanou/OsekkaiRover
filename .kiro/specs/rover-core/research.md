@@ -187,6 +187,21 @@
   - pydantic なら、機能ごとに既定値と範囲を宣言でき、エラーの場所も分かる
   - XDG は十数行で読め、依存を増やさずに済む
 
+### Decision: 優先度は基盤が定める帯から選ぶ（設計の確認で追加）
+- **Context**: `/kiro-validate-design` の指摘。優先度が「1 以上の整数」だけだと、8 つのスペックが勝手に値を選び、「日課が最優先」を保証できない
+- **Selected Approach**: `Priority` の帯（SCHEDULED 80 > INTERACTIVE 50 > REMOTE 30 > BACKGROUND 10、IDLE 0 は内部）を基盤が定める。帯は振る舞いの種類で、機能の名前を含まない。同じ帯の中では 0〜9 を足して順番を付けられる
+- **Rationale**: 基盤は機能を知らないまま、機能の作者が迷わず値を選べる。`product.md` の優先の原則と一致する
+
+### Decision: 段階のある動きは段階ごとに中断を確かめる（設計の確認で追加）
+- **Context**: `/kiro-validate-design` の指摘。ダンスなどが 1 回の呼び出しで 1.5 秒続き、取り上げた後も首とタイヤを動かし続けるおそれがあった（サンプルの不具合と同じ）
+- **Selected Approach**: MotionService の段階のある動きは `should_continue` を段階ごとに確かめ、偽なら止めて中止する
+
+### Decision: 安全停止はモーターの方式によらず止める（設計の確認で追加）
+- **Context**: `/kiro-validate-design` の指摘。HAT v5（PWM 2 本）のチャンネルが未確認で、P12・P13 を 0 にするだけでは止まらないおそれがある
+- **Selected Approach**:
+  - `safe_stop` は、P12〜P15 を 0 → 方向ピン Low → MCU リセット、の順に行う
+  - モーターのアダプタは、実機で割り当てを確かめる調査の後に作る
+
 ## Risks & Mitigations
 - **プロセスが落ちても PWM が残る** — `ExecStopPost` の安全停止と、起動時の MCU リセットで防ぐ。実機で SIGKILL を試して確かめる
 - **HAT v5 のモーターの方式の違い** — 設定で `auto`（UUID で判定）、`pwm_dir`、`dual_pwm` を選べるようにする。実機で確かめる

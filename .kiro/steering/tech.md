@@ -12,7 +12,7 @@
   - 優先度と使う資源を自分で申告する
   - 基盤は個々の機能を知らない
 - **アダプタ**:
-  - 実機用（robot_hat、LCD、Open JTalk、カメラ、マイク、Claude API など）と、テストや PC での実行に使う偽物（fake）を用意する
+  - 実機用（Robot HAT、LCD、Open JTalk、カメラ、マイク、Claude API など）と、テストや PC での実行に使う偽物（fake）を用意する
   - どちらもポートを実装する
 - **調停**:
   - 資源は 1 か所が持つ。機能は資源を「借りて返す」
@@ -37,7 +37,7 @@ features/* ──(Feature の契約・ポート)──> core ──(ポート)�
 
 | 用途 | ライブラリ | 決まりごと |
 | --- | --- | --- |
-| Robot HAT（サーボ・モーター・ピン・センサー） | SunFounder `robot_hat`（GitHub の 2.5.x、固定したコミット） | PyPI の `robot-hat` は別物なので使わない。`picarx` には依存しない |
+| Robot HAT（サーボ・モーター・ピン・センサー） | 自前の薄い部品（`smbus2` で HAT のマイコンのレジスタ、`lgpio` で GPIO） | SunFounder の `robot_hat` と `picarx` は使わない（読み込みの副作用、スレッドから安全でない、エラーを捨てる）。レジスタの仕様は robot_hat 2.5.x のコードを参照する（同じ GPL 系） |
 | LCD | `smbus2` | LCD と HAT は同じ I2C バスを使うので、書き込みはロックする |
 | 声 | Open JTalk（apt、サブプロセス）＋ PipeWire（`paplay`） | 再生先のデバイスは明示する |
 | 音声の文字化 | `faster-whisper` | 日本語に固定し、VAD を使う。実機の中だけで処理する |
@@ -45,9 +45,9 @@ features/* ──(Feature の契約・ポート)──> core ──(ポート)�
 | 会話 | `anthropic`（Python SDK） | 呼び出し方は設計の段階で claude-api のスキルで確かめる |
 | ラジコンの Web | Flask | 家の LAN だけに公開する |
 | 祝日 | `jpholiday` | 毎年、法改正に追随しているかを確かめる |
-| 設定 | PyYAML | |
+| 設定 | PyYAML、pydantic v2（PyPI） | 機能ごとに `BaseModel` で項目・既定値・範囲を定める。Bookworm の apt の pydantic は v1 なので使わない |
 
-ハードのライブラリ（`robot_hat`、`picamera2`、`smbus2`、`faster_whisper`、`anthropic`、`cv2`）は、**アダプタのモジュールの中だけ**で読み込みます。基盤・機能・テストからは読み込みません（CI で読み込めない、または読み込みに時間がかかるため）。
+ハードのライブラリ（`smbus2`、`lgpio`、`numpy`、`picamera2`、`faster_whisper`、`anthropic`、`cv2`）は、**アダプタのモジュールの中だけ**で読み込みます。基盤・機能・テストからは読み込みません（CI で読み込めない、または読み込みに時間がかかるため）。
 
 ## Development Standards
 
@@ -94,8 +94,10 @@ features/* ──(Feature の契約・ポート)──> core ──(ポート)�
 | 記録は一時ファイルに書いてから置き換える | 停電で記録が壊れ、起動できなくなるのを防ぐ |
 | 1 日の上限など、再起動をまたぐ状態は保存する | 再起動で制限が外れないようにする |
 | 子どもの名前は外部に送らず、ロボットの中で差し込む | 個人データの保護 |
-| SIGTERM と SIGINT の両方で、安全に止める | systemd の停止でモーターが止まらない危険を防ぐ |
+| SIGTERM と SIGINT の両方で、安全に止める。systemd の `ExecStopPost` でも必ずモーターを止める | systemd の停止でモーターが止まらない危険を防ぐ。HAT のマイコンは、プロセスが落ちても PWM を保つため |
+| HAT は自前の薄い部品で操作する | robot_hat は読み込みの副作用が重く、スレッドから安全に使えず、I2C のエラーを黙って捨てる（`rover-core` の調査） |
 | 依存関係は extras に分ける（実機用・音声・カメラ・会話・ラジコン） | CI と PC で、実機用のライブラリなしに入れられるようにする |
 
 ---
 _Document standards and patterns, not every dependency_
+_updated_at: 2026-11-03（rover-core の設計: HAT の自前の部品、pydantic v2、ExecStopPost）_
