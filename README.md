@@ -10,11 +10,13 @@ Claude Code のスキル（`/kiro-*` コマンド）を使い、要件 → 設�
 ```
 .
 ├── CLAUDE.md                 # Claude Code 向けのプロジェクト指示（開発ルール・ワークフロー）
+├── .github/                  # CI（GitHub Actions）と PR テンプレート
+├── scripts/                  # 開発用スクリプト
 ├── .claude/
 │   └── skills/kiro-*/        # /kiro-* コマンドの本体（SKILL.md）
 └── .kiro/
     ├── settings/templates/   # ステアリング・スペックのテンプレート
-    ├── steering/             # プロジェクト全体の方針（product / tech / structure）※未作成
+    ├── steering/             # プロジェクト全体の方針（git-workflow。product / tech / structure は未作成）
     └── specs/                # 機能ごとのスペック（requirements / design / tasks）※未作成
 ```
 
@@ -60,6 +62,19 @@ Claude Code のスキル（`/kiro-*` コマンド）を使い、要件 → 設�
    - 最後に `/kiro-validate-impl <feature>` で機能全体を検証します。
 
 5. **進捗を見る**: `/kiro-spec-status <feature>`（いつでも実行できます）
+
+## 開発の流れ（ブランチ・PR・リリース）
+
+詳しくは [`.kiro/steering/git-workflow.md`](.kiro/steering/git-workflow.md) を参照してください。
+
+- `main` と短命な作業ブランチ（`feat/<feature>`、`fix/*`、`docs/*`、`chore/*`）だけを使います。`main` への直接 push はできません。
+- PR は CI の `guard`（禁止ファイルと秘密情報のチェック）が通ってから squash でマージします。
+- ハードに関わる変更は、マージ前に実機（Raspberry Pi 5）で確認します。
+- 実機に入れるのはタグ `vX.Y.Z` を付けた版だけです。
+- 公開リポジトリなので、個人設定・記録・顔の特徴・写真や音声・API キー・pin は絶対にコミットしません。手元で確かめるには次を実行します。
+  ```sh
+  bash scripts/check-forbidden-files.sh
+  ```
 
 ## 開発ルール
 

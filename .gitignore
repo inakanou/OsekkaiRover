@@ -1,0 +1,33 @@
+# Personal settings (child's name, times, remote pin) and records — never commit
+config/local.yaml
+data/
+
+# Face features (biometric data) must never be committed
+*.npz
+
+# Audio, recordings, camera images
+*.wav
+*.mp3
+*.h264
+*.mp4
+*.jpg
+*.jpeg
+*.png
+!docs/**/*.png
+!docs/**/*.jpg
+
+# Archives (e.g. source bundles shared for review)
+*.zip
+
+# Secrets
+.env
+*.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# lgpio notify files
+.lgd-nfy*

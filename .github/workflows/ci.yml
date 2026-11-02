@@ -1,0 +1,26 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # Required check for main. Keeps personal data and secrets out of this public repo.
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # gitleaks scans every commit in the PR
+      - name: 禁止ファイルのチェック
+        run: bash scripts/check-forbidden-files.sh
+      - name: 秘密情報のチェック (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # lint と test のジョブは、サンプルのコードを取り込むスペックで追加する
