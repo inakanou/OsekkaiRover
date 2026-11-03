@@ -23,7 +23,7 @@ core:
     pan_range: [-80.0, 80.0]      # 首の左右の範囲（度）
     tilt_range: [-30.0, 60.0]     # 首の上下の範囲（度）
     # 調整値（実機に合わせて直す。-20〜20 度）
-    calibration:
+    calibration:                  # 正面の調整値（度）。pan と tilt は SunFounder の picar-x.conf と符号が逆
       steering: 0.0
       pan: 0.0
       tilt: 0.0

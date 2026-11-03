@@ -259,6 +259,7 @@
 - [ ] 7.4 サーボのアダプタを作る
   - パン・チルト・ステアリングの割り当て、50 Hz、パルス幅と角度の変換、パンとチルトの符号の反転を入れる
   - 完了の状態: mypy が通り、実機で首とステアリングが指示の向きに動き、正面に戻る
+  - _実機確認待ち: コードとレビューは済み（robot-hat 2.5.x と picar-x 2.1.x と照合済み）。実機で首とステアリングの向きと正面への復帰を確かめたら完了にする_
   - _Depends: 7.1_
   - _Requirements: 8.1, 8.4, 8.5_
 
@@ -344,3 +345,4 @@
 - 7.1: 実機の部品は `I2cBus`（`lock` を公開）・`HatMcu`（0x14→0x15→0x16、`reset()`、`hat_version()`）・`Gpio`・`HatButtons`・`HatLed`・`enable_speaker`。追加のボタンのピンが、リセット（D8）・LED（D14）・スピーカー（D15/D10）とぶつかっても今は断らない（後で ValueError にしてよい）。テストはハードのライブラリを読み込まずに、偽物を渡して純粋な部分だけを確かめる
 - 7.2: `Lcd1602Display(bus, glyphs: Mapping[Glyph, Sequence[int]], *, address=0x27, sleep=...)`。作るときに初期化と絵の文字の登録を行う（OSError なら 7.7 で Unavailable にする）。絵の文字の表は `core.lcd_text.GLYPH_PATTERNS` を組み立ての場所（`__main__`）から 7.7 の `build_pi_devices` に渡す
 - 7.3: `OpenJTalkSynth`・`PaplayPlayer`・`TimedatectlTimeSync`。失敗の例外にはコマンド名と終了コードだけを入れ、文章も stderr も入れない（時間切れは `from None`）。合成の時間の上限は 30 秒、再生は 60 秒。同期の判定のログは、判定が変わったときだけ INFO で出す
+- 7.4: `PiCarXServos(hat)`（P0 パン・P1 チルト・P2 ステアリング、50 Hz、プリスケーラ 352、パンとチルトは符号を反転）。調整値は MotionService が論理の向きで足すので、pan と tilt の値は picar-x.conf と符号が逆（設定の見本に書いた）。モーターは 7.6 で同じモジュールに別のクラスとして足す
