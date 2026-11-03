@@ -165,7 +165,7 @@
   - _Requirements: 9.4, 9.5, 9.6_
 
 - [ ] 5. 機能の契約・発見・監督
-- [ ] 5.1 機能の契約と、機能に渡す道具を作る
+- [x] 5.1 機能の契約と、機能に渡す道具を作る
   - 機能の申告（名前・優先度・使う資源・設定のモデル）と、機能の型（作り方と、停止の合図を受けて動く口）を定める
   - 機能に渡す道具を作る: 時計、その機能だけの保存先とキャッシュの置き場所、ロガー、資源を借りる口（自分の名前と優先度を埋め、申告した資源の外は断る）、ボタンの待ち手の登録と解除、待機画面の短い情報と顔、静かな状態の切り替えと確認、イベントの購読
   - 道具はほかの機能の保存先・キャッシュ・リースに触れる手段を持たない
@@ -328,3 +328,4 @@
 - 3.7: `ButtonRouter(port, clock)` を先に作って `Arbiter(..., buttons=router)` に渡す（Arbiter が `router.bind(self)` を呼ぶ）。Runtime は `router.start()`・`router.close()` を呼ぶ。機能の道具（5.1）の `want_button_presses` は `router.add_waiter(spec.name, spec.priority, callback)` を呼ぶ。待ち手の callback はボタンのポートのスレッドで呼ばれる。`Arbiter.lease_for(resource)` を公開している
 - 4.1: 待機画面の 1 行目は `MM/DD HH:MM`（11 セル）＋ 1 セルの空き ＋ 短い情報（右寄せ、4 セルまで）。`set_info` は 6 セルまで受け取るが、出るのは 4 セル（design の「6 セルまで」は 16 セルに収まらないための読み替え）。待機画面の口: `start(run_thread=True)`・`stop()`・`tick()`・`set_info`・`set_face(face, gaze)`・`set_quiet(bool)`。静かな状態の間も優先度 0 で画面を持ち、空白とバックライト消灯を出す。Runtime（6.2）が start と stop、機能の道具（5.1）が set_info と set_face、静かな状態（4.2）が set_quiet を呼ぶ
 - 4.2: `QuietMode(idle, bus, store, clock)`。store は `StateStore.for_feature(paths, "core", clock)`。起動時は保存しない（保存は機能が実際に切り替えたときだけ）。続けて再起動しても「静かだった」の印は消えない（夜に画面が点かない側に倒す）。機能の道具（5.1）の `request_quiet`・`end_quiet`・`is_quiet`・`was_quiet_before_restart` はここに任せる
+- 5.1: 機能の道具は `CoreFeatureContext(spec, *, arbiter, buttons, idle, quiet, bus, clock, paths, cache)`（作るときに `validate_spec` で確かめ、だめなら ValueError）。機能の発見（5.2）は `validate_spec(spec) -> list[str]` を、設定の読み込み（6.2）は `feature_models(specs)` を使う。機能が使う型は `osekkai.core` から読み込める
