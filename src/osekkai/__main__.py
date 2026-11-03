@@ -2,6 +2,10 @@
 
 引数を解析し、ログ・パス・アダプタ・機能の発見を組み立てて Runtime に渡す。
 アダプタを選ぶのはここだけにする。
+
+単一の実行のロックは、デバイスを作る前に取って Runtime に渡す（1.7）。ほかが動いていれば
+デバイスを 1 つも作らずに 75 で終える（動いている方の LCD・サーボ・モーター・HAT に触らない）。
+`--say` のときは声のデバイスだけを作る（13.5）。
 """
 
 from __future__ import annotations
@@ -20,12 +24,13 @@ from typing import Final, TextIO
 from osekkai.core.clock import SystemClock
 from osekkai.core.config import ConfigLoader, CoreConfig
 from osekkai.core.feature import feature_models
+from osekkai.core.instance_lock import InstanceLock
 from osekkai.core.lcd_text import GLYPH_PATTERNS
 from osekkai.core.logging_setup import configure_logging
 from osekkai.core.paths import Paths
 from osekkai.core.ports import Devices
 from osekkai.core.registry import FeatureRegistry
-from osekkai.core.runtime import ExitCode, Runtime
+from osekkai.core.runtime import ExitCode, Runtime, report_already_running
 
 logger = logging.getLogger("osekkai.cli")
 
@@ -57,23 +62,30 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
 
 
 def build_devices(args: argparse.Namespace, paths: Paths, registry: FeatureRegistry) -> Devices:
-    """アダプタを選んでデバイス一式を作る。"""
+    """アダプタを選んでデバイスを作る。単一の実行のロックを取ってから呼ぶ。"""
     if args.fake_hardware:
         from osekkai.adapters.fake.console import build_console_devices
 
         return build_console_devices(time)
-    return _build_pi_devices(paths, registry, args.config)
+    return _build_pi_devices(paths, registry, args.config, voice_only=args.say is not None)
 
 
-def _build_pi_devices(paths: Paths, registry: FeatureRegistry, config: Path | None) -> Devices:
+def _build_pi_devices(
+    paths: Paths, registry: FeatureRegistry, config: Path | None, *, voice_only: bool
+) -> Devices:
     try:
         module = importlib.import_module(PI_ADAPTER_MODULE)
     except ImportError as error:
         raise HardwareUnavailable(type(error).__name__) from error
     core = _core_config(paths, registry, config)
     try:
-        # 絵の文字の表は基盤のもの。アダプタは core.lcd_text を読み込まないので、ここから渡す
-        devices: Devices = module.build_pi_devices(core, GLYPH_PATTERNS)
+        devices: Devices
+        if voice_only:
+            # 話して終わるには声だけが要る（LCD・サーボ・モーター・マイコンに触らない）
+            devices = module.build_pi_voice_devices(core)
+        else:
+            # 絵の文字の表は基盤のもの。アダプタは core.lcd_text を読み込まないので、ここから渡す
+            devices = module.build_pi_devices(core, GLYPH_PATTERNS)
     except ImportError as error:  # ハードのライブラリがない（PC）
         raise HardwareUnavailable(type(error).__name__) from error
     return devices
@@ -101,6 +113,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     configure_logging(args.verbose)
     paths = Paths()
     registry = FeatureRegistry()
+    lock = InstanceLock(paths.lock_file)
+    if not lock.acquire():
+        return int(report_already_running())  # デバイスは 1 つも作らない（1.7）
+    try:
+        return _run_locked(args, paths, registry, lock)
+    finally:
+        lock.release()  # Runtime も放す。2 回呼んでもよい
+
+
+def _run_locked(
+    args: argparse.Namespace, paths: Paths, registry: FeatureRegistry, lock: InstanceLock
+) -> int:
     try:
         devices = build_devices(args, paths, registry)
     except HardwareUnavailable as error:
@@ -109,7 +133,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return int(ExitCode.FATAL)
 
     clock = SystemClock(devices.timesync)
-    runtime = Runtime(devices, paths, clock, registry, config_override=args.config)
+    runtime = Runtime(devices, paths, clock, registry, config_override=args.config, lock=lock)
     if args.say is not None:
         return int(runtime.say_and_exit(args.say))
 

@@ -14,7 +14,7 @@ from typing import Any, cast
 
 import pytest
 
-from osekkai.adapters.pi import PiFactories, build_pi_devices
+from osekkai.adapters.pi import PiFactories, build_pi_devices, build_pi_voice_devices
 from osekkai.adapters.pi.gpio import Gpio
 from osekkai.adapters.pi.hat import HatMcu
 from osekkai.adapters.pi.i2c_bus import I2cBus
@@ -382,3 +382,52 @@ def test_設定し直しに失敗してもリセットの後の残りを書き�
     with pytest.raises(OSError):
         hat.reset()
     assert order == ["servos", "motors"]
+
+
+# ---- 話して終わる（声だけ）----
+
+VOICE_ONLY_FORBIDDEN = (
+    "i2c_bus",
+    "gpio",
+    "hat_mcu",
+    "display",
+    "buttons",
+    "led",
+    "servos",
+    "motors",
+)
+
+
+def _voice_factories(speaker_calls: list[tuple[object, ...]]) -> PiFactories:
+    # 声に要らない部品を作ろうとしたら失敗させる
+    forbidden = {name: _raises(AssertionError(name)) for name in VOICE_ONLY_FORBIDDEN}
+    return replace(_factories(speaker_calls), **forbidden)
+
+
+def test_声だけの組み立てはスピーカーと声のデバイスだけを作る() -> None:
+    speaker: list[tuple[object, ...]] = []
+    core = CoreConfig(hardware=HardwareSettings(speaker_enable_pin=20))
+    devices = build_pi_voice_devices(core, factories=_voice_factories(speaker))
+    assert cast(Part, devices.synth).kind == "synth"
+    assert cast(Part, devices.player).kind == "player"
+    assert speaker == [("v4", 20)]  # 版はデバイスツリーから読む（マイコンに触らない）
+    unavailable = _unavailable(devices)
+    assert set(unavailable) == {"display", "led", "buttons", "servos", "motors", "hat"}
+    assert set(unavailable.values()) == {"not needed"}
+    assert not devices.timesync.is_synchronized()
+
+
+def test_声だけの組み立てでもハードのライブラリがなければ_ImportError() -> None:
+    factories = replace(_voice_factories([]), has_library=lambda name: False)
+    with pytest.raises(ImportError):
+        build_pi_voice_devices(CoreConfig(), factories=factories)
+
+
+def test_声だけの組み立てでスピーカーの失敗は警告だけにする(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    factories = replace(_voice_factories([]), enable_speaker=_raises(OSError("x")))
+    with caplog.at_level(logging.WARNING):
+        devices = build_pi_voice_devices(CoreConfig(), factories=factories)
+    assert not isinstance(devices.synth, Unavailable)
+    assert "OSError" in caplog.text

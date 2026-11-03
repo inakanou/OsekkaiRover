@@ -15,6 +15,12 @@ from typing import IO
 import pytest
 
 from osekkai import __main__ as cli
+from osekkai.adapters.fake.console import build_console_devices
+from osekkai.core.config import CoreConfig
+from osekkai.core.instance_lock import InstanceLock
+from osekkai.core.lcd_text import GLYPH_PATTERNS
+from osekkai.core.paths import Paths
+from osekkai.core.ports import Devices
 from osekkai.core.runtime import ALREADY_RUNNING_MESSAGE, ExitCode
 
 WAIT_S = 15.0
@@ -66,31 +72,122 @@ def test_PC_で実機のアダプタを選ぶとハードのライブラリが�
     assert cli.NO_PI_ADAPTER_MESSAGE in capsys.readouterr().err
 
 
-def test_実機のアダプタに基盤の設定と絵の文字の表を渡す(
-    xdg_dirs: dict[str, Path],
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    from osekkai.adapters.fake.console import build_console_devices
-    from osekkai.core.config import CoreConfig
-    from osekkai.core.lcd_text import GLYPH_PATTERNS
-    from osekkai.core.ports import Devices
+class _PiModule(types.ModuleType):
+    """実機のアダプタの身代わり。呼ばれた順と、そのときロックが持たれていたかを残す。"""
 
-    received: list[tuple[object, object]] = []
+    def __init__(self, lock_file: Path) -> None:
+        super().__init__("osekkai_test_pi_adapter")
+        self.lock_file = lock_file
+        self.calls: list[tuple[str, tuple[object, ...]]] = []
+        self.lock_held: list[bool] = []
 
-    def build_pi_devices(core_cfg: CoreConfig, glyphs: object) -> Devices:
-        received.append((core_cfg, glyphs))
+    def _record(self, name: str, *args: object) -> Devices:
+        self.calls.append((name, args))
+        probe = InstanceLock(self.lock_file)
+        held = not probe.acquire()  # 取れなければ、ほかが（この起動が）持っている
+        probe.release()
+        self.lock_held.append(held)
         return build_console_devices(time)
 
-    module = types.ModuleType("osekkai_test_pi_adapter")
-    module.build_pi_devices = build_pi_devices  # type: ignore[attr-defined]
+    def build_pi_devices(self, core_cfg: CoreConfig, glyphs: object) -> Devices:
+        return self._record("build_pi_devices", core_cfg, glyphs)
+
+    def build_pi_voice_devices(self, core_cfg: CoreConfig) -> Devices:
+        return self._record("build_pi_voice_devices", core_cfg)
+
+
+@pytest.fixture
+def pi_module(xdg_dirs: dict[str, Path], monkeypatch: pytest.MonkeyPatch) -> _PiModule:
+    module = _PiModule(Paths().lock_file)
     monkeypatch.setitem(sys.modules, module.__name__, module)
     monkeypatch.setattr(cli, "PI_ADAPTER_MODULE", module.__name__)
-    assert cli.main(["--say", "こんにちは"]) == 0
-    assert "[声] こんにちは" in capsys.readouterr().out
-    [(core_cfg, glyphs)] = received
+    return module
+
+
+@pytest.fixture
+def held_lock(xdg_dirs: dict[str, Path]) -> Iterator[InstanceLock]:
+    lock = InstanceLock(Paths().lock_file)
+    assert lock.acquire()
+    yield lock
+    lock.release()
+
+
+def test_実機のアダプタに基盤の設定と絵の文字の表を渡し_ロックを取ってから作る(
+    pi_module: _PiModule, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    received: list[Devices] = []
+
+    class _Recording(_StubRuntime):
+        def __init__(self, devices: Devices, *args: object, **kwargs: object) -> None:
+            super().__init__()
+            received.append(devices)
+
+        def run(self) -> ExitCode:
+            return ExitCode.OK
+
+    monkeypatch.setattr(cli, "Runtime", _Recording)
+    assert cli.main([]) == 0
+    [(name, (core_cfg, glyphs))] = pi_module.calls
+    assert name == "build_pi_devices"
     assert isinstance(core_cfg, CoreConfig)
     assert glyphs is GLYPH_PATTERNS
+    assert pi_module.lock_held == [True]
+    assert len(received) == 1
+    # 終えたらロックを放す
+    probe = InstanceLock(Paths().lock_file)
+    assert probe.acquire()
+    probe.release()
+
+
+def test_話して終わるは声のデバイスだけを_ロックを取ってから作る(
+    pi_module: _PiModule, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli.main(["--say", "こんにちは"]) == 0
+    assert "[声] こんにちは" in capsys.readouterr().out
+    [(name, (core_cfg,))] = pi_module.calls
+    assert name == "build_pi_voice_devices"
+    assert isinstance(core_cfg, CoreConfig)
+    assert pi_module.lock_held == [True]
+
+
+@pytest.mark.parametrize("argv", [[], ["--say", "こんにちは"]], ids=["起動", "話して終わる"])
+def test_すでに動いていれば実機のデバイスを作らずに_75_で終わる(
+    pi_module: _PiModule,
+    held_lock: InstanceLock,
+    argv: list[str],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert cli.main(argv) == ExitCode.ALREADY_RUNNING
+    assert pi_module.calls == []
+    out, err = capsys.readouterr()
+    assert ALREADY_RUNNING_MESSAGE in err
+    assert "[声]" not in out
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [["--fake-hardware"], ["--fake-hardware", "--say", "やあ"]],
+    ids=["起動", "話して終わる"],
+)
+def test_すでに動いていれば端末のデバイスも作らずに_75_で終わる(
+    held_lock: InstanceLock, monkeypatch: pytest.MonkeyPatch, argv: list[str]
+) -> None:
+    import osekkai.adapters.fake.console as console
+
+    built: list[object] = []
+    monkeypatch.setattr(console, "build_console_devices", built.append)
+    assert cli.main(argv) == ExitCode.ALREADY_RUNNING
+    assert built == []
+
+
+def test_実機のアダプタがなければロックを放してから_1_で終わる(
+    xdg_dirs: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cli, "PI_ADAPTER_MODULE", "osekkai.adapters.no_such_module")
+    assert cli.main([]) == ExitCode.FATAL
+    probe = InstanceLock(Paths().lock_file)
+    assert probe.acquire()
+    probe.release()
 
 
 class _StubRuntime:

@@ -94,3 +94,13 @@ def test_声のデバイスが使えなければ_1_で終わる(
     lock = InstanceLock(paths.lock_file)
     assert lock.acquire()  # 失敗でもロックを放す
     lock.release()
+
+
+def test_渡されたロックを取ったまま使い_話し終えたら放す(
+    fakes: FakeDeviceSet, paths: Paths, clock: FakeClock
+) -> None:
+    lock = InstanceLock(paths.lock_file)
+    assert lock.acquire()  # 起動の口がデバイスを作る前に取る
+    runtime = Runtime(fakes.to_devices(()), paths, clock, FeatureRegistry([]), lock=lock)
+    assert runtime.say_and_exit("こんにちは") is ExitCode.OK
+    assert not lock.held

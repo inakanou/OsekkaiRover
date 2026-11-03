@@ -49,6 +49,8 @@ logger = logging.getLogger(__name__)
 I2C_BUS_NUMBER: Final = 1
 HARDWARE_LIBS: Final[tuple[str, ...]] = ("smbus2", "lgpio")
 
+NOT_NEEDED: Final = "not needed"
+
 T = TypeVar("T")
 Glyphs = Mapping[Glyph, Sequence[int]]
 SpeakerPin = Literal["auto"] | int
@@ -87,7 +89,7 @@ class _PiHat:
 
 
 class _NeverSynchronized:
-    """時刻の同期を確かめる口が作れなかったときの代わり（確かでない側に倒す）。"""
+    """時刻の同期を確かめる口が作れない・要らないときの代わり（確かでない側に倒す）。"""
 
     def is_synchronized(self) -> bool:
         return False
@@ -157,9 +159,7 @@ def build_pi_devices(
 
     ハードのライブラリ（smbus2 と lgpio）がどちらもなければ実機ではないので ImportError。
     """
-    f = factories or PiFactories()
-    if not any(f.has_library(lib) for lib in HARDWARE_LIBS):
-        raise ImportError("hardware libraries are not installed")
+    f = _factories_on_pi(factories)
     hw = core_cfg.hardware
 
     # 共有の部品: I2C のバス 1 と gpiochip を 1 つずつ
@@ -211,6 +211,40 @@ def build_pi_devices(
         timesync=timesync,
         hat=hat,
     )
+
+
+def build_pi_voice_devices(
+    core_cfg: CoreConfig, *, factories: PiFactories | None = None
+) -> Devices:
+    """話して終わる（`--say`）ための、声のデバイスだけを作る（13.5）。
+
+    I2C・GPIO・マイコン・LCD には触らない。スピーカーのアンプを有効にし、声の合成と再生だけを作る。
+    ほかのデバイスは `Unavailable(名前, "not needed")` にする。
+    """
+    f = _factories_on_pi(factories)
+    # 版はデバイスツリーから読む（マイコンを探さない）
+    _turn_on_speaker(
+        f, Unavailable(device="hat", reason=NOT_NEEDED), core_cfg.hardware.speaker_enable_pin
+    )
+    return Devices(
+        display=Unavailable(device="display", reason=NOT_NEEDED),
+        led=Unavailable(device="led", reason=NOT_NEEDED),
+        buttons=Unavailable(device="buttons", reason=NOT_NEEDED),
+        servos=Unavailable(device="servos", reason=NOT_NEEDED),
+        motors=Unavailable(device="motors", reason=NOT_NEEDED),
+        synth=_prepare("synth", f.synth),
+        player=_prepare("player", f.player),
+        timesync=_NeverSynchronized(),
+        hat=Unavailable(device="hat", reason=NOT_NEEDED),
+    )
+
+
+def _factories_on_pi(factories: PiFactories | None) -> PiFactories:
+    # ハードのライブラリ（smbus2 と lgpio）がどちらもなければ実機ではない
+    f = factories or PiFactories()
+    if not any(f.has_library(lib) for lib in HARDWARE_LIBS):
+        raise ImportError("hardware libraries are not installed")
+    return f
 
 
 def _part(value: T | Unavailable) -> T:

@@ -84,6 +84,13 @@ class ExitCode(IntEnum):
     ALREADY_RUNNING = 75
 
 
+def report_already_running() -> ExitCode:
+    """ほかが動いていることをログと標準エラーに出し、終了コード 75 を返す（1.7）。"""
+    logger.error(ALREADY_RUNNING_MESSAGE)
+    print(ALREADY_RUNNING_MESSAGE, file=sys.stderr)
+    return ExitCode.ALREADY_RUNNING
+
+
 def within_hours(now: time, hours: tuple[time, time]) -> bool:
     """`now` が時間帯の中か。始まりは含み、終わりは含まない。日をまたぐ帯も扱う。
 
@@ -98,7 +105,11 @@ def within_hours(now: time, hours: tuple[time, time]) -> bool:
 
 
 class Runtime:
-    """基盤の起動と停止。"""
+    """基盤の起動と停止。
+
+    `lock` を渡すと、そのロックを使う。起動の口は、実機のデバイスを作る前にロックを取って渡す
+    （1.7。2 つ目の起動がハードに触らないように）。取ってあるロックの `acquire()` は True を返す。
+    """
 
     def __init__(
         self,
@@ -110,6 +121,7 @@ class Runtime:
         config_override: Path | None = None,
         config_error_seconds: float = CONFIG_ERROR_SECONDS,
         stop_budget: float = DEFAULT_STOP_BUDGET_S,
+        lock: InstanceLock | None = None,
     ) -> None:
         self._devices = devices
         self._paths = paths
@@ -118,7 +130,7 @@ class Runtime:
         self._config_override = config_override
         self._config_error_seconds = config_error_seconds
         self._stop_budget = stop_budget
-        self._lock = InstanceLock(paths.lock_file)
+        self._lock = lock if lock is not None else InstanceLock(paths.lock_file)
         self._started = False
         self.report: ConfigReport | None = None
         self.motion: MotionService | None = None
@@ -231,9 +243,7 @@ class Runtime:
         単一の実行のロックを取る。機能・待機画面・動きは始めず、声のほかのデバイスに触らない。
         """
         if not self._lock.acquire():
-            logger.error(ALREADY_RUNNING_MESSAGE)
-            print(ALREADY_RUNNING_MESSAGE, file=sys.stderr)
-            return ExitCode.ALREADY_RUNNING
+            return report_already_running()
         try:
             core = self._load_config().core
             cache = CacheManager.from_paths(self._paths, core.cache_max_mb, self._clock)
@@ -254,9 +264,7 @@ class Runtime:
         """起動の順番を行う。始められたら None、ほかが動いていれば `ALREADY_RUNNING`。"""
         if not self._lock.acquire():
             # デバイスには触らない（1.7）
-            logger.error(ALREADY_RUNNING_MESSAGE)
-            print(ALREADY_RUNNING_MESSAGE, file=sys.stderr)
-            return ExitCode.ALREADY_RUNNING
+            return report_already_running()
         self._started = True
         logger.info("版: %s", version.get_version())
 
