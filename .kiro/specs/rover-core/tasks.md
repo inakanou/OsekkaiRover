@@ -182,7 +182,7 @@
   - 完了の状態: 帯の外の優先度（0、95）を断る、同じ名前の後の方を除く、無効と設定の誤りを除く、読み込みの失敗を除く、の各テストが通る
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.6, 11.4_
 
-- [ ] 5.3 機能の監督を作る
+- [x] 5.3 機能の監督を作る
   - 機能ごとにデーモンでないスレッドを 1 本立て、機能を作って動かす。状態（開始中・動作中・失敗・停止）を持つ
   - 機能の生成や動作で例外が出たら、機能名と例外の型をログに残し（詳細は DEBUG のときだけ）、その機能の資源をすべて取り上げる。その機能は再起動しない
   - すべての機能に停止を知らせ、合計の上限の秒数まで終わりを待ち、応えなかった機能の名前を返す。上限の秒数は呼び出し側から渡す（テストでは短い値にする）
@@ -330,3 +330,5 @@
 - 4.2: `QuietMode(idle, bus, store, clock)`。store は `StateStore.for_feature(paths, "core", clock)`。起動時は保存しない（保存は機能が実際に切り替えたときだけ）。続けて再起動しても「静かだった」の印は消えない（夜に画面が点かない側に倒す）。機能の道具（5.1）の `request_quiet`・`end_quiet`・`is_quiet`・`was_quiet_before_restart` はここに任せる
 - 5.1: 機能の道具は `CoreFeatureContext(spec, *, arbiter, buttons, idle, quiet, bus, clock, paths, cache)`（作るときに `validate_spec` で確かめ、だめなら ValueError）。機能の発見（5.2）は `validate_spec(spec) -> list[str]` を、設定の読み込み（6.2）は `feature_models(specs)` を使う。機能が使う型は `osekkai.core` から読み込める
 - 5.2: `FeatureRegistry` は除いた機能を自分でログに残す（Runtime は開始した機能だけをログに出せばよい。`skipped()` は (名前, 理由) の並び）。エントリーポイントは (名前, 値) の順に並べ、同じ名前は後の方を除く（「後から登録された方」の読み替え）。読み込めなかった機能の設定の節は、設定の読み込みで「知らない項目」の警告になる
+- 5.3: `FeatureSupervisor(arbiter, context_factory)`。Runtime（6.2）は `context_factory` で `CoreFeatureContext` を作る。正常に終わった機能・応えなかった機能にも `revoke_all` をかける。`stop_all(timeout)` は合計の上限で、実際の秒数で待つ
+- 5.3（残課題）: 失敗した機能・見捨てた機能の、ボタンの待ち手（`add_waiter`）とイベントの購読は残る。待ち手の優先度が高いと押下を吸い続けるので、全体の確認（`/kiro-validate-impl`）までに、持ち主ごとに解く口を足すか判断する。見捨てた機能は資源を借り直せるので、Runtime（6.3）は見捨てた後に必ず中立の姿勢に戻してから終える
