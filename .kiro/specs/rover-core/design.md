@@ -235,14 +235,14 @@ sequenceDiagram
     participant Cfg as ConfigLoader
     participant Dev as Devices
     participant Sup as FeatureSupervisor
-    Main->>Runtime: run args
-    Runtime->>Lock: acquire
+    Main->>Lock: acquire
     alt already running
-        Lock-->>Runtime: busy
-        Runtime-->>Main: exit 75
+        Lock-->>Main: busy
+        Main-->>Main: exit 75 without touching devices
     end
+    Main->>Dev: build devices per device
+    Main->>Runtime: run with devices and held lock
     Runtime->>Cfg: load and validate
-    Runtime->>Dev: build devices per device
     Runtime->>Dev: reset MCU then center neck steering stop motors LED off
     Runtime->>Runtime: start services idle screen time sync monitor
     Runtime->>Sup: start enabled valid features
@@ -982,7 +982,8 @@ class ExitCode(IntEnum):
 
 class Runtime:
     def __init__(self, devices: Devices, paths: Paths, clock: Clock,
-                 registry: FeatureRegistry, *, config_override: Path | None = None) -> None: ...
+                 registry: FeatureRegistry, *, config_override: Path | None = None,
+                 lock: InstanceLock | None = None) -> None: ...   # lock は起動の口が先に取ったもの
     def run(self) -> ExitCode: ...
     def say_and_exit(self, text: str) -> ExitCode: ...   # 13.5
 ```
@@ -1111,10 +1112,11 @@ class Unavailable:
   1. 引数を解析する
   2. ログを設定する
   3. `Paths` を作る
-  4. アダプタを選ぶ（`build_pi_devices` か `build_fake_devices`）
-  5. `FeatureRegistry()` を作る
-  6. `Runtime(...).run()` を呼び、終了コードを `sys.exit` に渡す
-- `--say` のときは、VoiceService だけを作って話し、終える（13.5）。機能は開始しない
+  4. 単一の実行のロック（`InstanceLock`）を取る。取れなければ、デバイスを 1 つも作らずに終了コード 75 で終える（1.7）
+  5. アダプタを選ぶ（`build_pi_devices` か `build_fake_devices`）
+  6. `FeatureRegistry()` を作る
+  7. 取ったロックを渡して `Runtime(..., lock=)` を作り、`run()` を呼び、終了コードを `sys.exit` に渡す
+- `--say` のときは、VoiceService だけを作って話し、終える（13.5）。機能は開始しない。実機では `build_pi_voice_devices` で声のデバイス（とスピーカーの有効化）だけを作り、LCD・サーボ・モーター・マイコンには触らない
 
 ## Data Models
 
