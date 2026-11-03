@@ -6,6 +6,7 @@ import subprocess
 import sys
 import threading
 import time
+import types
 from collections.abc import Iterator
 from pathlib import Path
 from queue import Empty, Queue
@@ -51,6 +52,45 @@ def test_実機のアダプタがなければ知らせて_1_で終わる(
     out, err = capsys.readouterr()
     assert cli.NO_PI_ADAPTER_MESSAGE in err
     assert "[声]" not in out
+
+
+def test_PC_で実機のアダプタを選ぶとハードのライブラリがないので_1_で終わる(
+    xdg_dirs: dict[str, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import osekkai.adapters.pi.devices as pi_devices
+
+    monkeypatch.setattr(pi_devices, "_has_library", lambda name: False)
+    assert cli.main(["--say", "こんにちは"]) == ExitCode.FATAL
+    assert cli.NO_PI_ADAPTER_MESSAGE in capsys.readouterr().err
+
+
+def test_実機のアダプタに基盤の設定と絵の文字の表を渡す(
+    xdg_dirs: dict[str, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from osekkai.adapters.fake.console import build_console_devices
+    from osekkai.core.config import CoreConfig
+    from osekkai.core.lcd_text import GLYPH_PATTERNS
+    from osekkai.core.ports import Devices
+
+    received: list[tuple[object, object]] = []
+
+    def build_pi_devices(core_cfg: CoreConfig, glyphs: object) -> Devices:
+        received.append((core_cfg, glyphs))
+        return build_console_devices(time)
+
+    module = types.ModuleType("osekkai_test_pi_adapter")
+    module.build_pi_devices = build_pi_devices  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    monkeypatch.setattr(cli, "PI_ADAPTER_MODULE", module.__name__)
+    assert cli.main(["--say", "こんにちは"]) == 0
+    assert "[声] こんにちは" in capsys.readouterr().out
+    [(core_cfg, glyphs)] = received
+    assert isinstance(core_cfg, CoreConfig)
+    assert glyphs is GLYPH_PATTERNS
 
 
 class _StubRuntime:

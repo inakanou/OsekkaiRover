@@ -20,6 +20,7 @@ from typing import Final, TextIO
 from osekkai.core.clock import SystemClock
 from osekkai.core.config import ConfigLoader, CoreConfig
 from osekkai.core.feature import feature_models
+from osekkai.core.lcd_text import GLYPH_PATTERNS
 from osekkai.core.logging_setup import configure_logging
 from osekkai.core.paths import Paths
 from osekkai.core.ports import Devices
@@ -69,7 +70,12 @@ def _build_pi_devices(paths: Paths, registry: FeatureRegistry, config: Path | No
         module = importlib.import_module(PI_ADAPTER_MODULE)
     except ImportError as error:
         raise HardwareUnavailable(type(error).__name__) from error
-    devices: Devices = module.build_pi_devices(_core_config(paths, registry, config))
+    core = _core_config(paths, registry, config)
+    try:
+        # 絵の文字の表は基盤のもの。アダプタは core.lcd_text を読み込まないので、ここから渡す
+        devices: Devices = module.build_pi_devices(core, GLYPH_PATTERNS)
+    except ImportError as error:  # ハードのライブラリがない（PC）
+        raise HardwareUnavailable(type(error).__name__) from error
     return devices
 
 

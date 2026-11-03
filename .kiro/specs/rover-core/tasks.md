@@ -283,6 +283,7 @@
 - [ ] 7.7 実機のデバイス一式を、失敗を隔離して組み立てる
   - デバイスを 1 つずつ準備し、例外が出たデバイスは「使えない（名前と理由）」にして残りを続ける
   - 完了の状態: mypy が通り、実機で LCD の配線を外して起動しても、使えないデバイスと理由がログに出て、ほかのデバイスで起動が続く
+  - _実機確認待ち: コードとレビューは済み。実機で LCD の配線を外して起動し、使えないデバイスと理由のログと、ほかのデバイスでの起動を確かめたら完了にする_
   - _Depends: 7.2, 7.3, 7.4, 7.6_
   - _Requirements: 1.6_
 
@@ -352,3 +353,4 @@
 - 8.1（残課題）: 異常終了が続くと 5 秒ごとに再起動し続ける（起動の声や首の振り直しが繰り返される）。`RestartSteps`・`RestartMaxDelaySec`（systemd 254 以上）での後退は、実機の OS の版を device-deployment で確かめてから足すか決める
 - 7.1（実機）: スピーカーの有効化は `enable_speaker(version, configured, *, run)`（pinctrl。`Gpio` は要らない）。ボタンの見張りは lgpio の 30 ms のチャタリング除去つき。1 度だけ、大きいボタンの 3 回の押下が 4 回になった（再現せず）。全体の確認で、除去の長さ（30 ms→50 ms）を見直すか決める
 - 7.6: `PiCarXMotors(hat, pins, *, motor_driver)`（pwm_dir。`dual_pwm` と auto→v5 は `MotorMappingUnverified` で断るので、7.7 で Unavailable にする）。`stop_now()` はロックを最大 50 ms 待ち、0 は `I2cBus.write_block_emergency`（I2C_RDWR の 1 回の転送。共有の fd の相手のアドレスを変えない）でだけ書く。安全停止は `run_safe_stop(environ, open_hardware)` → 失敗した段階の名前、`main()` はいつも 0。`EXIT_STATUS=75` とロックがほかに持たれているときは何もしない。調べるために落とすファイルは作業コピーに置かない
+- 7.7: `build_pi_devices(core_cfg, glyphs, *, factories=None)`（`__main__` が `GLYPH_PATTERNS` を渡す。`PiFactories` で差し替える）。理由は例外の型の名前（`MotorMappingUnverified` だけ決まった文）。使えないデバイスのログは Runtime が出す。GPIO の失敗→buttons・led・motors・hat、マイコンの失敗→servos・motors・hat、I2C の失敗→さらに display。スピーカーの失敗は警告だけ。`_PiHat.reset()` はリセットの後にサーボとモーターのタイマーを書き直す。未解決: `__main__` がロックより前に実機のデバイスを作る（要件 1.7。2 つ目の起動と `--say` がハードに触る）
