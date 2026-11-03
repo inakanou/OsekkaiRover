@@ -1,0 +1,45 @@
+# おせっかいローバーの設定の見本。
+# 実際の設定は ~/.config/osekkai/config.yaml（$XDG_CONFIG_HOME/osekkai/config.yaml）に置く。
+# ファイルがなければ、起動のときにこの見本から作られる。
+# 書いていない項目は既定値になる。名前や pin など個人の値は、この見本には書かない。
+
+# 基盤の設定
+core:
+  # 起動を声で知らせる時間帯（始め、終わり）。時刻は引用符で囲む
+  startup_voice_hours: ["08:00", "20:00"]
+
+  # 声（Open JTalk）
+  voice:
+    open_jtalk: open_jtalk
+    dictionary: /var/lib/mecab/dic/open-jtalk/naist-jdic
+    htsvoice: ~/.local/share/osekkai/voices/tohoku-f01-happy.htsvoice
+    pitch: 3.0     # 高さ（-24〜24）
+    speed: 1.05    # 速さ（0.5〜2.0）
+    sink: ""       # 再生先。空なら既定の再生先
+
+  # 動き
+  motion:
+    allow_drive_in_dance: false   # ダンスでタイヤを回すか
+    pan_range: [-80.0, 80.0]      # 首の左右の範囲（度）
+    tilt_range: [-30.0, 60.0]     # 首の上下の範囲（度）
+    # 調整値（実機に合わせて直す。-20〜20 度）
+    calibration:
+      steering: 0.0
+      pan: 0.0
+      tilt: 0.0
+      motor_direction: [1, 1]     # 左右のモーターの向き（1 か -1）
+
+  # ハード
+  hardware:
+    lcd_address: 0x27             # LCD の I2C のアドレス（0x03〜0x77）
+    extra_button_pin: null        # 足したボタンのピン（例: D0）。なければ null
+    motor_driver: auto            # auto、pwm_dir、dual_pwm
+    speaker_enable_pin: auto      # auto か、ピンの番号
+
+  # キャッシュの合計の上限（MiB、10〜5000）
+  cache_max_mb: 200
+
+# 機能の設定は、機能の名前をトップレベルのキーにして書く。
+# 項目は機能ごとに決まっている。enabled: false にすると、その機能は開始しない。
+# greeting:
+#   enabled: true

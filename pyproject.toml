@@ -37,6 +37,10 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# 設定の見本（config/osekkai.example.yaml と同じ内容）を同梱する
+[tool.setuptools.package-data]
+"osekkai.core" = ["example_config.yaml"]
+
 [tool.ruff]
 target-version = "py311"
 line-length = 100

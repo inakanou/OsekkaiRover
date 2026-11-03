@@ -50,7 +50,7 @@
   - _Boundary: CacheManager_
   - _Requirements: 12.1, 12.6_
 
-- [ ] 2.2 (P) 設定の読み込みと検証を作る
+- [x] 2.2 (P) 設定の読み込みと検証を作る
   - 基盤の設定の項目（起動の声の時間帯、声、動き、調整値、ハード、キャッシュの上限）を、既定値と許される範囲とともに定める
   - 設定ファイルがなければ、パッケージに同梱した見本から作り、作った場所をログに残す。同梱の見本は `data/` という名前のディレクトリの下に置かない（公開リポジトリの禁止ファイルの確認に当たるため）
   - 機能の節は、その機能が申告した設定のモデルで検証する。節がなければ既定値を使う
@@ -312,3 +312,5 @@
 - 1.5: 名前と key の検証は `core.paths.validate_name`、0700 のディレクトリ作成は `core.paths.ensure_private_dir` を使い回す。`JsonValue` は `core.storage` にある。`Paths` は作ったときに環境変数を写し取る
 - 1.5: `StateStore.load` は、壊れた JSON は退避して None を返すが、EIO などの `OSError` はそのまま投げる。呼び出し側（機能の開始や静かな状態の読み込み）で受け止める
 - 2.1: キャッシュを書いた直後と使ったときは、必ず `CacheManager.touch` を呼ぶ（mtime を時計の時刻にする。呼ばないと偽の時計のテストで古さの順が狂う）。`touch` はロックを取らないので、消された後の `FileNotFoundError` は呼び出し側で受け止める。上限は `CacheManager.from_paths(paths, max_mb, clock)` で MiB から作る
+- 2.2: `ConfigLoader(paths, feature_models)` は「機能の名前 → 設定のモデル」の対応を受け取る（design の `feature_specs` の代わり）。`fatal_errors` があれば、機能の発見（5.2）はすべての機能を除く。誤りのある機能は `features` に入らない。見本から作るときの `OSError` は `load()` から投げられるので、Runtime（6.2）で受け止める
+- 2.2: 同梱の見本は `src/osekkai/core/example_config.yaml`。`config/osekkai.example.yaml` と同じ内容であることをテストで縛っている（片方を変えたらもう片方も変える）
