@@ -174,7 +174,7 @@
   - _Depends: 2.2, 3.7, 4.2_
   - _Requirements: 3.1, 3.2, 5.2, 9.2, 9.3, 9.4, 9.5, 9.6, 10.1, 11.7, 12.2_
 
-- [ ] 5.2 機能の発見と、開始してよい機能の選び出しを作る
+- [x] 5.2 機能の発見と、開始してよい機能の選び出しを作る
   - エントリーポイントの群から機能のクラスを読み込む。テストではクラスのリストを直接渡せる。読み込みに失敗した機能はログに残して除く
   - 名前の形（小文字で始まる英数字と下線、`core` は予約）と優先度（帯の値に 0〜9 を足した 10〜89）を確かめ、外れたものはログに残して除く
   - 同じ名前の 2 つ目を除いてログに残す
@@ -329,3 +329,4 @@
 - 4.1: 待機画面の 1 行目は `MM/DD HH:MM`（11 セル）＋ 1 セルの空き ＋ 短い情報（右寄せ、4 セルまで）。`set_info` は 6 セルまで受け取るが、出るのは 4 セル（design の「6 セルまで」は 16 セルに収まらないための読み替え）。待機画面の口: `start(run_thread=True)`・`stop()`・`tick()`・`set_info`・`set_face(face, gaze)`・`set_quiet(bool)`。静かな状態の間も優先度 0 で画面を持ち、空白とバックライト消灯を出す。Runtime（6.2）が start と stop、機能の道具（5.1）が set_info と set_face、静かな状態（4.2）が set_quiet を呼ぶ
 - 4.2: `QuietMode(idle, bus, store, clock)`。store は `StateStore.for_feature(paths, "core", clock)`。起動時は保存しない（保存は機能が実際に切り替えたときだけ）。続けて再起動しても「静かだった」の印は消えない（夜に画面が点かない側に倒す）。機能の道具（5.1）の `request_quiet`・`end_quiet`・`is_quiet`・`was_quiet_before_restart` はここに任せる
 - 5.1: 機能の道具は `CoreFeatureContext(spec, *, arbiter, buttons, idle, quiet, bus, clock, paths, cache)`（作るときに `validate_spec` で確かめ、だめなら ValueError）。機能の発見（5.2）は `validate_spec(spec) -> list[str]` を、設定の読み込み（6.2）は `feature_models(specs)` を使う。機能が使う型は `osekkai.core` から読み込める
+- 5.2: `FeatureRegistry` は除いた機能を自分でログに残す（Runtime は開始した機能だけをログに出せばよい。`skipped()` は (名前, 理由) の並び）。エントリーポイントは (名前, 値) の順に並べ、同じ名前は後の方を除く（「後から登録された方」の読み替え）。読み込めなかった機能の設定の節は、設定の読み込みで「知らない項目」の警告になる
