@@ -33,7 +33,7 @@
   - 完了の状態: 偽の時計で「1 時間進める」が実際には待たずに終わり、偽物の記録を読むテストが通る
   - _Requirements: 10.1, 13.3, 13.4_
 
-- [ ] 1.5 XDG のパスと、機能ごとの状態の保存を作る
+- [x] 1.5 XDG のパスと、機能ごとの状態の保存を作る
   - 設定・状態・キャッシュ・データ・ロックの置き場所を、XDG の環境変数から決める。未設定か相対パスなら既定値を使う
   - 機能ごとの状態の保存先を分け、key はパスの外に出られない文字だけを受け付ける
   - 保存は一時ファイルへの書き込み → fsync → 置き換え → ディレクトリの fsync で、原子的に行う
@@ -309,3 +309,5 @@
 - 1.3: `tests/core/` に `__init__.py` はない。テストのファイル名は tests の中で重ならないようにする
 - 1.4: `FakeClock.sleep()` は時刻を進めて直ちに戻り、待っているほかのスレッドを起こさない。スレッドで回る処理（同期の見張り・待機画面・動きの待ち）は、止める合図を `threading.Event` で持つか、テストで 1 回ずつ進める口を設ける。空回りで時刻が飛ばないようにする
 - 1.4: 偽物の失敗は `fail_on` に操作名を入れると `FakeDeviceError(RuntimeError)`。`SpeechFailed` などへの変換はサービスの側で行う。テストでは `fakes`（型付きの `FakeDeviceSet`）・`fake_devices`・`clock`・`xdg_dirs` の fixture を使う
+- 1.5: 名前と key の検証は `core.paths.validate_name`、0700 のディレクトリ作成は `core.paths.ensure_private_dir` を使い回す。`JsonValue` は `core.storage` にある。`Paths` は作ったときに環境変数を写し取る
+- 1.5: `StateStore.load` は、壊れた JSON は退避して None を返すが、EIO などの `OSError` はそのまま投げる。呼び出し側（機能の開始や静かな状態の読み込み）で受け止める
