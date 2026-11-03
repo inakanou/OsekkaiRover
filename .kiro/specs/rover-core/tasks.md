@@ -289,6 +289,7 @@
 - [ ] 8.1 systemd のユーザーサービスのユニットを作る
   - `python -m osekkai` を常駐させ、`KillMode=mixed`、`TimeoutStopSec=15s`、異常終了で再起動、終了コード 75 では再起動しない、`ExecStopPost=` で安全停止のコマンドを実行する
   - 完了の状態: `systemd-analyze verify` でユニットに誤りがなく、実機で `systemctl --user stop` の後にモーターが止まり首が正面に戻る
+  - _実機確認待ち: ユニットのファイルとレビューは済み（`systemd-analyze verify` は誤りなし）。7.6 の安全停止のコマンドと、実機での `systemctl --user stop` の確認の後に完了にする_
   - _Depends: 6.5, 7.6_
   - _Requirements: 1.7, 2.1, 2.2, 2.4_
 
@@ -346,3 +347,5 @@
 - 7.2: `Lcd1602Display(bus, glyphs: Mapping[Glyph, Sequence[int]], *, address=0x27, sleep=...)`。作るときに初期化と絵の文字の登録を行う（OSError なら 7.7 で Unavailable にする）。絵の文字の表は `core.lcd_text.GLYPH_PATTERNS` を組み立ての場所（`__main__`）から 7.7 の `build_pi_devices` に渡す
 - 7.3: `OpenJTalkSynth`・`PaplayPlayer`・`TimedatectlTimeSync`。失敗の例外にはコマンド名と終了コードだけを入れ、文章も stderr も入れない（時間切れは `from None`）。合成の時間の上限は 30 秒、再生は 60 秒。同期の判定のログは、判定が変わったときだけ INFO で出す
 - 7.4: `PiCarXServos(hat)`（P0 パン・P1 チルト・P2 ステアリング、50 Hz、プリスケーラ 352、パンとチルトは符号を反転）。調整値は MotionService が論理の向きで足すので、pan と tilt の値は picar-x.conf と符号が逆（設定の見本に書いた）。モーターは 7.6 で同じモジュールに別のクラスとして足す
+- 8.1: ユニットは作業コピー `%h/works/OsekkaiRover` と `.venv/bin/python` を前提にする（device-deployment で確かめる）。ExecStopPost は終了コード 75（2 つ目の起動）の後でも動くので、7.6 の安全停止のコマンドは `$EXIT_STATUS=75` か、ロックが取れないときは何もしないようにする（動いている方のマイコンをリセットしない）
+- 8.1（残課題）: 異常終了が続くと 5 秒ごとに再起動し続ける（起動の声や首の振り直しが繰り返される）。`RestartSteps`・`RestartMaxDelaySec`（systemd 254 以上）での後退は、実機の OS の版を device-deployment で確かめてから足すか決める
