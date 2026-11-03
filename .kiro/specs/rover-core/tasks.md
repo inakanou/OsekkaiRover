@@ -299,3 +299,8 @@
   - 完了の状態: PR 本文に実機確認の結果が書かれている
   - _Depends: 7.7, 8.1_
   - _Requirements: 1.1, 1.2, 1.3, 2.1, 5.1_
+
+## Implementation Notes
+- 1.1: setuptools は空のエントリーポイントの群を宣言できない。`osekkai.features` は最初の機能を足すときに `[project.entry-points."osekkai.features"]` を書く（それまで発見の結果は空）
+- 1.1: ruff 0.17 は `*.md` も整形するので、`.kiro` と `.claude` を対象から外している
+- 1.1: 開発の PC は Python 3.14 の `.venv`。CI は 3.11 と 3.13 なので、3.12 以降だけの書き方を使わない
