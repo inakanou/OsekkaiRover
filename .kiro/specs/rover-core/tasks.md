@@ -1,7 +1,7 @@
 # Implementation Plan
 
 - [ ] 1. 土台: パッケージ・テストの仕組み・CI・保存先
-- [ ] 1.1 パッケージの骨組みと開発の道具を整える
+- [x] 1.1 パッケージの骨組みと開発の道具を整える
   - src レイアウトのパッケージ `osekkai` を作り、Python 3.11 以上・PyYAML・pydantic v2 を依存にする。実機の依存（smbus2、lgpio、numpy）は extras の `pi` に、pytest・ruff・mypy は extras の `dev` に分ける
   - 機能を発見するエントリーポイントの群 `osekkai.features` を宣言する（この段階では空でよい）
   - ruff（lint と format）、mypy（strict 寄り。実機の依存は型を見ない設定）、pytest の設定を入れる

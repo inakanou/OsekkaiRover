@@ -31,3 +31,9 @@ venv/
 
 # lgpio notify files
 .lgd-nfy*
+
+# Tool caches and build metadata
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
