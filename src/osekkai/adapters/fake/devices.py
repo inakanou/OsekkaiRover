@@ -36,7 +36,8 @@ class FakeDeviceError(RuntimeError):
 class _FakeDevice:
     def __init__(self, clock: MonotonicSource | None = None) -> None:
         self._clock: MonotonicSource = clock if clock is not None else FakeClock()
-        self._lock = threading.Lock()
+        # 同じスレッドから入り直しても止まらないように RLock（シグナルの受け手が割り込む形）
+        self._lock = threading.RLock()
         self.calls: list[Call] = []
         self.fail_on: set[str] = set()
 
