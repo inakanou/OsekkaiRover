@@ -197,7 +197,7 @@
   - 完了の状態: 偽のデバイスで手順の順番どおりに記録され、1 つの段階が失敗しても残りの段階が行われるテストが通る
   - _Requirements: 1.1, 2.2, 2.4_
 
-- [ ] 6.2 起動の順番を組み立てる
+- [x] 6.2 起動の順番を組み立てる
   - 単一の実行のロックを取り、取れなければ「すでに動いている」を伝えて終了コード 75 で終える
   - 版をログに出し、設定を読み、デバイスの準備の結果（使えないデバイスと理由）をログに出す
   - HAT をリセットしてから中立の姿勢にし、各サービス・待機画面・同期の見張りを始め、開始してよい機能を開始する。開始した機能と開始しなかった機能（と理由）をログに出す
@@ -333,3 +333,4 @@
 - 5.3: `FeatureSupervisor(arbiter, context_factory)`。Runtime（6.2）は `context_factory` で `CoreFeatureContext` を作る。正常に終わった機能・応えなかった機能にも `revoke_all` をかける。`stop_all(timeout)` は合計の上限で、実際の秒数で待つ
 - 5.3（残課題）: 失敗した機能・見捨てた機能の、ボタンの待ち手（`add_waiter`）とイベントの購読は残る。待ち手の優先度が高いと押下を吸い続けるので、全体の確認（`/kiro-validate-impl`）までに、持ち主ごとに解く口を足すか判断する。見捨てた機能は資源を借り直せるので、Runtime（6.3）は見捨てた後に必ず中立の姿勢に戻してから終える
 - 6.1: `SafetyStop(motion, display, led)`。`neutral()` と `halt()` は失敗した段階の名前（`stop`・`home`・`led`・`display_clear`・`display_backlight`）を返すので、Runtime（6.2・6.3）はそれをログに出せる。首とステアリングは 1 つの段階（`home()`）
+- 6.2: `Runtime(devices, paths, clock, registry, *, config_override=None, config_error_seconds=5.0)`。`start() -> ExitCode | None`（None は起動できた）と `shutdown(budget=8.0)`。6.3 はこの 2 つの周りに `run()`・シグナル・終了コードを足す。設定の誤りの表示は、持ち主 `core.config`・優先度 IDLE+1 の画面のリース。起動の声はリースを取らずに VoiceService を直に呼ぶ
