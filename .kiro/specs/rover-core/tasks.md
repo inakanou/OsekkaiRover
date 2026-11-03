@@ -244,6 +244,7 @@
 - [ ] 7.2 LCD のアダプタを作る
   - 4 ビットモードで初期化し、8 つの絵の文字を登録し、行ごとに 16 コードを書き、バックライトと消去を操作する
   - 完了の状態: mypy が通り、実機で 2 行の半角カタカナと絵の文字が表示される
+  - _実機確認待ち: コードとレビューは済み。実機の LCD で 2 行の半角カタカナと絵の文字を確かめたら完了にする_
   - _Requirements: 7.1, 7.3, 7.5_
 
 - [ ] 7.3 (P) 声の合成と再生、時刻の同期のアダプタを作る
@@ -340,3 +341,4 @@
 - 6.4: ハードなしの実行は `build_console_devices(clock, *, out=None, inp=None, fail=())`。標準入力の読み手は daemon のスレッドで、`ButtonPort.start` で始まる。偽物の記録のロックは RLock にした（片付けの途中の 2 回目のシグナルでも止まらない）
 - 6.5: `python -m osekkai` の入口は `osekkai.__main__.main(argv)`。実機のアダプタは `osekkai.adapters.pi.build_pi_devices(core_cfg)` を遅れて読み込む（7.7 でこの関数を足せば動く。今は ImportError で「実機のアダプタがありません」と出して 1 で終える）。実機の道では設定を 2 回読む。CLI を手で動かすときは XDG の環境変数を一時のディレクトリに向ける（ホームに設定・キャッシュができる）
 - 7.1: 実機の部品は `I2cBus`（`lock` を公開）・`HatMcu`（0x14→0x15→0x16、`reset()`、`hat_version()`）・`Gpio`・`HatButtons`・`HatLed`・`enable_speaker`。追加のボタンのピンが、リセット（D8）・LED（D14）・スピーカー（D15/D10）とぶつかっても今は断らない（後で ValueError にしてよい）。テストはハードのライブラリを読み込まずに、偽物を渡して純粋な部分だけを確かめる
+- 7.2: `Lcd1602Display(bus, glyphs: Mapping[Glyph, Sequence[int]], *, address=0x27, sleep=...)`。作るときに初期化と絵の文字の登録を行う（OSError なら 7.7 で Unavailable にする）。絵の文字の表は `core.lcd_text.GLYPH_PATTERNS` を組み立ての場所（`__main__`）から 7.7 の `build_pi_devices` に渡す
