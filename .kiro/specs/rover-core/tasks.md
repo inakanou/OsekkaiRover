@@ -61,7 +61,7 @@
   - _Boundary: ConfigLoader, CoreConfig_
   - _Requirements: 3.3, 8.5, 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7_
 
-- [ ] 2.3 (P) 時刻の同期の見張りと、基盤のイベントの配達を作る
+- [x] 2.3 (P) 時刻の同期の見張りと、基盤のイベントの配達を作る
   - イベントの配達役は、専用のスレッドで登録順に配り、受け手の例外はログに残して配り続ける
   - 静かな状態の変化と、時刻が確かになったことのイベントを定める
   - 同期の見張りは、同期するまで 30 秒ごとに確かめ、同期したら 1 回だけ知らせる。一度確かになったら保つ
@@ -314,3 +314,4 @@
 - 2.1: キャッシュを書いた直後と使ったときは、必ず `CacheManager.touch` を呼ぶ（mtime を時計の時刻にする。呼ばないと偽の時計のテストで古さの順が狂う）。`touch` はロックを取らないので、消された後の `FileNotFoundError` は呼び出し側で受け止める。上限は `CacheManager.from_paths(paths, max_mb, clock)` で MiB から作る
 - 2.2: `ConfigLoader(paths, feature_models)` は「機能の名前 → 設定のモデル」の対応を受け取る（design の `feature_specs` の代わり）。`fatal_errors` があれば、機能の発見（5.2）はすべての機能を除く。誤りのある機能は `features` に入らない。見本から作るときの `OSError` は `load()` から投げられるので、Runtime（6.2）で受け止める
 - 2.2: 同梱の見本は `src/osekkai/core/example_config.yaml`。`config/osekkai.example.yaml` と同じ内容であることをテストで縛っている（片方を変えたらもう片方も変える）
+- 2.3: `EventBus` と `TimeSyncMonitor` のスレッドは daemon。Runtime（6.2・6.3）は起動で `bus.start()`・`monitor.start()`、停止で `bus.close()`・`monitor.stop()` を必ず呼ぶ。テストでは `bus.wait_idle(timeout)` で配達を待ち、見張りは `check_once()` で 1 回ずつ進める。受け手は、イベントの型にちょうど一致するものだけに届く
