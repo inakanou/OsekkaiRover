@@ -106,7 +106,7 @@
   - _Depends: 2.1_
   - _Requirements: 4.6, 6.1, 6.3, 6.4, 6.5, 6.6_
 
-- [ ] 3.3 (P) 画面と LED の操作を作る
+- [x] 3.3 (P) 画面と LED の操作を作る
   - 2 行の文字を、変換後の 16 セルに切り詰めて空白で埋め、変わった行だけをデバイスに送る
   - バックライトの点灯と消灯、画面の消去、LED の点灯と消灯を作る
   - 完了の状態: 17 セル以上の行が切り詰められる、同じ行の再表示でデバイスへの書き込みが起きない、バックライトと LED が指示どおりになる、の各テストが通る
@@ -320,3 +320,4 @@
 - 3.1: `MotionService` は段階ごとにロックを取り、待つのはロックの外。`should_continue` は MotionService のロックを持ったまま呼ばれるので、Handle（3.6）の判定はロックを取らない形（`preempt_requested` の Event と、ロックを取らない有効かどうかの読み取り）にする。Arbiter（3.4・3.5）は `home()`・`stop()`・`emergency_stop()` を自分の Condition の外で呼ぶ。`home()` はステアリングも 0 にする
 - 3.1: 調整値は「範囲に収めてから足す」。ダンスの終わりのモーター停止は、タイヤを使ったときだけ。首だけの動きの中止でも `emergency_stop()` する（design のとおり）
 - 3.2: `SpeechFailed` は元の例外を `from` でつなぐ。実機の合成・再生のアダプタ（7.3）は、例外のメッセージに文章を入れない。機能の側でも `logger.exception` で `SpeechFailed` を出さない（元の例外が出る）
+- 3.3: `DisplayService` は `show`・`clear`・`set_backlight` を持つ（安全な停止の 6.1 は `clear()` と `set_backlight(False)` を使う）。`_device_errors` は motion.py と display.py で重複している（後でまとめてよい）
