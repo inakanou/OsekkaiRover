@@ -134,6 +134,10 @@ class HatMcu:
     def set_channel_value(self, channel: int, value: int) -> None:
         self._write_word(channel_register(channel), value)
 
+    def set_channel_value_emergency(self, channel: int, value: int) -> None:
+        """非常停止用。バスのロックを取らずに 1 回の転送で書く（I2cBus.write_block_emergency）。"""
+        self._bus.write_block_emergency(self.address, channel_register(channel), encode_word(value))
+
     def set_prescaler(self, channel: int, prescaler: int) -> None:
         """チャンネルのタイマーのプリスケーラ（同じタイマーのチャンネルで共有）。"""
         if prescaler < 1:
