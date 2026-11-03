@@ -143,6 +143,7 @@ class MotionService:
     # --- 内側（ロックを持って呼ぶ） ---
 
     def _check(self, should_continue: Callable[[], bool]) -> None:
+        # ロックを持って呼ぶ。should_continue（とサーボの書き込み）から Arbiter を呼ばないこと
         if not should_continue():
             self.emergency_stop()
             raise MotionAborted()

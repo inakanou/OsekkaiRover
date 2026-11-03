@@ -30,11 +30,14 @@ from enum import Enum
 from types import TracebackType
 from typing import TYPE_CHECKING, Final
 
+from osekkai.core.handles import DisplayHandle, DriveHandle, LedHandle, NeckHandle, VoiceHandle
 from osekkai.core.types import Resource, ResourceBusy
 
 if TYPE_CHECKING:
     from osekkai.core.clock import Clock
+    from osekkai.core.display import DisplayService, LedService
     from osekkai.core.motion import MotionService
+    from osekkai.core.voice import VoiceService
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +87,37 @@ class Lease:
     def active(self) -> bool:
         return self._state not in _FINISHED
 
+    # --- 操作の口（4.9）。借りていない資源の口を求めたら ValueError ---
+
+    @property
+    def voice(self) -> VoiceHandle:
+        self._require(Resource.VOICE)
+        return VoiceHandle(self, self._arbiter._voice)
+
+    @property
+    def display(self) -> DisplayHandle:
+        self._require(Resource.DISPLAY)
+        return DisplayHandle(self, self._arbiter._display)
+
+    @property
+    def led(self) -> LedHandle:
+        self._require(Resource.LED)
+        return LedHandle(self, self._arbiter._led)
+
+    @property
+    def neck(self) -> NeckHandle:
+        self._require(Resource.NECK)
+        return NeckHandle(self, self._arbiter._motion)
+
+    @property
+    def drive(self) -> DriveHandle:
+        self._require(Resource.DRIVE)
+        return DriveHandle(self, self._arbiter._motion)
+
+    def _require(self, resource: Resource) -> None:
+        if resource not in self.resources:
+            raise ValueError(f"resource not leased: {resource.value}")
+
     def release(self) -> None:
         """返す。何度呼んでもよい。"""
         self._arbiter._finish([self], LeaseState.RELEASED, owner=None)
@@ -111,9 +145,24 @@ class Arbiter:
     # 偽の時計が進まないときに備えた、中断の後の実際の待ちの上限（秒）
     _PREEMPT_REAL_LIMIT_S: float = PREEMPT_GRACE_S + 1.0
 
-    def __init__(self, clock: Clock, motion: MotionService) -> None:
+    def __init__(
+        self,
+        clock: Clock,
+        motion: MotionService,
+        *,
+        voice: VoiceService | None = None,
+        display: DisplayService | None = None,
+        led: LedService | None = None,
+    ) -> None:
+        """`voice`・`display`・`led` は、リースの口を作るのに使う。
+
+        渡されていない資源の口は作れるが、操作すると `DeviceUnavailable` を投げる。
+        """
         self._clock = clock
         self._motion = motion
+        self._voice = voice
+        self._display = display
+        self._led = led
         self._cond = threading.Condition()
         self._holders: dict[Resource, Lease] = {}
         self._leases: set[Lease] = set()  # 終わっていないリース

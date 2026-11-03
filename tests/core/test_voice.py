@@ -241,3 +241,23 @@ def test_同時の2つの発話は重ならない(cache: CacheManager, settings:
     assert player.started == 3
     assert player.max_active == 1
     assert synth.lines == ["ひとつめ。", "ふたつめ。", "みっつめ。"]
+
+
+def test_ロックを取った後に続けてはいけなければ何も話さない(
+    cache: CacheManager, settings: VoiceSettings
+) -> None:
+    synth, player = FakeSynth(), FakePlayer()
+    voice = VoiceService(synth, player, cache, settings)
+    assert voice.speak("いいえ。", should_continue=lambda: False) is False
+    assert synth.lines == []
+    assert player.played == []
+    assert voice.speak("はい。", should_continue=lambda: True) is True
+    assert synth.lines == ["はい。"]
+
+
+def test_続けてよいかは文の間では確かめない(cache: CacheManager, settings: VoiceSettings) -> None:
+    synth, player = FakeSynth(), FakePlayer()
+    voice = VoiceService(synth, player, cache, settings)
+    answers = iter([True, False, False])
+    assert voice.speak("ひとつ。ふたつ。", should_continue=lambda: next(answers)) is True
+    assert synth.lines == ["ひとつ。", "ふたつ。"]

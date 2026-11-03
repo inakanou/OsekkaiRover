@@ -14,6 +14,7 @@ import os
 import re
 import tempfile
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -65,14 +66,22 @@ class VoiceService:
         # 発話の終わりまで持つ（4.6）
         self._lock = threading.Lock()
 
-    def speak(self, text: str, *, keep: bool = True) -> None:
+    def speak(
+        self,
+        text: str,
+        *,
+        keep: bool = True,
+        should_continue: Callable[[], bool] | None = None,
+    ) -> bool:
         """文章を話し、再生が終わってから戻る。
 
+        `should_continue` は、発話のロックを取った直後に 1 回だけ確かめる。偽なら何も話さずに
+        False を返す（話し始めた後は、文の間でも確かめない。4.6）。それ以外は True を返す。
         話せなければ `SpeechFailed`、デバイスが使えなければ `DeviceUnavailable` を投げる。
         """
         lines = split_lines(text)
         if not lines:
-            return
+            return True
         synth = self._synth
         player = self._player
         if isinstance(synth, Unavailable):
@@ -80,6 +89,8 @@ class VoiceService:
         if isinstance(player, Unavailable):
             raise _unavailable(player)
         with self._lock:
+            if should_continue is not None and not should_continue():
+                return False
             try:
                 all_cached = self._speak_lines(synth, player, lines, keep)
             except Exception as error:
@@ -93,6 +104,7 @@ class VoiceService:
             sum(len(line) for line in lines),
             "あり" if all_cached else "なし",
         )
+        return True
 
     def _speak_lines(
         self,
