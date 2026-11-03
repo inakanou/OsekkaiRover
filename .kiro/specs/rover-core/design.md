@@ -201,7 +201,7 @@ src/osekkai/
     │   ├── __init__.py                # build_pi_devices: デバイスごとに準備し、失敗を隔離する
     │   ├── i2c_bus.py                 # I2C バスの共有ロックと、失敗を例外にする書き込み
     │   ├── hat.py                     # HatMcu: PWM レジスタ、MCU リセット、HAT の版の判定
-    │   ├── gpio.py                    # lgpio のピン（ボタン、LED、モーターの方向、スピーカーの有効化）
+    │   ├── gpio.py                    # lgpio のピン（ボタン、LED、モーターの方向）と、pinctrl でのスピーカーの有効化
     │   ├── picarx.py                  # PiCarXBody: サーボ（P0/P1/P2）とモーター（P12/P13＋D4/D5）の割り当て
     │   ├── lcd1602.py                 # Lcd1602Display（HD44780 + PCF8574、絵の文字の登録）
     │   ├── openjtalk.py               # OpenJTalkSynth（1 行に整える、文で分ける、音量の正規化）
@@ -1060,7 +1060,9 @@ class Unavailable:
   - lgpio で gpiochip を開く（環境変数 `ROBOT_HAT_GPIOCHIP` があればその番号）
   - USR（BCM 25、プルアップ）と追加のボタン（`D0`〜`D16` の割り当て表）の立ち下がりを、callback で通知する
   - LED は BCM 26
-  - スピーカーの有効化: v4 は BCM 20、v5 は BCM 12、または設定の値を High にする
+  - スピーカーの有効化: v4 は BCM 20、v5 は BCM 12、または設定の値を `pinctrl set N op dh` で High にする（GPIO 18〜21 はカーネルの I2S が持つので、lgpio では確保できない）
+  - ボタンの見張りには、lgpio のチャタリング除去（30 ms）を入れる。離すときのチャタリングは、基盤の 50 ms の除去では取り切れない
+  - HAT の版は、v5 の UUID なら v5、それ以外（EEPROM のない HAT を含む）は v4 とする
 - `Lcd1602Display`:
   - PCF8574 の 4 ビットモードで初期化し、`GLYPH_PATTERNS` を CGRAM の 0〜7 に登録する
   - `write_line` は DDRAM の 0x00 か 0x40 から 16 コードを書く

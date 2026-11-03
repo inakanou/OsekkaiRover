@@ -58,11 +58,14 @@
   - **PWM**: 周期 4095、プリスケーラ 10。P12 と P13 は同じタイマー（P12–15）を使う
   - **向きのピン**: picar-x 2.1.0a1 の `set_motor_speed` は、速さが 0 以上で調整値が 1 のとき方向ピンを Low、負のとき High にする。速さ s（0 以外）はデューティ `int(|s|/2) + 50` % にする
   - **前進**: picar-x の `forward(s)` は、左に +s、右に −s を渡す（右は反転して付いている）
-  - **スピーカーの有効化**: v4 なので BCM 20
+  - **スピーカーの有効化**: v4 なので BCM 20。`dtoverlay=hifiberry-dac` のため、GPIO 18〜21 はカーネルの I2S が持っている（`gpioinfo` で consumer="kernel"）。lgpio で確保すると `Invalid argument` で失敗する。robot_hat と同じく `pinctrl set 20 op dh` なら High にできる
   - **ピンの名前**: robot_hat の表で、D4 は BCM 23、D5 は BCM 24、SW（USR）は BCM 25、LED は BCM 26、MCURST は BCM 5
+  - **HAT の版の判定**: EEPROM がないので、`*hat*` のノードがないときは v4 とする（robot_hat 2.5.8 と同じ）
+  - **ボタンのチャタリング**: 追加の大きいボタン（D0、BCM 17）は、離すときに約 0.3 秒後のチャタリングで立ち下がりが 6 回ほど出た。基盤の 50 ms の除去では取り切れない。lgpio の `gpio_set_debounce_micros` で 30 ms にすると、5 回の押下がちょうど 5 回になった
   - **v5 の PWM 2 本のチャンネル**: 実機が v4 なので確かめられない。robot_hat 2.5.8 の `Motors` も、v5 用の 2 本目の PWM のチャンネルを決めていない（方向ピンの `Pin` を渡すので、mode 2 では型の確認で落ちる）
 - **Implications**:
   - 割り当ては設計の前提（`pwm_dir` で P13＋D4、P12＋D5）に収まる。設計に戻す必要はない
+  - スピーカーの有効化は `pinctrl` で行い、ボタンの見張りには lgpio のチャタリング除去（30 ms）を入れる（7.1 の直し）
   - 安全停止で 0 にするチャンネルは P12・P13、Low にするピンは D4・D5 とする
   - v5（`dual_pwm`）のチャンネルは未確認のまま。確かめるまでは、`dual_pwm` を選んだときと、`auto` で v5 と判定したときは、モーターを「使えない（理由: v5 のモーターの割り当てが未確認）」にして、ほかのデバイスで起動を続ける（要件 1.6）
 
@@ -229,7 +232,7 @@
 - **プロセスが落ちても PWM が残る** — `ExecStopPost` の安全停止と、起動時の MCU リセットで防ぐ。実機で SIGKILL を試して確かめる
 - **HAT v5 のモーターの方式の違い** — 設定で `auto`（UUID で判定）、`pwm_dir`、`dual_pwm` を選べるようにする。実機で確かめる
 - **lgpio がスレッドから安全に使えるか不明** — GPIO の操作も、HAT の部品の 1 つのロックで直列にする
-- **`pinctrl` と GPIO の権限** — 利用者を `gpio` グループに入れる（`device-deployment` の初期設定）。スピーカーの有効化は lgpio で行い、`pinctrl` に頼らない
+- **`pinctrl` と GPIO の権限** — 利用者を `gpio` グループに入れる（`device-deployment` の初期設定）。スピーカーの有効化は `pinctrl` で行う（GPIO 18〜21 はカーネルの I2S が持ち、lgpio では確保できない。2026-11-03 に実機で確かめた）
 - **時刻の同期の判定に使うコマンドがない環境** — `timedatectl` が失敗したら `synchronized` ファイルを見る。どちらも使えなければ「確かでない」として扱い、ログに残す
 
 ## References

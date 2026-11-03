@@ -1,6 +1,8 @@
-"""lgpio のピン（ボタン、LED、スピーカーの有効化、MCU リセット）。
+"""lgpio のピン（ボタン、LED、MCU リセット）と、pinctrl でのスピーカーの有効化。
 
 ピンの割り当ては SunFounder robot-hat 2.5.x の `pin.py`（HAT v4 以降の表）に合わせている。
+スピーカーのピン（BCM 20 など）は I2S のオーバーレイでカーネルが持つので lgpio では取れない。
+robot-hat と同じく `pinctrl set <pin> op dh` で High にする。
 lgpio がスレッドから安全か分からないので、GPIO の操作は I2C とは別の 1 つのロックで直列にする。
 """
 
@@ -8,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
 import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
@@ -17,6 +20,8 @@ from typing import Any, Final, Literal
 from osekkai.adapters.pi.hat import HatVersion
 
 logger = logging.getLogger(__name__)
+
+Runner = Callable[..., "subprocess.CompletedProcess[Any]"]
 
 # robot-hat 2.5.x pin.py の表（D0〜D16 と名前つきのピン → BCM）
 PIN_MAP: Final[Mapping[str, int]] = {
@@ -46,6 +51,9 @@ USR_BUTTON_PIN: Final = 25  # プルアップ、押すと 0
 LED_PIN: Final = 26
 SPEAKER_PIN_V4: Final = 20
 SPEAKER_PIN_V5: Final = 12
+BUTTON_DEBOUNCE_MICROS: Final = 30_000  # 離すときのチャタリングを消す（実機で確認）
+PINCTRL: Final = "pinctrl"
+PINCTRL_TIMEOUT: Final = 2.0
 
 GPIOCHIP_ENV: Final = "ROBOT_HAT_GPIOCHIP"
 GPIOCHIP_LABEL: Final = "pinctrl-rp1"  # Pi 5。番号はカーネルで変わる
@@ -154,13 +162,20 @@ class Gpio:
             self._lg.gpio_write(self._handle, pin, 1 if level else 0)
 
     def watch_falling(
-        self, pin: int, func: Callable[[int, int, int, int], None], *, pull_up: bool = True
+        self,
+        pin: int,
+        func: Callable[[int, int, int, int], None],
+        *,
+        pull_up: bool = True,
+        debounce_micros: int = BUTTON_DEBOUNCE_MICROS,
     ) -> Any:
         """立ち下がりを lgpio のスレッドで func に知らせる。戻り値は cancel() を持つ。"""
         with self._lock:
             flags = self._lg.SET_PULL_UP if pull_up else 0
             self._lg.gpio_claim_alert(self._handle, pin, self._lg.FALLING_EDGE, flags)
             self._claimed.add(pin)
+            # 線ごとのチャタリング除け。知らせを登録する前に入れる
+            self._lg.gpio_set_debounce_micros(self._handle, pin, debounce_micros)
             return self._lg.callback(self._handle, pin, self._lg.FALLING_EDGE, func)
 
     def free(self, pin: int) -> None:
@@ -240,9 +255,27 @@ class HatLed:
         self._gpio.write(LED_PIN, 1 if on else 0)
 
 
-def enable_speaker(gpio: Gpio, version: HatVersion, configured: Literal["auto"] | int) -> int:
-    """スピーカーのアンプを有効にする（ピンを High）。使ったピンを返す。"""
+def enable_speaker(
+    version: HatVersion, configured: Literal["auto"] | int, *, run: Runner = subprocess.run
+) -> int:
+    """スピーカーのアンプを有効にする（`pinctrl set <pin> op dh`）。使ったピンを返す。
+
+    失敗（コマンドがない・0 でない終わり・時間切れ）は OSError にする。
+    """
     pin = speaker_pin(version, configured)
-    gpio.claim_output(pin, 1)
-    gpio.write(pin, 1)
+    try:
+        result = run(
+            [PINCTRL, "set", str(pin), "op", "dh"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=PINCTRL_TIMEOUT,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        raise OSError(f"{PINCTRL} timed out after {PINCTRL_TIMEOUT:g} s") from None
+    except OSError:
+        raise OSError(f"{PINCTRL} could not be run") from None
+    if result.returncode != 0:
+        raise OSError(f"{PINCTRL} failed with return code {result.returncode}")
     return pin

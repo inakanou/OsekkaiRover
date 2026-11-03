@@ -75,12 +75,15 @@ def encode_word(value: int) -> list[int]:
 
 
 def read_hat_version(device_tree: Path = DEVICE_TREE) -> HatVersion:
-    """`*hat*/uuid` を読む。v5 の UUID なら v5、ほかの UUID なら v4、なければ unknown。"""
+    """`*hat*/uuid` を読む。v5 の UUID なら v5、それ以外は v4（robot-hat 2.5.8 と同じ）。
+
+    v4 には EEPROM がないので、hat の項目も uuid もないのが普通。
+    デバイスツリー自体が読めないときだけ unknown にする。
+    """
     try:
-        folders = sorted(device_tree.glob("*hat*"))
+        folders = sorted(p for p in device_tree.iterdir() if "hat" in p.name)
     except OSError:
         return "unknown"
-    found = False
     for folder in folders:
         try:
             raw = (folder / "uuid").read_bytes()
@@ -89,9 +92,7 @@ def read_hat_version(device_tree: Path = DEVICE_TREE) -> HatVersion:
         uuid = raw.replace(b"\x00", b"").decode("ascii", "replace").strip().lower()
         if uuid == V5_UUID:
             return "v5"
-        if uuid:
-            found = True
-    return "v4" if found else "unknown"
+    return "v4"
 
 
 class HatMcu:

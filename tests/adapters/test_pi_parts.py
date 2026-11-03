@@ -6,6 +6,7 @@ smbus2 と lgpio は、偽のオブジェクトを渡して読み込まない。
 from __future__ import annotations
 
 import ast
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,7 @@ from typing import Any
 import pytest
 
 from osekkai.adapters.pi.gpio import (
+    BUTTON_DEBOUNCE_MICROS,
     PIN_MAP,
     Gpio,
     HatButtons,
@@ -105,6 +107,10 @@ class FakeLgpio:
         self.calls.append(("alert", pin, edge, flags))
         return 0
 
+    def gpio_set_debounce_micros(self, handle: int, pin: int, micros: int) -> int:
+        self.calls.append(("debounce", handle, pin, micros))
+        return 0
+
     def gpio_write(self, handle: int, pin: int, level: int) -> int:
         self.calls.append(("write", pin, level))
         return 0
@@ -116,6 +122,7 @@ class FakeLgpio:
     def callback(
         self, handle: int, pin: int, edge: int, func: Callable[[int, int, int, int], None]
     ) -> FakeCallback:
+        self.calls.append(("callback", pin, edge))
         self.callbacks[pin] = func
         cb = FakeCallback()
         self.handles.append(cb)
@@ -212,9 +219,19 @@ def _write_uuid(root: Path, folder: str, text: str) -> None:
 
 
 def test_HATの版をuuidで見分ける(tmp_path: Path) -> None:
-    assert read_hat_version(tmp_path) == "unknown"
     _write_uuid(tmp_path, "hat", V5_UUID)
     assert read_hat_version(tmp_path) == "v5"
+
+
+def test_EEPROMのないHATはv4(tmp_path: Path) -> None:
+    # v4 には EEPROM がないので、デバイスツリーに hat の項目がない（robot-hat 2.5.8 と同じ）
+    (tmp_path / "chosen").mkdir()
+    assert read_hat_version(tmp_path) == "v4"
+
+
+def test_uuidのないhatの項目はv4(tmp_path: Path) -> None:
+    (tmp_path / "hat").mkdir()
+    assert read_hat_version(tmp_path) == "v4"
 
 
 def test_v5でないuuidのHATはv4(tmp_path: Path) -> None:
@@ -369,7 +386,71 @@ def test_LEDはBCM26を操作する() -> None:
     assert lg.calls == [("out", 26, 0), ("write", 26, 1), ("write", 26, 0)]
 
 
-def test_スピーカーの有効化はピンをHighにする() -> None:
+def test_ボタンは見張りの後と知らせの前に30ミリ秒のチャタリング除けを入れる() -> None:
     gpio, lg = _gpio({0: "pinctrl-rp1"})
-    assert enable_speaker(gpio, "v5", "auto") == 12
-    assert lg.calls == [("out", 12, 1), ("write", 12, 1)]
+    gpio.watch_falling(17, lambda chip, pin, level, tick: None)
+    assert BUTTON_DEBOUNCE_MICROS == 30_000
+    assert lg.calls == [
+        ("alert", 17, lg.FALLING_EDGE, lg.SET_PULL_UP),
+        ("debounce", 100, 17, 30_000),
+        ("callback", 17, lg.FALLING_EDGE),
+    ]
+
+
+def test_チャタリング除けの長さは変えられる() -> None:
+    gpio, lg = _gpio({0: "pinctrl-rp1"})
+    gpio.watch_falling(25, lambda chip, pin, level, tick: None, debounce_micros=5_000)
+    assert ("debounce", 100, 25, 5_000) in lg.calls
+
+
+class FakeRun:
+    def __init__(self, returncode: int = 0, error: BaseException | None = None) -> None:
+        self.returncode = returncode
+        self.error = error
+        self.calls: list[tuple[list[str], dict[str, Any]]] = []
+
+    def __call__(self, args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
+        self.calls.append((list(args), kwargs))
+        if self.error is not None:
+            raise self.error
+        return subprocess.CompletedProcess(args, self.returncode)
+
+
+def test_スピーカーの有効化はpinctrlでピンをHighにする() -> None:
+    run = FakeRun()
+    assert enable_speaker("v5", "auto", run=run) == 12
+    assert enable_speaker("v4", "auto", run=run) == 20
+    assert enable_speaker("unknown", 6, run=run) == 6
+    assert [args for args, _ in run.calls] == [
+        ["pinctrl", "set", "12", "op", "dh"],
+        ["pinctrl", "set", "20", "op", "dh"],
+        ["pinctrl", "set", "6", "op", "dh"],
+    ]
+    _, kwargs = run.calls[0]
+    assert kwargs["check"] is False
+    assert 0 < kwargs["timeout"] <= 5
+
+
+def test_スピーカーの有効化はlgpioを使わない() -> None:
+    gpio, lg = _gpio({0: "pinctrl-rp1"})
+    enable_speaker("v4", "auto", run=FakeRun())
+    assert lg.calls == []
+    gpio.close()
+
+
+@pytest.mark.parametrize(
+    ("run", "message"),
+    [
+        (FakeRun(returncode=1), "pinctrl failed with return code 1"),
+        (FakeRun(error=FileNotFoundError(2, "No such file", "/secret/pinctrl")), "pinctrl"),
+        (FakeRun(error=subprocess.TimeoutExpired(["pinctrl"], 2.0, output=b"x")), "pinctrl"),
+        (FakeRun(error=PermissionError(13, "denied", "/secret")), "pinctrl"),
+    ],
+)
+def test_スピーカーの有効化の失敗はOSError(run: FakeRun, message: str) -> None:
+    with pytest.raises(OSError) as info:
+        enable_speaker("v4", "auto", run=run)
+    text = str(info.value)
+    assert text.startswith(message)
+    assert "/secret" not in text
+    assert info.value.__cause__ is None
