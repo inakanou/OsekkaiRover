@@ -252,6 +252,7 @@
   - 再生: 再生先を指定して再生し、終わるまで待つ
   - 時刻の同期: timedatectl を 2 秒の上限で問い合わせ、失敗したら同期の印のファイルの有無で判定する
   - 完了の状態: mypy が通り、実機で `--say` の文章が割れずに聞こえ、時刻の同期の判定がログに出る
+  - _実機確認待ち: コードとレビューは済み（numpy の正規化は使い捨ての環境で動かして確かめた）。実機で `--say` の声と同期の判定のログを確かめたら完了にする_
   - _Boundary: OpenJTalkSynth, PaplayPlayer, TimedatectlTimeSync_
   - _Requirements: 6.1, 6.2, 10.1_
 
@@ -342,3 +343,4 @@
 - 6.5: `python -m osekkai` の入口は `osekkai.__main__.main(argv)`。実機のアダプタは `osekkai.adapters.pi.build_pi_devices(core_cfg)` を遅れて読み込む（7.7 でこの関数を足せば動く。今は ImportError で「実機のアダプタがありません」と出して 1 で終える）。実機の道では設定を 2 回読む。CLI を手で動かすときは XDG の環境変数を一時のディレクトリに向ける（ホームに設定・キャッシュができる）
 - 7.1: 実機の部品は `I2cBus`（`lock` を公開）・`HatMcu`（0x14→0x15→0x16、`reset()`、`hat_version()`）・`Gpio`・`HatButtons`・`HatLed`・`enable_speaker`。追加のボタンのピンが、リセット（D8）・LED（D14）・スピーカー（D15/D10）とぶつかっても今は断らない（後で ValueError にしてよい）。テストはハードのライブラリを読み込まずに、偽物を渡して純粋な部分だけを確かめる
 - 7.2: `Lcd1602Display(bus, glyphs: Mapping[Glyph, Sequence[int]], *, address=0x27, sleep=...)`。作るときに初期化と絵の文字の登録を行う（OSError なら 7.7 で Unavailable にする）。絵の文字の表は `core.lcd_text.GLYPH_PATTERNS` を組み立ての場所（`__main__`）から 7.7 の `build_pi_devices` に渡す
+- 7.3: `OpenJTalkSynth`・`PaplayPlayer`・`TimedatectlTimeSync`。失敗の例外にはコマンド名と終了コードだけを入れ、文章も stderr も入れない（時間切れは `from None`）。合成の時間の上限は 30 秒、再生は 60 秒。同期の判定のログは、判定が変わったときだけ INFO で出す
