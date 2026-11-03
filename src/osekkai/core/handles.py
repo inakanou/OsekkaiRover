@@ -10,6 +10,7 @@
   中止（`MotionAborted`）は `LeaseRevoked` に変える。中止のときは首を戻さない
 - 声の口は、発話のロックを待つ前と、ロックを取った直後（話し始める前）に確かめる。
   話し始めた後は、取り上げられても発話の途中では止めない（4.6）
+- ボタンの口は、リースの押下の待ち行列を読む。待つ間にリースが終わったら `LeaseRevoked`
 - サービスを渡されていない資源は、操作すると `DeviceUnavailable` を投げる（1.6）。
   サービスの `DeviceUnavailable` と `SpeechFailed` は、そのまま外に出す
 """
@@ -23,6 +24,7 @@ from osekkai.core.types import DeviceUnavailable, LeaseRevoked, MotionAborted
 
 if TYPE_CHECKING:
     from osekkai.core.arbiter import Lease
+    from osekkai.core.buttons import ButtonRouter
     from osekkai.core.display import DisplayService, LedService
     from osekkai.core.motion import MotionService
     from osekkai.core.voice import VoiceService
@@ -87,6 +89,30 @@ class LedHandle:
     def set(self, on: bool) -> None:
         _check(self._lease)
         _service(self._service, "led").set(on)
+
+
+class ButtonHandle:
+    def __init__(self, lease: Lease, router: ButtonRouter | None) -> None:
+        self._lease = lease
+        self._router = router
+
+    def clear(self) -> None:
+        """それまでの押下を忘れる。"""
+        _check(self._lease)
+        _service(self._router, "buttons").clear(self._lease)
+
+    def wait_press(self, timeout: float | None) -> bool:
+        """押下を 1 つ消費する（5.1）。時間切れなら False。取り上げられたら LeaseRevoked。"""
+        lease = self._lease
+        _check(lease)
+        got = _service(self._router, "buttons").wait_press(lease, timeout)
+        if got is None:
+            raise LeaseRevoked(lease.owner)
+        return got
+
+    def has_press(self) -> bool:
+        _check(self._lease)
+        return _service(self._router, "buttons").has_press(self._lease)
 
 
 class DriveHandle:

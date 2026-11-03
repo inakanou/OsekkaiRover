@@ -141,7 +141,7 @@
   - _Depends: 3.2, 3.3, 3.5_
   - _Requirements: 1.6, 4.4, 4.6, 4.9_
 
-- [ ] 3.7 ボタンの押下の配達を作る
+- [x] 3.7 ボタンの押下の配達を作る
   - 同じボタンで 50 ms 以内の重複の通知を捨てる。USR と追加のボタンを同じ押下として扱う
   - ボタンを借りている機能がいれば、そのリースの押下の待ち行列に 1 つ入れる。いなければ、待ち手のうち最も優先度の高い機能（同じなら先に登録した方）に知らせる。どちらもいなければ捨てる
   - リースが終わったら、その待ち行列を捨てる
@@ -325,3 +325,4 @@
 - 3.4: リースが終わるときの順は「状態を変える → 走行・首の後始末（Condition の外）→ 持ち主を消して notify_all → 空いた合図（Condition の外）」。前の持ち主の後始末が、新しい持ち主のモーターを止めることはない。中断（3.5）の差し込み口は `acquire` のループの `blockers` の後にある。`LeaseState` と `Lease.state`・`Lease.priority` を公開している
 - 3.5: 中断の知らせは、持ち主の全員が低いときだけ、1 回だけ。2 秒の取り上げは、待っている高い方の要求者のループの中で行う（裏のタイマーはない）。高い方は、中断している間は自分の `wait` によらず待つ。中断を知らされたリースは `active` のまま `preempt_requested` が立つので、走行の口（3.6）は `preempt_requested` を見て操作を断る
 - 3.6: `Arbiter(clock, motion, *, voice=None, display=None, led=None)`。渡されていないサービスの口は、操作したときに `DeviceUnavailable`。`Lease.button` は 3.7 で足す。`VoiceService.speak(..., should_continue=...)` は発話のロックを取った直後に 1 回だけ確かめ、話さなかったら False を返す。走行の口は中断の知らせの後 `drive()` を断るが `stop()` は使える
+- 3.7: `ButtonRouter(port, clock)` を先に作って `Arbiter(..., buttons=router)` に渡す（Arbiter が `router.bind(self)` を呼ぶ）。Runtime は `router.start()`・`router.close()` を呼ぶ。機能の道具（5.1）の `want_button_presses` は `router.add_waiter(spec.name, spec.priority, callback)` を呼ぶ。待ち手の callback はボタンのポートのスレッドで呼ばれる。`Arbiter.lease_for(resource)` を公開している

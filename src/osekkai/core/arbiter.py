@@ -30,10 +30,18 @@ from enum import Enum
 from types import TracebackType
 from typing import TYPE_CHECKING, Final
 
-from osekkai.core.handles import DisplayHandle, DriveHandle, LedHandle, NeckHandle, VoiceHandle
+from osekkai.core.handles import (
+    ButtonHandle,
+    DisplayHandle,
+    DriveHandle,
+    LedHandle,
+    NeckHandle,
+    VoiceHandle,
+)
 from osekkai.core.types import Resource, ResourceBusy
 
 if TYPE_CHECKING:
+    from osekkai.core.buttons import ButtonRouter
     from osekkai.core.clock import Clock
     from osekkai.core.display import DisplayService, LedService
     from osekkai.core.motion import MotionService
@@ -105,6 +113,11 @@ class Lease:
         return LedHandle(self, self._arbiter._led)
 
     @property
+    def button(self) -> ButtonHandle:
+        self._require(Resource.BUTTON)
+        return ButtonHandle(self, self._arbiter._buttons)
+
+    @property
     def neck(self) -> NeckHandle:
         self._require(Resource.NECK)
         return NeckHandle(self, self._arbiter._motion)
@@ -153,8 +166,9 @@ class Arbiter:
         voice: VoiceService | None = None,
         display: DisplayService | None = None,
         led: LedService | None = None,
+        buttons: ButtonRouter | None = None,
     ) -> None:
-        """`voice`・`display`・`led` は、リースの口を作るのに使う。
+        """`voice`・`display`・`led`・`buttons` は、リースの口を作るのに使う。
 
         渡されていない資源の口は作れるが、操作すると `DeviceUnavailable` を投げる。
         """
@@ -167,6 +181,10 @@ class Arbiter:
         self._holders: dict[Resource, Lease] = {}
         self._leases: set[Lease] = set()  # 終わっていないリース
         self._freed_callbacks: dict[Resource, list[Callable[[], None]]] = {}
+        self._buttons = buttons
+        if buttons is not None:
+            # 押下をボタンの持ち主のリースに届けるため（5.1）
+            buttons.bind(self)
 
     def acquire(
         self,
@@ -238,6 +256,11 @@ class Arbiter:
         with self._cond:
             lease = self._holders.get(resource)
             return lease.owner if lease is not None else None
+
+    def lease_for(self, resource: Resource) -> Lease | None:
+        """その資源を持っているリース。"""
+        with self._cond:
+            return self._holders.get(resource)
 
     # --- 内側 ---
 
