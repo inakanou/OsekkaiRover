@@ -67,6 +67,11 @@ class MotionService:
         with self._lock:
             self._home()
 
+    def home_neck(self) -> None:
+        """首だけを正面に戻す。ステアリング（走行の側）には触らない（4.8）。"""
+        with self._lock:
+            self._home_neck()
+
     def nod(self, times: int, should_continue: Callable[[], bool]) -> None:
         for _ in range(times):
             for tilt in (-20.0, 10.0):
@@ -75,7 +80,7 @@ class MotionService:
                     self._set("tilt", tilt)
                 self._clock.sleep(NOD_STEP)
         with self._lock:
-            self._home()
+            self._home_neck()
 
     def look_around(self, should_continue: Callable[[], bool]) -> None:
         for pan in (-30.0, 30.0, 0.0):
@@ -147,9 +152,12 @@ class MotionService:
         self._set("tilt", tilt)
 
     def _home(self) -> None:
+        self._home_neck()
+        self._set("steering", 0.0)
+
+    def _home_neck(self) -> None:
         self._set("pan", 0.0)
         self._set("tilt", 0.0)
-        self._set("steering", 0.0)
 
     def _set(self, channel: Channel, degrees: float) -> None:
         servos = self._servos

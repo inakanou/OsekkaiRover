@@ -108,7 +108,8 @@ def test_うなずくはチルトを0_25秒ずつ動かして正面に戻る(
     tilts = [a[1] for a in _angles(fakes.servos) if a[0] == "tilt"]
     assert tilts[:4] == [-20.0, 10.0, -20.0, 10.0]
     assert clock.sleeps[:4] == [0.25, 0.25, 0.25, 0.25]
-    assert fakes.servos.angles == {"pan": 0.0, "tilt": 0.0, "steering": 0.0}
+    # 首だけを戻し、走行の側のステアリングには触らない
+    assert fakes.servos.angles == {"pan": 0.0, "tilt": 0.0}
 
 
 def test_見回すはパンを0_35秒ずつ動かす(fakes: FakeDeviceSet, clock: FakeClock) -> None:
@@ -338,3 +339,14 @@ def test_書き込みの失敗はデバイスが使えないになる(fakes: Fak
     fakes.motors.fail_on.clear()
     motion.drive(0, 10)
     assert fakes.motors.speeds == (10, 10)
+
+
+def test_首だけを正面に戻してもステアリングは変えない(
+    fakes: FakeDeviceSet, clock: FakeClock
+) -> None:
+    motion = _service(fakes, clock)
+    motion.drive(20, 50)
+    motion.look(40, 20)
+    motion.home_neck()
+    assert fakes.servos.angles == {"pan": 0.0, "tilt": 0.0, "steering": 20.0}
+    assert fakes.motors.speeds == (50, 50)
