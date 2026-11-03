@@ -69,7 +69,7 @@
   - _Boundary: Clock, TimeSyncMonitor, EventBus_
   - _Requirements: 10.1, 10.3_
 
-- [ ] 2.4 (P) LCD の文字の変換・中央寄せ・絵の文字・顔を作る
+- [x] 2.4 (P) LCD の文字の変換・中央寄せ・絵の文字・顔を作る
   - ひらがなをカタカナに、カタカナを半角カタカナの ROM のコードに変える。濁点と半濁点は別のセルにする。ASCII の表示できる範囲はそのまま、絵の文字のコードは通し、それ以外は「?」にする
   - 変換後のセル数で数える中央寄せを作る
   - 8 つの絵の文字の 5×8 の形と、4 つの顔の文字列を定める
@@ -315,3 +315,4 @@
 - 2.2: `ConfigLoader(paths, feature_models)` は「機能の名前 → 設定のモデル」の対応を受け取る（design の `feature_specs` の代わり）。`fatal_errors` があれば、機能の発見（5.2）はすべての機能を除く。誤りのある機能は `features` に入らない。見本から作るときの `OSError` は `load()` から投げられるので、Runtime（6.2）で受け止める
 - 2.2: 同梱の見本は `src/osekkai/core/example_config.yaml`。`config/osekkai.example.yaml` と同じ内容であることをテストで縛っている（片方を変えたらもう片方も変える）
 - 2.3: `EventBus` と `TimeSyncMonitor` のスレッドは daemon。Runtime（6.2・6.3）は起動で `bus.start()`・`monitor.start()`、停止で `bus.close()`・`monitor.stop()` を必ず呼ぶ。テストでは `bus.wait_idle(timeout)` で配達を待ち、見張りは `check_once()` で 1 回ずつ進める。受け手は、イベントの型にちょうど一致するものだけに届く
+- 2.4: LCD のセル数は `len(to_lcd_codes(text))` で数える（濁点は 1 セル）。顔の文字列は `Face.text()`（5〜6 セル）。絵の文字は `chr(Glyph.X)` で文字列に入れる。0x5C は A00 の ROM では「¥」に見える

@@ -50,6 +50,28 @@ class Face(Enum):
     HAPPY = "happy"
     SLEEP = "sleep"
 
+    def text(self) -> str:
+        """LCD に出す顔の文字列（絵の文字のコードを含む）。"""
+        return _FACE_TEXTS[self]
+
+
+def _g(glyph: Glyph) -> str:
+    return chr(glyph)
+
+
+# 目・口・目の並び。待機画面で左右に動かすので 8 セルより短くする
+_FACE_TEXTS: dict[Face, str] = {
+    Face.NORMAL: _g(Glyph.EYE) + " - " + _g(Glyph.EYE),
+    Face.CALL: _g(Glyph.EYE) + " " + _g(Glyph.MOUTH_O) + " " + _g(Glyph.EYE) + "!",
+    Face.HAPPY: _g(Glyph.EYE_HAPPY)
+    + " "
+    + _g(Glyph.SMILE)
+    + " "
+    + _g(Glyph.EYE_HAPPY)
+    + _g(Glyph.HEART),
+    Face.SLEEP: _g(Glyph.EYE_CLOSED) + " - " + _g(Glyph.EYE_CLOSED) + _g(Glyph.ZZZ),
+}
+
 
 @dataclass(frozen=True)
 class ButtonPress:
