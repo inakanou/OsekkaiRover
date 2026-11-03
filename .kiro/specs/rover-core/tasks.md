@@ -238,6 +238,7 @@
   - GPIO: gpiochip をラベルで探して開き、USR と追加のボタンの立ち下がりを知らせ、LED を操作し、スピーカーを有効にする。GPIO の操作も 1 つのロックで直列にする
   - ハードのライブラリは、これらのモジュールの中でだけ読み込む
   - 完了の状態: mypy が通り、実機で HAT の版の判定結果と USR ボタンの押下がログに出る
+  - _実機確認待ち: コードとレビューは済み（robot-hat 2.5.x のレジスタとピンの表と照合済み）。実機で HAT の版と USR ボタンの押下のログを確かめたら完了にする_
   - _Requirements: 1.6, 5.1, 7.6_
 
 - [ ] 7.2 LCD のアダプタを作る
@@ -338,3 +339,4 @@
 - 6.3（残課題）: 偽物の `_FakeDevice._record` は再入できない Lock を使うので、ハードなしの実行（6.4）で片付けの途中に 2 回目のシグナルが来ると止まりうる。6.4 で RLock にするか判断する
 - 6.4: ハードなしの実行は `build_console_devices(clock, *, out=None, inp=None, fail=())`。標準入力の読み手は daemon のスレッドで、`ButtonPort.start` で始まる。偽物の記録のロックは RLock にした（片付けの途中の 2 回目のシグナルでも止まらない）
 - 6.5: `python -m osekkai` の入口は `osekkai.__main__.main(argv)`。実機のアダプタは `osekkai.adapters.pi.build_pi_devices(core_cfg)` を遅れて読み込む（7.7 でこの関数を足せば動く。今は ImportError で「実機のアダプタがありません」と出して 1 で終える）。実機の道では設定を 2 回読む。CLI を手で動かすときは XDG の環境変数を一時のディレクトリに向ける（ホームに設定・キャッシュができる）
+- 7.1: 実機の部品は `I2cBus`（`lock` を公開）・`HatMcu`（0x14→0x15→0x16、`reset()`、`hat_version()`）・`Gpio`・`HatButtons`・`HatLed`・`enable_speaker`。追加のボタンのピンが、リセット（D8）・LED（D14）・スピーカー（D15/D10）とぶつかっても今は断らない（後で ValueError にしてよい）。テストはハードのライブラリを読み込まずに、偽物を渡して純粋な部分だけを確かめる
