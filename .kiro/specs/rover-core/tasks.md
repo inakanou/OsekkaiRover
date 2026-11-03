@@ -223,7 +223,7 @@
   - _Boundary: Fake adapters_
   - _Requirements: 13.1, 13.2_
 
-- [ ] 6.5 起動の口と「話して終わる」を作る
+- [x] 6.5 起動の口と「話して終わる」を作る
   - 引数（ハードなし、設定ファイルの指定、話して終わる、詳しいログ）を解析し、ログを設定し、パスを作り、アダプタを選び、機能の発見を作って起動する。アダプタを選ぶのはここだけにする
   - 「話して終わる」は、単一の実行のロックを取り、声の出力だけを作って話し、機能を開始せずに終える（Runtime の口として足す）
   - README に、開発の始め方（インストール、ハードなしの実行）と設定ファイルの場所を書き足す
@@ -337,3 +337,4 @@
 - 6.3: `Runtime.run() -> ExitCode` と `request_stop()`・`report_fatal(exc)`・`abandoned`。Runtime は `os._exit` を呼ばない。起動の口（6.5）は `runtime.abandoned` が空でなければ `os._exit(int(code))` で終える（機能のスレッドは daemon でないため）。停止の片付けは「機能を止める → 中立の姿勢 → スレッドの片付け → halt」の順（スレッドの待ちが長引いても首とステアリングは先に戻す）
 - 6.3（残課題）: 偽物の `_FakeDevice._record` は再入できない Lock を使うので、ハードなしの実行（6.4）で片付けの途中に 2 回目のシグナルが来ると止まりうる。6.4 で RLock にするか判断する
 - 6.4: ハードなしの実行は `build_console_devices(clock, *, out=None, inp=None, fail=())`。標準入力の読み手は daemon のスレッドで、`ButtonPort.start` で始まる。偽物の記録のロックは RLock にした（片付けの途中の 2 回目のシグナルでも止まらない）
+- 6.5: `python -m osekkai` の入口は `osekkai.__main__.main(argv)`。実機のアダプタは `osekkai.adapters.pi.build_pi_devices(core_cfg)` を遅れて読み込む（7.7 でこの関数を足せば動く。今は ImportError で「実機のアダプタがありません」と出して 1 で終える）。実機の道では設定を 2 回読む。CLI を手で動かすときは XDG の環境変数を一時のディレクトリに向ける（ホームに設定・キャッシュができる）

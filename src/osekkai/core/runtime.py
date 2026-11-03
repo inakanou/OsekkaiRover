@@ -56,7 +56,7 @@ from osekkai.core.safety import SafetyStop
 from osekkai.core.storage import StateStore
 from osekkai.core.supervisor import THREAD_PREFIX as FEATURE_THREAD_PREFIX
 from osekkai.core.supervisor import FeatureSupervisor
-from osekkai.core.types import Priority, Resource
+from osekkai.core.types import DeviceUnavailable, Priority, Resource, SpeechFailed
 from osekkai.core.voice import VoiceService
 
 if TYPE_CHECKING:
@@ -222,6 +222,31 @@ class Runtime:
                 self.report_fatal(error)
 
         return hook
+
+    # --- 話して終わる ---
+
+    def say_and_exit(self, text: str) -> ExitCode:
+        """声の出力だけを作って `text` を話し、終了コードを返す（13.5）。
+
+        単一の実行のロックを取る。機能・待機画面・動きは始めず、声のほかのデバイスに触らない。
+        """
+        if not self._lock.acquire():
+            logger.error(ALREADY_RUNNING_MESSAGE)
+            print(ALREADY_RUNNING_MESSAGE, file=sys.stderr)
+            return ExitCode.ALREADY_RUNNING
+        try:
+            core = self._load_config().core
+            cache = CacheManager.from_paths(self._paths, core.cache_max_mb, self._clock)
+            voice = VoiceService(self._devices.synth, self._devices.player, cache, core.voice)
+            try:
+                voice.speak(text)
+            except (SpeechFailed, DeviceUnavailable) as error:
+                # 文章はログに出さない（6.5）
+                logger.error("話せませんでした: %s", type(error).__name__)
+                return ExitCode.FATAL
+            return ExitCode.OK
+        finally:
+            self._lock.release()
 
     # --- 起動 ---
 
