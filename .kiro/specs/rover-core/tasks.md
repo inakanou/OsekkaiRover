@@ -158,7 +158,7 @@
   - 完了の状態: 分の変化で 1 行目が変わる、短い情報と顔の向きが反映される、同期の前は「--:--」になる、機能が画面を借りると退き返すと戻る、の各テストが偽の時計で通る
   - _Requirements: 1.2, 9.1, 9.2, 9.3, 10.2_
 
-- [ ] 4.2 静かな状態を作る
+- [x] 4.2 静かな状態を作る
   - 静かな状態に入ると、待機画面を消してバックライトを消し、変化のイベントを出す。終えると、バックライトを点けて待機画面に戻し、イベントを出す
   - 変化のたびに基盤の状態として原子的に保存し、起動時に「再起動の前に静かだったか」として読む。起動時の状態は「静かでない」から始める
   - 完了の状態: 入ると画面が消えてイベントが届く、終えると戻ってイベントが届く、保存の後に作り直すと「再起動の前に静かだった」が真になる、の各テストが通る
@@ -327,3 +327,4 @@
 - 3.6: `Arbiter(clock, motion, *, voice=None, display=None, led=None)`。渡されていないサービスの口は、操作したときに `DeviceUnavailable`。`Lease.button` は 3.7 で足す。`VoiceService.speak(..., should_continue=...)` は発話のロックを取った直後に 1 回だけ確かめ、話さなかったら False を返す。走行の口は中断の知らせの後 `drive()` を断るが `stop()` は使える
 - 3.7: `ButtonRouter(port, clock)` を先に作って `Arbiter(..., buttons=router)` に渡す（Arbiter が `router.bind(self)` を呼ぶ）。Runtime は `router.start()`・`router.close()` を呼ぶ。機能の道具（5.1）の `want_button_presses` は `router.add_waiter(spec.name, spec.priority, callback)` を呼ぶ。待ち手の callback はボタンのポートのスレッドで呼ばれる。`Arbiter.lease_for(resource)` を公開している
 - 4.1: 待機画面の 1 行目は `MM/DD HH:MM`（11 セル）＋ 1 セルの空き ＋ 短い情報（右寄せ、4 セルまで）。`set_info` は 6 セルまで受け取るが、出るのは 4 セル（design の「6 セルまで」は 16 セルに収まらないための読み替え）。待機画面の口: `start(run_thread=True)`・`stop()`・`tick()`・`set_info`・`set_face(face, gaze)`・`set_quiet(bool)`。静かな状態の間も優先度 0 で画面を持ち、空白とバックライト消灯を出す。Runtime（6.2）が start と stop、機能の道具（5.1）が set_info と set_face、静かな状態（4.2）が set_quiet を呼ぶ
+- 4.2: `QuietMode(idle, bus, store, clock)`。store は `StateStore.for_feature(paths, "core", clock)`。起動時は保存しない（保存は機能が実際に切り替えたときだけ）。続けて再起動しても「静かだった」の印は消えない（夜に画面が点かない側に倒す）。機能の道具（5.1）の `request_quiet`・`end_quiet`・`is_quiet`・`was_quiet_before_restart` はここに任せる
