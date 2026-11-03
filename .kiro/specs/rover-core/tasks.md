@@ -150,7 +150,7 @@
   - _Requirements: 5.1, 5.2, 5.3, 5.4_
 
 - [ ] 4. 待機画面と静かな状態
-- [ ] 4.1 待機画面を作る
+- [x] 4.1 待機画面を作る
   - 優先度 0 の内部の持ち主として画面を借り、中断を知らされたら直ちに返し、画面が空いたら借り直す
   - 1 行目に日付と時刻、右寄せで機能の短い情報（6 セルまで）を出す。時刻が確かでなければ時刻の代わりに「--:--」を出す
   - 2 行目に顔を出し、視線に応じて中央から ±4 セル動かす
@@ -326,3 +326,4 @@
 - 3.5: 中断の知らせは、持ち主の全員が低いときだけ、1 回だけ。2 秒の取り上げは、待っている高い方の要求者のループの中で行う（裏のタイマーはない）。高い方は、中断している間は自分の `wait` によらず待つ。中断を知らされたリースは `active` のまま `preempt_requested` が立つので、走行の口（3.6）は `preempt_requested` を見て操作を断る
 - 3.6: `Arbiter(clock, motion, *, voice=None, display=None, led=None)`。渡されていないサービスの口は、操作したときに `DeviceUnavailable`。`Lease.button` は 3.7 で足す。`VoiceService.speak(..., should_continue=...)` は発話のロックを取った直後に 1 回だけ確かめ、話さなかったら False を返す。走行の口は中断の知らせの後 `drive()` を断るが `stop()` は使える
 - 3.7: `ButtonRouter(port, clock)` を先に作って `Arbiter(..., buttons=router)` に渡す（Arbiter が `router.bind(self)` を呼ぶ）。Runtime は `router.start()`・`router.close()` を呼ぶ。機能の道具（5.1）の `want_button_presses` は `router.add_waiter(spec.name, spec.priority, callback)` を呼ぶ。待ち手の callback はボタンのポートのスレッドで呼ばれる。`Arbiter.lease_for(resource)` を公開している
+- 4.1: 待機画面の 1 行目は `MM/DD HH:MM`（11 セル）＋ 1 セルの空き ＋ 短い情報（右寄せ、4 セルまで）。`set_info` は 6 セルまで受け取るが、出るのは 4 セル（design の「6 セルまで」は 16 セルに収まらないための読み替え）。待機画面の口: `start(run_thread=True)`・`stop()`・`tick()`・`set_info`・`set_face(face, gaze)`・`set_quiet(bool)`。静かな状態の間も優先度 0 で画面を持ち、空白とバックライト消灯を出す。Runtime（6.2）が start と stop、機能の道具（5.1）が set_info と set_face、静かな状態（4.2）が set_quiet を呼ぶ
