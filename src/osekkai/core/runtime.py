@@ -10,12 +10,24 @@
   - 致命の誤り: 返さずに出し続ける（機能は 1 つも開始しない）
   - 機能の節の誤り: `config_error_seconds` 秒（実際の秒数）後に返し、待機画面に戻す
 - 起動の声はメインのスレッドで話し終えてから戻る（機能の開始の後）
-- シグナル・停止の待ちの上限・基盤の異常の扱いは 6.3 で `run()` として足す
+
+停止（2.1〜2.4）は `run()` が扱う。
+
+- SIGTERM・SIGINT のハンドラは、非常停止と停止の要求の記録だけを行う。ハンドラは
+  メインのスレッドの待ちの途中に割り込むので、Event のロックは取らず、旗を立てるだけにする
+  （メインのスレッドが `STOP_POLL_S` ごとに見る）。ほかのスレッドからは `request_stop()` を使う
+- 機能の停止は合計 `stop_budget` 秒（既定 8 秒、実際の秒数）まで待ち、応えない機能は待たずに
+  片付けに進む。その名前は `abandoned` に残る。見捨てた機能のスレッドは daemon でないので、
+  呼び出す側（CLI）は `abandoned` が空でなければ `os._exit(終了コード)` で強制的に終える
+- 基盤の異常（`run()` の中の例外と、名前が `osekkai-` で始まる基盤のスレッドの捕まえなかった
+  例外）では、先にモーターを止めてから片付け、終了コード 1 を返す。機能のスレッド
+  （`osekkai-feature-`）の例外は監督が扱うので、ここでは扱わない
 """
 
 from __future__ import annotations
 
 import logging
+import signal
 import sys
 import threading
 from collections.abc import Callable
@@ -23,6 +35,7 @@ from dataclasses import fields
 from datetime import time
 from enum import IntEnum
 from pathlib import Path
+from types import FrameType
 from typing import TYPE_CHECKING, Final
 
 from osekkai import version
@@ -41,6 +54,7 @@ from osekkai.core.ports import Devices, Unavailable
 from osekkai.core.quiet import QuietMode
 from osekkai.core.safety import SafetyStop
 from osekkai.core.storage import StateStore
+from osekkai.core.supervisor import THREAD_PREFIX as FEATURE_THREAD_PREFIX
 from osekkai.core.supervisor import FeatureSupervisor
 from osekkai.core.types import Priority, Resource
 from osekkai.core.voice import VoiceService
@@ -59,6 +73,9 @@ CONFIG_NOTICE_OWNER: Final = "core.config"
 CONFIG_NOTICE_PRIORITY: Final = Priority.IDLE + 1
 CONFIG_ERROR_SECONDS: Final = 5.0
 DEFAULT_STOP_BUDGET_S: Final = 8.0
+STOP_POLL_S: Final = 0.05
+CORE_THREAD_PREFIX: Final = "osekkai-"
+STOP_SIGNALS: Final = (signal.SIGTERM, signal.SIGINT)
 
 
 class ExitCode(IntEnum):
@@ -92,6 +109,7 @@ class Runtime:
         *,
         config_override: Path | None = None,
         config_error_seconds: float = CONFIG_ERROR_SECONDS,
+        stop_budget: float = DEFAULT_STOP_BUDGET_S,
     ) -> None:
         self._devices = devices
         self._paths = paths
@@ -99,6 +117,7 @@ class Runtime:
         self._registry = registry
         self._config_override = config_override
         self._config_error_seconds = config_error_seconds
+        self._stop_budget = stop_budget
         self._lock = InstanceLock(paths.lock_file)
         self._started = False
         self.report: ConfigReport | None = None
@@ -117,6 +136,92 @@ class Runtime:
         self._notice_lock = threading.Lock()
         self._notice_stop = threading.Event()
         self._notice_thread: threading.Thread | None = None
+        self._stop_event = threading.Event()
+        self._signaled = False  # シグナルのハンドラが立てる旗（ロックを取らない）
+        self._fatal: BaseException | None = None
+        self.abandoned: list[str] = []
+
+    # --- 実行 ---
+
+    def run(self) -> ExitCode:
+        """起動し、停止の要求か基盤の異常まで待ち、片付けて終了コードを返す。
+
+        `abandoned` が空でなければ、残ったスレッドを呼び出す側が強制的に終える。
+        """
+        previous_signals = self._install_signal_handlers()
+        previous_hook = threading.excepthook
+        threading.excepthook = self._make_excepthook(previous_hook)
+        try:
+            return self._run()
+        finally:
+            threading.excepthook = previous_hook
+            for signum, handler in previous_signals.items():
+                signal.signal(signum, handler)
+
+    def request_stop(self) -> None:
+        """停止を求める。モーターは直ちに止める（2.1）。どのスレッドからでも呼べる。"""
+        self._emergency_stop()
+        self._stop_event.set()
+
+    def report_fatal(self, error: BaseException) -> None:
+        """基盤の異常を知らせる。モーターは直ちに止め、メインのスレッドが片付ける（2.4）。"""
+        if self._fatal is None:
+            self._fatal = error
+        self.request_stop()
+
+    def _run(self) -> ExitCode:
+        try:
+            code = self.start()
+            if code is not None:
+                return code
+            # 起動の途中の要求でも、止めてから待ちを抜ける
+            while not (self._stop_event.wait(STOP_POLL_S) or self._signaled):
+                pass
+        except Exception as error:
+            self.report_fatal(error)
+        self._emergency_stop()
+        fatal = self._fatal
+        if fatal is not None:
+            logger.error("基盤に異常が起きたので止めます: %s", type(fatal).__name__)
+        else:
+            logger.info("停止の要求を受けたので止めます")
+        self.shutdown(self._stop_budget)
+        if self._fatal is not None:  # 片付けの間の異常も含める
+            return ExitCode.FATAL
+        return ExitCode.OK
+
+    def _emergency_stop(self) -> None:
+        motion = self.motion
+        if motion is not None:
+            motion.emergency_stop()  # 例外を外に出さない
+
+    def _handle_signal(self, signum: int, frame: FrameType | None) -> None:
+        # 非常停止と要求の記録だけを行う（2.1）
+        self._emergency_stop()
+        self._signaled = True
+
+    def _install_signal_handlers(
+        self,
+    ) -> dict[int, signal.Handlers | Callable[..., object] | int | None]:
+        previous: dict[int, signal.Handlers | Callable[..., object] | int | None] = {}
+        # シグナルのハンドラはメインのスレッドでしか置けない
+        if threading.current_thread() is not threading.main_thread():
+            return previous
+        for signum in STOP_SIGNALS:
+            previous[signum] = signal.signal(signum, self._handle_signal)
+        return previous
+
+    def _make_excepthook(
+        self, previous: Callable[[threading.ExceptHookArgs], object]
+    ) -> Callable[[threading.ExceptHookArgs], None]:
+        def hook(args: threading.ExceptHookArgs) -> None:
+            previous(args)
+            name = args.thread.name if args.thread is not None else ""
+            if name.startswith(CORE_THREAD_PREFIX) and not name.startswith(FEATURE_THREAD_PREFIX):
+                error = args.exc_value if args.exc_value is not None else RuntimeError()
+                self.report_fatal(error)
+
+        return hook
 
     # --- 起動 ---
 
@@ -289,6 +394,10 @@ class Runtime:
         self._started = False
         if self.supervisor is not None:
             self._step("features", lambda: self._stop_features(budget))
+        if self.safety is not None:
+            # 後のスレッドの待ちが長引いても 10 秒に収まるよう、先に中立の姿勢にする（2.2）
+            for step in self.safety.neutral():
+                logger.warning("停止の片付けの段階 %s ができませんでした", step)
         self._notice_stop.set()
         if self._notice_thread is not None:
             self._notice_thread.join(timeout=1.0)
@@ -309,7 +418,7 @@ class Runtime:
     def _stop_features(self, budget: float) -> None:
         supervisor = self.supervisor
         if supervisor is not None:
-            supervisor.stop_all(budget)
+            self.abandoned = list(supervisor.stop_all(budget))
 
     @staticmethod
     def _step(name: str, action: Callable[[], object]) -> None:

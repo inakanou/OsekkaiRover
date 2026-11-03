@@ -207,7 +207,7 @@
   - _Depends: 2.5, 5.2, 5.3, 6.1_
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 11.2, 11.3, 11.4_
 
-- [ ] 6.3 停止の要求と基盤の異常を扱う
+- [x] 6.3 停止の要求と基盤の異常を扱う
   - SIGTERM と SIGINT のハンドラでは、非常停止と停止の要求の記録だけを行う
   - メインのスレッドは要求を待ち、機能に停止を知らせて合計 8 秒まで待ち、応えない機能は待たずに片付けに進む。片付けの後、終了コード 0 で終える。残ったスレッドがあれば強制的に終える
   - 基盤の中で捕まえなかった例外では、停止の片付けを行い、終了コード 1 で終える
@@ -334,3 +334,5 @@
 - 5.3（残課題）: 失敗した機能・見捨てた機能の、ボタンの待ち手（`add_waiter`）とイベントの購読は残る。待ち手の優先度が高いと押下を吸い続けるので、全体の確認（`/kiro-validate-impl`）までに、持ち主ごとに解く口を足すか判断する。見捨てた機能は資源を借り直せるので、Runtime（6.3）は見捨てた後に必ず中立の姿勢に戻してから終える
 - 6.1: `SafetyStop(motion, display, led)`。`neutral()` と `halt()` は失敗した段階の名前（`stop`・`home`・`led`・`display_clear`・`display_backlight`）を返すので、Runtime（6.2・6.3）はそれをログに出せる。首とステアリングは 1 つの段階（`home()`）
 - 6.2: `Runtime(devices, paths, clock, registry, *, config_override=None, config_error_seconds=5.0)`。`start() -> ExitCode | None`（None は起動できた）と `shutdown(budget=8.0)`。6.3 はこの 2 つの周りに `run()`・シグナル・終了コードを足す。設定の誤りの表示は、持ち主 `core.config`・優先度 IDLE+1 の画面のリース。起動の声はリースを取らずに VoiceService を直に呼ぶ
+- 6.3: `Runtime.run() -> ExitCode` と `request_stop()`・`report_fatal(exc)`・`abandoned`。Runtime は `os._exit` を呼ばない。起動の口（6.5）は `runtime.abandoned` が空でなければ `os._exit(int(code))` で終える（機能のスレッドは daemon でないため）。停止の片付けは「機能を止める → 中立の姿勢 → スレッドの片付け → halt」の順（スレッドの待ちが長引いても首とステアリングは先に戻す）
+- 6.3（残課題）: 偽物の `_FakeDevice._record` は再入できない Lock を使うので、ハードなしの実行（6.4）で片付けの途中に 2 回目のシグナルが来ると止まりうる。6.4 で RLock にするか判断する
