@@ -431,3 +431,214 @@ def test_取り上げると待っていた機能が借りる(arbiter: Arbiter) -
     thread.join(2.0)
     assert result[0].active
     _wait_until(lambda: arbiter.holder(V) == "b")
+
+
+# --- 優先度による中断と取り上げ（4.3〜4.5） ---
+
+
+def _state(lease: Lease) -> LeaseState:
+    """状態を読み直す（mypy が前の確認で型を絞り込まないように）。"""
+    return lease.state
+
+
+class _Requester:
+    """別のスレッドで acquire を呼び、結果か例外を残す。"""
+
+    def __init__(
+        self,
+        arbiter: Arbiter,
+        owner: str,
+        priority: int,
+        resources: list[Resource],
+        wait: float = 0.0,
+    ) -> None:
+        self.result: list[Lease] = []
+        self.errors: list[BaseException] = []
+        self.thread = threading.Thread(
+            target=self._run, args=(arbiter, owner, priority, resources, wait), daemon=True
+        )
+        self.thread.start()
+
+    def _run(
+        self, arbiter: Arbiter, owner: str, priority: int, resources: list[Resource], wait: float
+    ) -> None:
+        try:
+            self.result.append(arbiter.acquire(owner, priority, resources, wait=wait))
+        except BaseException as error:
+            self.errors.append(error)
+
+    def join(self) -> None:
+        self.thread.join(2.0)
+        assert not self.thread.is_alive(), "高い方が借りられないまま止まった"
+
+
+def test_低い方に中断を1回だけ知らせ返されたら高い方に貸す(arbiter: Arbiter) -> None:
+    called: list[threading.Thread] = []
+    low = arbiter.acquire(
+        "low",
+        Priority.BACKGROUND,
+        [V, D],
+        on_preempt=lambda: called.append(threading.current_thread()),
+    )
+    high = _Requester(arbiter, "high", Priority.SCHEDULED, [V])
+
+    _wait_until(lambda: len(called) == 1)
+    assert low.preempt_requested.is_set()
+    assert low.state is LeaseState.PREEMPT_REQUESTED
+    assert low.active  # 返すまでは有効のまま
+    assert called[0] is not high.thread  # 借りに来たスレッドでは呼ばない
+    time.sleep(0.1)
+    assert high.thread.is_alive()  # wait=0 でも、返されるのを待つ
+    assert len(called) == 1
+
+    low.release()
+    high.join()
+    assert high.errors == []
+    assert high.result[0].active
+    assert _state(low) is LeaseState.RELEASED
+    assert arbiter.holder(V) == "high"
+    assert arbiter.holder(D) is None
+    assert len(called) == 1
+
+
+def test_2秒で返されなければ取り上げて高い方に貸す(arbiter: Arbiter, clock: FakeClock) -> None:
+    low = arbiter.acquire("low", Priority.BACKGROUND, [V])
+    high = _Requester(arbiter, "high", Priority.SCHEDULED, [V])
+    assert low.preempt_requested.wait(2.0)
+
+    clock.advance(Arbiter.PREEMPT_GRACE_S - 0.1)
+    time.sleep(0.15)
+    assert low.state is LeaseState.PREEMPT_REQUESTED  # まだ 2 秒たっていない
+    assert high.thread.is_alive()
+
+    clock.advance(0.1)
+    high.join()
+    assert high.errors == []
+    assert high.result[0].active
+    assert _state(low) is LeaseState.REVOKED
+    assert not low.active
+    assert arbiter.holder(V) == "high"
+
+
+def test_偽の時計が進まなくても実際の待ちの上限で取り上げる(
+    arbiter: Arbiter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(arbiter, "_PREEMPT_REAL_LIMIT_S", 0.2)
+    low = arbiter.acquire("low", Priority.BACKGROUND, [V])
+    high = _Requester(arbiter, "high", Priority.SCHEDULED, [V])
+    high.join()
+    assert high.result[0].active
+    assert low.state is LeaseState.REVOKED
+
+
+def test_走行の中断で返されるのを待たずに直ちにモーターを止める(
+    arbiter: Arbiter, motion: MotionService, fakes: FakeDeviceSet
+) -> None:
+    low = arbiter.acquire("low", Priority.REMOTE, [R])
+    motion.drive(0, 50)
+    assert fakes.motors.speeds == (50, 50)
+    high = _Requester(arbiter, "high", Priority.SCHEDULED, [R, N])
+
+    _wait_until(lambda: "stop_now" in fakes.motors.ops())
+    assert fakes.motors.speeds == (0, 0)
+    assert low.state is LeaseState.PREEMPT_REQUESTED  # まだ返されていない
+    assert high.thread.is_alive()
+
+    low.release()
+    high.join()
+    assert high.result[0].active
+    assert fakes.motors.ops().count("stop_now") == 1
+
+
+def test_走行を持たないリースの中断では非常停止しない(
+    arbiter: Arbiter, fakes: FakeDeviceSet
+) -> None:
+    low = arbiter.acquire("low", Priority.BACKGROUND, [V])
+    high = _Requester(arbiter, "high", Priority.SCHEDULED, [V])
+    assert low.preempt_requested.wait(2.0)
+    low.release()
+    high.join()
+    assert "stop_now" not in fakes.motors.ops()
+
+
+def test_知らせの受け手が止まっても調停は止まらない(arbiter: Arbiter, clock: FakeClock) -> None:
+    stuck = threading.Event()
+    entered = threading.Event()
+
+    def block() -> None:
+        entered.set()
+        stuck.wait(5.0)
+
+    try:
+        low = arbiter.acquire("low", Priority.BACKGROUND, [V], on_preempt=block)
+        high = _Requester(arbiter, "high", Priority.SCHEDULED, [V])
+        assert entered.wait(2.0)
+        # 受け手が止まっている間も、ほかの貸し出しは進む
+        assert arbiter.acquire("other", Priority.INTERACTIVE, [D]).active
+        assert arbiter.holder(V) == "low"
+        clock.advance(Arbiter.PREEMPT_GRACE_S)
+        high.join()
+        assert high.result[0].active
+        assert low.state is LeaseState.REVOKED
+    finally:
+        stuck.set()
+
+
+def test_知らせの受け手の例外は型だけ残して調停は続く(
+    arbiter: Arbiter, caplog: pytest.LogCaptureFixture
+) -> None:
+    def broken() -> None:
+        raise RuntimeError("secret message")
+
+    with caplog.at_level(logging.WARNING, logger="osekkai"):
+        low = arbiter.acquire("low", Priority.BACKGROUND, [V], on_preempt=broken)
+        high = _Requester(arbiter, "high", Priority.SCHEDULED, [V])
+        _wait_until(lambda: "RuntimeError" in caplog.text)
+        low.release()
+        high.join()
+    assert high.result[0].active
+    assert "secret message" not in caplog.text
+
+
+def test_同じ優先度の持ち主には中断を知らせない(arbiter: Arbiter) -> None:
+    called: list[str] = []
+    low = arbiter.acquire("a", Priority.INTERACTIVE, [V], on_preempt=lambda: called.append("a"))
+    with pytest.raises(ResourceBusy):
+        arbiter.acquire("b", Priority.INTERACTIVE, [V])
+    time.sleep(0.02)
+    assert called == []
+    assert not low.preempt_requested.is_set()
+    assert low.state is LeaseState.ACTIVE
+
+
+def test_持ち主の一部でも低くなければ中断を知らせない(arbiter: Arbiter) -> None:
+    called: list[str] = []
+    low = arbiter.acquire("low", Priority.BACKGROUND, [V], on_preempt=lambda: called.append("low"))
+    same = arbiter.acquire("same", Priority.INTERACTIVE, [D])
+    with pytest.raises(ResourceBusy):
+        arbiter.acquire("b", Priority.INTERACTIVE, [V, D])
+    time.sleep(0.02)
+    assert called == []
+    assert not low.preempt_requested.is_set()
+    assert low.state is LeaseState.ACTIVE
+    assert same.state is LeaseState.ACTIVE
+
+
+def test_2度目の高い要求では知らせ直さない(arbiter: Arbiter, fakes: FakeDeviceSet) -> None:
+    called: list[str] = []
+    low = arbiter.acquire("low", Priority.BACKGROUND, [R], on_preempt=lambda: called.append("low"))
+    first = _Requester(arbiter, "high1", Priority.SCHEDULED, [R])
+    _wait_until(lambda: len(called) == 1)
+    second = _Requester(arbiter, "high2", Priority.SCHEDULED, [R])
+    time.sleep(0.1)
+    assert called == ["low"]
+    assert fakes.motors.ops().count("stop_now") == 1
+
+    low.release()
+    first.join()
+    second.join()
+    # 片方が借り、もう片方は同じ優先度の持ち主に断られる（wait=0）
+    assert len(first.result) + len(second.result) == 1
+    errors = first.errors + second.errors
+    assert len(errors) == 1
+    assert isinstance(errors[0], ResourceBusy)
