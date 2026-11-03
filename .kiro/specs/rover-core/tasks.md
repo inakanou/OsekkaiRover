@@ -77,7 +77,7 @@
   - _Boundary: lcd_text_
   - _Requirements: 7.2, 7.3, 7.4_
 
-- [ ] 2.5 (P) 単一の実行の保証と、ログの形式を作る
+- [x] 2.5 (P) 単一の実行の保証と、ログの形式を作る
   - ロックのファイルに排他のロックをかけ、プロセスが続くあいだ保つ。取れなければ「すでに動いている」と分かる結果を返す
   - ログは標準エラーに出す。journal の下では時刻なし、端末では時刻付きの形式にする
   - 完了の状態: 同じロックを 2 回取ろうとすると 2 回目が断られるテストと、ログの形式が環境で切り替わるテストが通る
@@ -316,3 +316,4 @@
 - 2.2: 同梱の見本は `src/osekkai/core/example_config.yaml`。`config/osekkai.example.yaml` と同じ内容であることをテストで縛っている（片方を変えたらもう片方も変える）
 - 2.3: `EventBus` と `TimeSyncMonitor` のスレッドは daemon。Runtime（6.2・6.3）は起動で `bus.start()`・`monitor.start()`、停止で `bus.close()`・`monitor.stop()` を必ず呼ぶ。テストでは `bus.wait_idle(timeout)` で配達を待ち、見張りは `check_once()` で 1 回ずつ進める。受け手は、イベントの型にちょうど一致するものだけに届く
 - 2.4: LCD のセル数は `len(to_lcd_codes(text))` で数える（濁点は 1 セル）。顔の文字列は `Face.text()`（5〜6 セル）。絵の文字は `chr(Glyph.X)` で文字列に入れる。0x5C は A00 の ROM では「¥」に見える
+- 2.5: Runtime（6.2）と `--say`（6.5）は `InstanceLock.acquire()` を直接呼んで bool を確かめる（`with` の形は取れなかったことを例外にしない）。ログは `configure_logging()` が `osekkai` のロガーに付ける。ルートのロガーにハンドラを足さない（二重に出る）
