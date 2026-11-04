@@ -3,6 +3,8 @@
 行は変換後のセルで数えて 16 セルに切り詰め、空白で埋める。濁点・半濁点は 1 セルなので、
 16 セル目のかなの濁点が 17 セル目になるときは、濁点だけが切れる。
 ログには失敗した例外の型だけを出し、表示する文字は出さない。
+書けない間の警告は最初の 1 回だけ出し、書けるようになるまでは DEBUG にする
+（待機画面は毎秒描き直すので、LCD が外れるとログが埋まる）。
 """
 
 from __future__ import annotations
@@ -28,13 +30,33 @@ def _fit(text: str) -> tuple[int, ...]:
     return tuple(codes) + (_SPACE,) * (WIDTH - len(codes))
 
 
+class FailureLog:
+    """続けて失敗する間は、最初の 1 回だけ警告する。成功したら次の失敗でまた警告する。
+
+    呼ぶ側のロックの中で使う。
+    """
+
+    def __init__(self, logger: logging.Logger) -> None:
+        self._logger = logger
+        self._failing = False
+
+    def failed(self, message: str, *args: object) -> None:
+        level = logging.DEBUG if self._failing else logging.WARNING
+        self._failing = True
+        self._logger.log(level, message, *args)
+
+    def succeeded(self) -> None:
+        self._failing = False
+
+
 @contextmanager
-def _device_errors(device: str) -> Iterator[None]:
+def _device_errors(device: str, failures: FailureLog) -> Iterator[None]:
     try:
         yield
     except Exception as error:
-        logger.warning("%s に書き込めませんでした: %s", device, type(error).__name__)
+        failures.failed("%s に書き込めませんでした: %s", device, type(error).__name__)
         raise DeviceUnavailable(device) from error
+    failures.succeeded()
 
 
 class DisplayService:
@@ -43,6 +65,7 @@ class DisplayService:
     def __init__(self, port: DisplayPort | Unavailable) -> None:
         self._port = port
         self._lock = threading.Lock()
+        self._failures = FailureLog(logger)
         # デバイスに送ったと分かっている行（分からなければ None）
         self._sent: list[tuple[int, ...] | None] = [None] * ROWS
 
@@ -55,7 +78,7 @@ class DisplayService:
                     continue
                 # 失敗したら中身が分からないので、次の表示で送り直す
                 self._sent[row] = None
-                with _device_errors("display"):
+                with _device_errors("display", self._failures):
                     port.write_line(row, codes)
                 self._sent[row] = codes
 
@@ -63,13 +86,13 @@ class DisplayService:
         with self._lock:
             port = self._available()
             self._sent = [None] * ROWS
-            with _device_errors("display"):
+            with _device_errors("display", self._failures):
                 port.clear()
 
     def set_backlight(self, on: bool) -> None:
         with self._lock:
             port = self._available()
-            with _device_errors("display"):
+            with _device_errors("display", self._failures):
                 port.set_backlight(on)
 
     def _available(self) -> DisplayPort:
@@ -85,11 +108,12 @@ class LedService:
     def __init__(self, port: LedPort | Unavailable) -> None:
         self._port = port
         self._lock = threading.Lock()
+        self._failures = FailureLog(logger)
 
     def set(self, on: bool) -> None:
         with self._lock:
             port = self._port
             if isinstance(port, Unavailable):
                 raise DeviceUnavailable(port.device)
-            with _device_errors("led"):
+            with _device_errors("led", self._failures):
                 port.set(on)

@@ -151,3 +151,42 @@ def test_バックライトと消去とLEDの失敗はDeviceUnavailableになる
         display.clear()
     with pytest.raises(DeviceUnavailable):
         led.set(True)
+
+
+def _write_warnings(caplog: pytest.LogCaptureFixture, device: str) -> int:
+    return sum(
+        1
+        for r in caplog.records
+        if r.levelno == logging.WARNING and r.getMessage().startswith(f"{device} に書き込めません")
+    )
+
+
+def test_続けて書けない間の警告は最初の1回だけ出し書けたらまた警告する(
+    fakes: FakeDeviceSet, caplog: pytest.LogCaptureFixture
+) -> None:
+    # 待機画面は毎秒描き直すので、LCD が外れると毎秒警告が出ていた（8.3）
+    display = DisplayService(fakes.display)
+    fakes.display.fail_on.add("write_line")
+    with caplog.at_level(logging.DEBUG, logger="osekkai"):
+        for text in ("a", "b", "c"):
+            with pytest.raises(DeviceUnavailable):
+                display.show(text)
+        assert _write_warnings(caplog, "display") == 1
+        fakes.display.fail_on.clear()
+        display.show("d")
+        fakes.display.fail_on.add("write_line")
+        with pytest.raises(DeviceUnavailable):
+            display.show("e")
+    assert _write_warnings(caplog, "display") == 2
+
+
+def test_LEDも続けて書けない間の警告は1回だけ出す(
+    fakes: FakeDeviceSet, caplog: pytest.LogCaptureFixture
+) -> None:
+    led = LedService(fakes.led)
+    fakes.led.fail_on.add("set")
+    with caplog.at_level(logging.DEBUG, logger="osekkai"):
+        for _ in range(3):
+            with pytest.raises(DeviceUnavailable):
+                led.set(True)
+    assert _write_warnings(caplog, "led") == 1

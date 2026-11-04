@@ -10,6 +10,7 @@ DISPLAY が空いたら借り直して描き直す。
 - 2 行目: 顔を中央に置き、視線（−1.0〜1.0）に応じて ±4 セル動かす
 - 静かな間も DISPLAY は持ったまま（優先度 0 なので機能は借りられる）、空白を出して
   バックライトを消す。静かな状態を終えたらバックライトを点けて描き直す
+- 描けない間の警告は最初の 1 回だけ出す（毎秒描き直すので、LCD がないとログが埋まる）
 - 専用のスレッドが `interval` 秒（実際の時間）ごとに `tick()` を呼び、分の変化を出す。
   待つのは止める合図の `threading.Event`（偽の時計は進めない）。テストは `tick()` で進める
 
@@ -25,7 +26,7 @@ import threading
 from enum import Enum
 from typing import TYPE_CHECKING, Final
 
-from osekkai.core.display import WIDTH
+from osekkai.core.display import WIDTH, FailureLog
 from osekkai.core.lcd_text import to_lcd_codes
 from osekkai.core.types import (
     DeviceUnavailable,
@@ -90,6 +91,7 @@ class IdleScreen:
         self._releasing = False  # 自分で返している間（その合図では借り直さない）
         self._shown: tuple[str, str] | None = None  # 最後に出した行（分からなければ None）
         self._backlight: bool | None = None  # 最後に送ったバックライト
+        self._failures = FailureLog(logger)
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         arbiter.on_resource_freed(Resource.DISPLAY, self._on_display_freed)
@@ -257,4 +259,6 @@ class IdleScreen:
             # 取り上げられた。空いた合図か次のたしかめで借り直す
             self._lease = None
         except DeviceUnavailable as error:
-            logger.warning("待機画面を描けませんでした: %s", type(error).__name__)
+            self._failures.failed("待機画面を描けませんでした: %s", type(error).__name__)
+        else:
+            self._failures.succeeded()

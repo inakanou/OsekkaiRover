@@ -359,3 +359,40 @@ def test_画面が使えなくても止まらず次に描き直す(
     fakes.display.fail_on.clear()
     idle.tick()
     assert fakes.display.rows[0] == _row("03/07 08:05")
+
+
+def _unavailable_warnings(caplog: pytest.LogCaptureFixture) -> int:
+    return sum(
+        1
+        for r in caplog.records
+        if r.name == "osekkai.core.idle" and r.levelname == "WARNING" and "描けません" in r.message
+    )
+
+
+def test_画面が使えない間の警告は最初の1回だけ出す(
+    idle: IdleScreen, fakes: FakeDeviceSet, clock: FakeClock, caplog: pytest.LogCaptureFixture
+) -> None:
+    # 実機で LCD がないと毎秒警告が出て、1 日で約 8.6 万行になった（8.3）
+    caplog.set_level("DEBUG", logger="osekkai.core.idle")
+    fakes.display.fail_on.add("write_line")
+    idle.start(run_thread=False)
+    for _ in range(5):
+        idle.tick()
+    assert _unavailable_warnings(caplog) == 1
+
+
+def test_描けるようになった後にまた使えなくなれば警告し直す(
+    idle: IdleScreen, fakes: FakeDeviceSet, clock: FakeClock, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level("DEBUG", logger="osekkai.core.idle")
+    fakes.display.fail_on.add("write_line")
+    idle.start(run_thread=False)
+    idle.tick()
+    fakes.display.fail_on.clear()
+    idle.tick()
+    assert fakes.display.rows[0] == _row("03/07 08:05")
+    fakes.display.fail_on.add("write_line")
+    clock.advance(60)  # 分が変わって描き直す
+    idle.tick()
+    idle.tick()
+    assert _unavailable_warnings(caplog) == 2
