@@ -505,6 +505,7 @@ class Remote:
 - `run-apply ...`: `Transaction.run()`。ロックを取り、記録を書く
 - `follow <id>`: 記録が `result` の行になるまで流す
 - `status`、`self-check [--json]`、`backups`、`restore <id>`、`stop`、`remind`、`provision [--ref]`、`set-everyday <json>`
+- `log [id]`: 入れ替えの記録を返す（id がなければ最新の 1 件。`--list` で一覧）
 
 #### DeployState
 
