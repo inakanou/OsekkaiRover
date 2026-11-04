@@ -3,8 +3,9 @@
 引数を解析し、ログ・パス・アダプタ・機能の発見を組み立てて Runtime に渡す。
 アダプタを選ぶのはここだけにする。
 
-単一の実行のロックは、デバイスを作る前に取って Runtime に渡す（1.7）。ほかが動いていれば
-デバイスを 1 つも作らずに 75 で終える（動いている方の LCD・サーボ・モーター・HAT に触らない）。
+単一の実行のロックは、機能の発見とデバイスを作る前に取って Runtime に渡す（1.7）。
+ほかが動いていれば、機能を読み込まず、デバイスを 1 つも作らずに 75 で終える
+（動いている方の LCD・サーボ・モーター・HAT に触らない）。
 `--say` のときは声のデバイスだけを作る（13.5）。
 """
 
@@ -112,11 +113,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     configure_logging(args.verbose)
     paths = Paths()
-    registry = FeatureRegistry()
     lock = InstanceLock(paths.lock_file)
     if not lock.acquire():
-        return int(report_already_running())  # デバイスは 1 つも作らない（1.7）
+        # デバイスは 1 つも作らず、機能のモジュールも読み込まない（1.7）
+        return int(report_already_running())
     try:
+        registry = FeatureRegistry()
         return _run_locked(args, paths, registry, lock)
     finally:
         lock.release()  # Runtime も放す。2 回呼んでもよい

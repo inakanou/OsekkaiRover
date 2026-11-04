@@ -198,7 +198,8 @@ src/osekkai/
 └── adapters/
     ├── __init__.py
     ├── pi/
-    │   ├── __init__.py                # build_pi_devices: デバイスごとに準備し、失敗を隔離する
+    │   ├── __init__.py                # devices.py の組み立ての口を外に見せる
+    │   ├── devices.py                 # build_pi_devices: デバイスごとに準備し、失敗を隔離する。build_pi_voice_devices: 声だけ
     │   ├── i2c_bus.py                 # I2C バスの共有ロックと、失敗を例外にする書き込み
     │   ├── hat.py                     # HatMcu: PWM レジスタ、MCU リセット、HAT の版の判定
     │   ├── gpio.py                    # lgpio のピン（ボタン、LED、モーターの方向）と、pinctrl でのスピーカーの有効化
@@ -208,9 +209,9 @@ src/osekkai/
     │   ├── pipewire.py                # PaplayPlayer（再生先の指定）
     │   └── timesync.py                # TimedatectlTimeSync（同期の判定）
     └── fake/
-        ├── __init__.py                # build_fake_devices
+        ├── __init__.py                # build_fake_devices（テスト用）
         ├── devices.py                 # テスト用の記録する偽物（FakeDisplay、FakeServo、FakeMotor など）
-        ├── console.py                 # ハードなしの実行: 状態を端末に出し、Enter キーでボタンを模擬する
+        ├── console.py                 # ハードなしの実行（build_console_devices）: 状態を端末に出し、Enter キーでボタンを模擬する
         └── clock.py                   # FakeClock（時刻を進められる、同期の状態を切り替えられる）
 tests/
 ├── conftest.py                        # 偽物のデバイス一式、FakeClock、一時の XDG ディレクトリ
@@ -1048,7 +1049,7 @@ class Unavailable:
 | Requirements | 1.1, 1.6, 6.1, 6.2, 7.3, 8.4 |
 
 **Responsibilities & Constraints**
-- `build_pi_devices(core_cfg)`: デバイスを 1 つずつ作り、例外が出たら `Unavailable(device, reason)` にする（1.6）。ハードのライブラリ（smbus2、lgpio、numpy）は、この関数と各モジュールの中でだけ読み込む
+- `build_pi_devices(core_cfg, glyphs, *, factories=None)`: 絵の文字の表（`glyphs`）は起動の口が `core.lcd_text` から渡す。`factories` はテストで差し替える。デバイスを 1 つずつ作り、例外が出たら `Unavailable(device, reason)` にする（1.6）。ハードのライブラリ（smbus2、lgpio、numpy）は、この関数と各モジュールの中でだけ読み込む
 - `i2c_bus.py`: バス 1 の `SMBus` を 1 つだけ開き、1 つの `RLock` で HAT と LCD の書き込みを直列にする。書き込みの失敗は `OSError` のまま上に投げる（黙って捨てない）
 - `HatMcu`（`hat.py`）:
   - アドレスは 0x14（だめなら 0x15、0x16 を試す）
@@ -1119,8 +1120,8 @@ class Unavailable:
   2. ログを設定する
   3. `Paths` を作る
   4. 単一の実行のロック（`InstanceLock`）を取る。取れなければ、デバイスを 1 つも作らずに終了コード 75 で終える（1.7）
-  5. アダプタを選ぶ（`build_pi_devices` か `build_fake_devices`）
-  6. `FeatureRegistry()` を作る
+  5. `FeatureRegistry()` を作る（機能のモジュールを読み込むので、ロックの後にする。アダプタが読む基盤の設定の検証にも使う）
+  6. アダプタを選ぶ（`build_pi_devices` か、ハードなしの実行の `build_console_devices`）
   7. 取ったロックを渡して `Runtime(..., lock=)` を作り、`run()` を呼び、終了コードを `sys.exit` に渡す
 - `--say` のときは、VoiceService だけを作って話し、終える（13.5）。機能は開始しない。実機では `build_pi_voice_devices` で声のデバイス（とスピーカーの有効化）だけを作り、LCD・サーボ・モーター・マイコンには触らない
 

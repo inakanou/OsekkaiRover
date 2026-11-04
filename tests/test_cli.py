@@ -164,6 +164,16 @@ def test_すでに動いていれば実機のデバイスを作らずに_75_で�
     assert "[声]" not in out
 
 
+def test_すでに動いていれば機能を読み込まずに_75_で終わる(
+    held_lock: InstanceLock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 機能の発見は機能のモジュールを読み込むので、2 つ目の起動では行わない（1.7）
+    built: list[object] = []
+    monkeypatch.setattr(cli, "FeatureRegistry", lambda: built.append("registry"))
+    assert cli.main(["--fake-hardware"]) == ExitCode.ALREADY_RUNNING
+    assert built == []
+
+
 @pytest.mark.parametrize(
     "argv",
     [["--fake-hardware"], ["--fake-hardware", "--say", "やあ"]],
