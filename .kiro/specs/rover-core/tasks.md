@@ -301,10 +301,10 @@
   - 完了の状態: これらの結合テストが CI の両方の Python の版で通る
   - _Requirements: 2.5, 3.1, 3.5, 4.3, 4.5, 9.4, 9.5, 10.3, 12.6_
 
-- [ ] 8.3 実機で全体を確かめる
+- [x] 8.3 実機で全体を確かめる
   - 使っていない時間帯に作業ブランチを実機に入れ、起動で正面・待機画面・起動の声が出る、USR ボタンの押下がログに出る、`systemctl --user stop` と `kill -9` でモーターが止まる、を確かめて PR に結果を書く。終わったら最新のタグに戻す
   - 完了の状態: PR 本文に実機確認の結果が書かれている
-  - _実機で確かめ済み、PR 本文への記入待ち（2026-11-04）: 起動で首が正面に戻り、待機画面（時刻など）と起動の声が出た。USR ボタンの押下は `--verbose` のときにログに出た（機能がないので DEBUG）。`systemctl --user stop` と `kill -9` でモーターが止まった。動いている間の `--say` は何にも触らず 75 で終わり、止めた後の `--say` は話した。終わった後に今の版に戻した_
+  - _実機で確認済み（2026-11-04、結果は PR #4 の本文）: 起動で首が正面に戻り、待機画面（時刻など）と起動の声が出た。USR ボタンの押下は `--verbose` のときにログに出た（機能がないので DEBUG）。`systemctl --user stop` と `kill -9` でモーターが止まった。動いている間の `--say` は何にも触らず 75 で終わり、止めた後の `--say` は話した。終わった後に今の版に戻した_
   - _Depends: 7.7, 8.1_
   - _Requirements: 1.1, 1.2, 1.3, 2.1, 5.1_
 
@@ -355,4 +355,4 @@
 - 7.1（実機）: スピーカーの有効化は `enable_speaker(version, configured, *, run)`（pinctrl。`Gpio` は要らない）。ボタンの見張りは lgpio の 30 ms のチャタリング除去つき。1 度だけ、大きいボタンの 3 回の押下が 4 回になった（再現せず）。全体の確認で、除去の長さ（30 ms→50 ms）を見直すか決める
 - 7.6: `PiCarXMotors(hat, pins, *, motor_driver)`（pwm_dir。`dual_pwm` と auto→v5 は `MotorMappingUnverified` で断るので、7.7 で Unavailable にする）。`stop_now()` はロックを最大 50 ms 待ち、0 は `I2cBus.write_block_emergency`（I2C_RDWR の 1 回の転送。共有の fd の相手のアドレスを変えない）でだけ書く。安全停止は `run_safe_stop(environ, open_hardware)` → 失敗した段階の名前、`main()` はいつも 0。`EXIT_STATUS=75` とロックがほかに持たれているときは何もしない。調べるために落とすファイルは作業コピーに置かない
 - 7.7: `build_pi_devices(core_cfg, glyphs, *, factories=None)`（`__main__` が `GLYPH_PATTERNS` を渡す。`PiFactories` で差し替える）。理由は例外の型の名前（`MotorMappingUnverified` だけ決まった文）。使えないデバイスのログは Runtime が出す。GPIO の失敗→buttons・led・motors・hat、マイコンの失敗→servos・motors・hat、I2C の失敗→さらに display。スピーカーの失敗は警告だけ。`_PiHat.reset()` はリセットの後にサーボとモーターのタイマーを書き直す。`__main__` がロックより前に実機のデバイスを作っていた不具合（要件 1.7）は 813fbf8 で直した。今は起動の口が先にロックを取り、`Runtime(..., lock=)` に渡す。`--say` は `build_pi_voice_devices` で声だけを作る
-- 8.3（2026-11-04、実機）: LCD がないと、待機画面が描けないという警告が 1 秒に 1 回出続ける（1 日で約 8.6 万行）。直すまで 8.3 は完了にしない。押下のログは機能がないと DEBUG なので、実機で押下を確かめるときは `--verbose` を付ける
+- 8.3（2026-11-04、実機）: LCD がないと、待機画面が描けないという警告が 1 秒に 1 回出続ける（1 日で約 8.6 万行）。4b85009 で、続けて失敗する間は最初の 1 回だけ警告するように直した（`core.display.FailureLog`。表示と LED の書き込みも同じ）。押下のログは機能がないと DEBUG なので、実機で押下を確かめるときは `--verbose` を付ける
