@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "osekkai-rover"
+version = "0.1.0"
+description = "PiCar-X で子どもに寄り添うロボットの基盤"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+dependencies = [
+    "PyYAML>=6",
+    "pydantic>=2,<3",
+]
+
+[project.optional-dependencies]
+# 実機だけ。Pi では lgpio と numpy は apt（python3-lgpio、python3-numpy）で入れる
+pi = [
+    "smbus2",
+    "lgpio",
+    "numpy",
+]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "types-PyYAML",
+]
+
+# 機能を発見するエントリーポイントの群。setuptools では空の群を書けないため、
+# 最初の機能を足すときに次の形で加える:
+# [project.entry-points."osekkai.features"]
+# greeting = "osekkai.features.greeting:GreetingFeature"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# 設定の見本（config/osekkai.example.yaml と同じ内容）を同梱する
+[tool.setuptools.package-data]
+"osekkai.core" = ["example_config.yaml"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+# 仕様書と skill の Markdown にある下書きのコードは整えない
+extend-exclude = [".kiro", ".claude"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "SIM"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["osekkai"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src/osekkai", "tests"]
+mypy_path = "src"
+strict = true
+warn_unreachable = true
+
+# 実機の依存は型を見ない
+[[tool.mypy.overrides]]
+module = ["smbus2", "smbus2.*", "lgpio", "lgpio.*", "numpy", "numpy.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

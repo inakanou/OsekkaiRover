@@ -64,8 +64,8 @@
 
 ## Constraints
 - Python、Raspberry Pi OS（64-bit）、systemd のユーザーサービス
-- `picarx` には依存せず、SunFounder の `robot_hat`（GitHub の 2.5.x、2026-09-11 以降）の上に自前のアダプタを書く。サーボの調整値は、リポジトリの外の自前の保存先に置く（picarx の既定 `/opt/picar-x` は root が必要）
-- robot_hat は読み込み時に `/proc/device-tree/` を読むので、実機用のアダプタの中だけで読み込む
+- `picarx` には依存せず、HAT を操作する自前のアダプタを書く（設計で、`robot_hat` にも依存しないことに決めた。`research.md` を参照）。サーボの調整値は、リポジトリの外の自前の保存先に置く（picarx の既定 `/opt/picar-x` は root が必要）
+- ハードのライブラリは、実機用のアダプタの中だけで読み込む
 - Robot HAT のスピーカーは、有効化のピン（v4 は 20、v5 は 12）を立てる必要がある。再生先のデバイスは明示する
 - I2C は LCD（0x27）と HAT（0x14）が同じバスを使う。複数のスレッドから書くときはロックする
 - CI（x86）でハードなしにテストできること

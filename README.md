@@ -24,9 +24,9 @@ Claude Code のスキル（`/kiro-*` コマンド）を使い、要件 → 設�
 | 項目 | 状態 |
 | --- | --- |
 | 開発ワークフロー（ブランチ・PR・CI） | 整備済み（[`git-workflow.md`](.kiro/steering/git-workflow.md)） |
-| ソースコード | 未取り込み。手元のサンプル（Python）を、スペックを起票してから取り込む |
-| ステアリング（product / tech / structure） | 未作成 |
-| スペック | なし |
+| ソースコード | 基盤（`src/osekkai/core`）とハードなしの実行（`src/osekkai/adapters/fake`）を実装中。実機のアダプタはこれから |
+| ステアリング（product / tech / structure） | 作成済み（`.kiro/steering/`） |
+| スペック | `rover-core`（基盤）を実装中（`.kiro/specs/rover-core/`） |
 | 実機へのデプロイの仕組み | 未作成 |
 
 ## 今後の予定
@@ -93,6 +93,51 @@ Claude Code のスキル（`/kiro-*` コマンド）を使い、要件 → 設�
 
 5. **進捗を見る**: `/kiro-spec-status <feature>`（いつでも実行できます）
 
+## 開発の始め方（ロボットのプログラム）
+
+前提: Python 3.11 以上。実機がなくても PC で動かせます。
+
+1. **インストール**
+   ```sh
+   python3 -m venv .venv
+   . .venv/bin/activate
+   pip install -e '.[dev]'
+   ```
+
+2. **ハードなしで動かす**
+   ```sh
+   python -m osekkai --fake-hardware
+   ```
+   - 画面（`[LCD]`）・話す文章（`[声]`）・LED・首と走行の状態が端末に出ます。ログは標準エラーに出ます
+   - Enter キーを押すと、USR ボタンを押したことになります
+   - Ctrl+C で止まります（終了コード 0）
+   - `--verbose` で詳しいログ、`--config PATH` で別の設定ファイルを使います
+
+3. **話して終わる**（声の確認）
+   ```sh
+   python -m osekkai --fake-hardware --say こんにちは
+   ```
+   ほかに動いているときは、`すでに動いています` と出て終了コード 75 で終わります。
+
+4. **確認する**（CI と同じ 4 つ）
+   ```sh
+   ruff check .
+   ruff format --check .
+   mypy
+   pytest -q
+   ```
+
+### 設定ファイルと保存の場所
+
+| 種類 | 場所 |
+| --- | --- |
+| 設定ファイル | `~/.config/osekkai/config.yaml`（`$XDG_CONFIG_HOME`）。ないときは見本 [`config/osekkai.example.yaml`](config/osekkai.example.yaml) から作ります |
+| 状態 | `~/.local/state/osekkai/`（`$XDG_STATE_HOME`） |
+| キャッシュ（声など） | `~/.cache/osekkai/`（`$XDG_CACHE_HOME`） |
+| 単一の実行のロック | `$XDG_RUNTIME_DIR/osekkai/rover.lock`（未設定なら `/tmp/osekkai-<uid>/rover.lock`） |
+
+どれもリポジトリの外にあるので、版を入れ替えても残ります。個人の設定はコミットしません。
+
 ## 開発の流れ（ブランチ・PR・リリース）
 
 詳しくは [`.kiro/steering/git-workflow.md`](.kiro/steering/git-workflow.md) を参照してください。
@@ -122,7 +167,7 @@ Claude Code のスキル（`/kiro-*` コマンド）を使い、要件 → 設�
 
 | 名前 | 用途 | ライセンス |
 | --- | --- | --- |
-| [SunFounder robot-hat](https://github.com/sunfounder/robot-hat) | Robot HAT の操作 | GPL-3.0 |
+| [SunFounder robot-hat](https://github.com/sunfounder/robot-hat) | Robot HAT のレジスタの仕様の参考（このリポジトリは使わず、自前の部品で操作する） | GPL-3.0 |
 | [HTS voice tohoku-f01](https://github.com/icn-lab/htsvoice-tohoku-f01) | 声。© 2015 Intelligent Communication Network (Ito-Nose) Laboratory, Tohoku University | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 | [Open JTalk](https://open-jtalk.sourceforge.net/) | 音声合成 | Modified BSD |
 | [YuNet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet)（OpenCV Zoo） | 顔検出のモデル | MIT |

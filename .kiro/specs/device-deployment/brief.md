@@ -55,6 +55,6 @@
 - 初期設定で必要なこと（技術構成の確認より）:
   - ユーザーのリンガリング（`loginctl enable-linger`）。これがないと、起動時に PipeWire が動かず声が出ない
   - 画面のない環境では、WirePlumber のセッションの監視を止める必要がある場合がある
-  - SunFounder の `install.sh` は root で全体に入れるので、システムの準備（I2C、I2S、lgpio）にだけ使う。robot_hat は仮想環境に、固定したコミットで入れ直す
+  - robot_hat は使わない（`rover-core` の設計）。I2C と I2S（スピーカー）の有効化、`python3-lgpio`、`gpio` グループへの追加を初期設定で行う。SunFounder の `install.sh` を使うかは、必要な設定だけを取り出すかどうかで決める
   - OpenCV、numpy、picamera2 は apt から入れる（仮想環境は `--system-site-packages`）
   - OS は 64-bit の Trixie 系を推奨する（実機の OS は要確認）

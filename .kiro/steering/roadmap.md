@@ -33,9 +33,8 @@ OsekkaiRover は、SunFounder PiCar-X（Raspberry Pi 5 + Robot HAT + I2C LCD 160
 - 技術構成の確認（2026-11-03）で分かった前提:
   - OS は 64-bit の Trixie 系 Raspberry Pi OS（Python 3.13、apt の OpenCV 4.10）を推奨する。Bookworm の apt の OpenCV 4.6 では、YuNet（2023mar）が読み込めない。実機の OS は要確認
   - OpenCV と numpy は、実機では apt から入れる。CI は `opencv-python-headless>=4.10,<5` に固定する（5.x にするなら YuNet の 2026may モデルに替える）
-  - `robot_hat` は SunFounder の GitHub（2.5.x、2026-09-11 以降）から入れる。PyPI の `robot-hat` は別人のパッケージなので使わない。RPi.GPIO は Pi 5 で動かない（robot_hat は lgpio を使う）
-  - `picarx` には依存しない（ライセンスの表記が不整合で、中身は robot_hat の薄い包み）。robot_hat の上に自前のアダプタを書く
-  - robot_hat・picamera2・libcamera はファイルの先頭で読み込まない（CI で読み込めない）。実機用のアダプタの中だけで読み込む
+  - SunFounder の `robot_hat` と `picarx` には依存しない。HAT は smbus2（I2C のレジスタ）と lgpio（GPIO）の上の自前の薄い部品で操作する（`rover-core` の設計で決定。robot_hat は読み込みの副作用が重く、スレッドから安全でない）。RPi.GPIO は Pi 5 で動かない
+  - smbus2・lgpio・picamera2・libcamera はファイルの先頭で読み込まない（CI で読み込めない）。実機用のアダプタの中だけで読み込む
   - 声の再生（PipeWire）には、ユーザーのリンガリングが必要。画面のない環境では WirePlumber の設定も要る場合がある
   - faster-whisper の速さは実機で測る（`base` int8 で 5 秒の音声に 1.5〜3 秒の見込み。日本語の精度が足りなければ `small`）。冷却ファン（GPIO のスペーサー付き）が要る
 
