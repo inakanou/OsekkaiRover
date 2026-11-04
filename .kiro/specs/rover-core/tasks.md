@@ -356,3 +356,11 @@
 - 7.6: `PiCarXMotors(hat, pins, *, motor_driver)`（pwm_dir。`dual_pwm` と auto→v5 は `MotorMappingUnverified` で断るので、7.7 で Unavailable にする）。`stop_now()` はロックを最大 50 ms 待ち、0 は `I2cBus.write_block_emergency`（I2C_RDWR の 1 回の転送。共有の fd の相手のアドレスを変えない）でだけ書く。安全停止は `run_safe_stop(environ, open_hardware)` → 失敗した段階の名前、`main()` はいつも 0。`EXIT_STATUS=75` とロックがほかに持たれているときは何もしない。調べるために落とすファイルは作業コピーに置かない
 - 7.7: `build_pi_devices(core_cfg, glyphs, *, factories=None)`（`__main__` が `GLYPH_PATTERNS` を渡す。`PiFactories` で差し替える）。理由は例外の型の名前（`MotorMappingUnverified` だけ決まった文）。使えないデバイスのログは Runtime が出す。GPIO の失敗→buttons・led・motors・hat、マイコンの失敗→servos・motors・hat、I2C の失敗→さらに display。スピーカーの失敗は警告だけ。`_PiHat.reset()` はリセットの後にサーボとモーターのタイマーを書き直す。`__main__` がロックより前に実機のデバイスを作っていた不具合（要件 1.7）は 813fbf8 で直した。今は起動の口が先にロックを取り、`Runtime(..., lock=)` に渡す。`--say` は `build_pi_voice_devices` で声だけを作る
 - 8.3（2026-11-04、実機）: LCD がないと、待機画面が描けないという警告が 1 秒に 1 回出続ける（1 日で約 8.6 万行）。4b85009 で、続けて失敗する間は最初の 1 回だけ警告するように直した（`core.display.FailureLog`。表示と LED の書き込みも同じ）。押下のログは機能がないと DEBUG なので、実機で押下を確かめるときは `--verbose` を付ける
+- 全体の確認（/kiro-validate-impl、2026-11-04）: 1 回目は NO-GO。指摘を直して GO にした。
+  - ダンスは、首だけを借りたときもステアリングを動かしていた（4.1、4.9）。01b0725 で、走行も借りたときだけ動かすように直した。
+  - 終わった機能のボタンの待ち手と知らせの受け手が残っていた（5.2、5.3、9.4）。01b0725 で、名前ごとに外すようにした（`FeatureSupervisor(on_finished=)`）。
+  - 2 つ目の起動が、ロックの前に機能を読み込んでいた（1.7）。167d38c で直した。
+  - 後に回すもの:
+    - チャタリング除去の長さは 30 ms のままにする。基盤も 50 ms 以内の重複を捨てるので、2 段になっている。
+    - 首だけを借りた動きを中止するときの `emergency_stop()` は、ほかの持ち主の走行も止める。止める向きなので危なくはない。走行を使う機能の設計のときに見直す。
+    - 再起動の後退、作業コピーの場所、open_jtalk の入れ方、ロックの場所が `XDG_RUNTIME_DIR` で変わることは、device-deployment で決める。
