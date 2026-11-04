@@ -194,4 +194,5 @@ class CoreFeatureContext:
         return self._quiet.was_quiet_before_restart
 
     def subscribe(self, event_type: type[E], callback: Callable[[E], None]) -> None:
-        self._bus.subscribe(event_type, callback)
+        """基盤の知らせを受ける。機能が終わったら外れる。"""
+        self._bus.subscribe(event_type, callback, owner=self._spec.name)

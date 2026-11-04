@@ -328,8 +328,8 @@ stateDiagram-v2
 | 4.8 | 首が空いたら正面に戻す | Arbiter, MotionService | `MotionService.home()` | 貸し出し |
 | 4.9 | 資源を持たない操作を受け付けない | Handles | Handle はリースからだけ得られる | — |
 | 5.1 | 押下をボタンの持ち主に 1 回知らせる | ButtonRouter, ButtonHandle | `ButtonHandle.wait_press()` | — |
-| 5.2 | 持ち主がいなければ最も高い待ち手に知らせる | ButtonRouter | `FeatureContext.want_button_presses()` | — |
-| 5.3 | 受け手がいなければ捨てる | ButtonRouter | — | — |
+| 5.2 | 持ち主がいなければ最も高い待ち手に知らせる | ButtonRouter, FeatureSupervisor | `FeatureContext.want_button_presses()`、`ButtonRouter.remove_waiters(owner)` | — |
+| 5.3 | 受け手がいなければ捨てる | ButtonRouter, FeatureSupervisor | `on_finished(owner)` | — |
 | 5.4 | チャタリングで重複させない | ButtonRouter | 50 ms の除去 | — |
 | 6.1 | 声・高さ・速さで話し、終わりを知らせる | VoiceService, OpenJTalkSynth, PaplayPlayer | `VoiceHandle.say()` | — |
 | 6.2 | 音量をそろえる | OpenJTalkSynth | 正規化 | — |
@@ -384,7 +384,7 @@ stateDiagram-v2
 | SafetyStop / safe_stop | Lifecycle | 中立の姿勢への復帰とモーター停止。ExecStopPost 用の最小コマンド | 1.1, 2.1, 2.2, 2.4 | MotionService (P0), HatMcu (P0) | Service |
 | InstanceLock | Lifecycle | 単一の実行 | 1.7 | paths (P1) | Service |
 | FeatureRegistry | Features | エントリーポイントの発見、重複と無効の判定 | 3.1–3.3, 3.6, 11.4 | ConfigLoader (P0) | Service |
-| FeatureSupervisor | Features | 機能ごとのスレッド、異常の隔離、停止の待ち | 2.2, 2.3, 3.1, 3.4, 3.5 | Arbiter (P0) | Service, State |
+| FeatureSupervisor | Features | 機能ごとのスレッド、異常の隔離、停止の待ち | 2.2, 2.3, 3.1, 3.4, 3.5, 5.2, 5.3 | Arbiter (P0) | Service, State |
 | Feature / FeatureSpec / FeatureContext | Features | 機能の契約と、機能に渡す道具 | 3.1, 3.2, 5.2, 9.2–9.6, 10.1, 11.7, 12.2 | Arbiter, StateStore, Clock, EventBus (P0) | Service |
 | Arbiter / Lease | Resources | 資源の貸し出し、中断、取り上げ | 2.5, 3.5, 4.1–4.9 | MotionService (P0) | Service, State |
 | Handles | Resources | リースから得る操作の口 | 4.9, 1.6 | 各 Service (P0) | Service |
@@ -471,6 +471,7 @@ class FeatureContext(Protocol):
   - `acquire()` の `resources` は、`spec.resources` の部分集合（でなければ `ValueError`）
   - `set_idle_info()` は、LCD の表示で 6 セル以内（超えたら切り詰める）
 - **Postconditions**: `want_button_presses` の callback は ButtonRouter のスレッドで呼ばれる。callback は速やかに戻る（重い処理は自分のスレッドに渡す）
+- **Postconditions**: `want_button_presses` と `subscribe` の登録は、機能の名前を持ち主として持つ。機能が終わったら（失敗・正常の終わり・見捨て）、解除を呼ばなくても基盤が外す（FeatureSupervisor を参照）
 - **Invariants**:
   - FeatureContext は、ほかの機能の保存先・キャッシュ・リースに触れる手段を持たない
   - 静かな状態は、どれかの機能が `request_quiet()` すると入り、どれかの機能が `end_quiet()` すると終わる。誰が求めたかは数えない（単純な真偽値。最後の要求が勝つ）
@@ -510,12 +511,13 @@ class FeatureRegistry:
 | Field | Detail |
 |-------|--------|
 | Intent | 機能ごとのスレッドを動かし、異常を隔離し、停止を待つ |
-| Requirements | 2.2, 2.3, 3.1, 3.4, 3.5 |
+| Requirements | 2.2, 2.3, 3.1, 3.4, 3.5, 5.2, 5.3 |
 
 **Responsibilities & Constraints**
 - 機能ごとに、デーモンでないスレッドを 1 本立て、`Feature(ctx, config)` を作って `run(stop)` を呼ぶ
 - 機能の生成や `run` で例外が出たら、ログに残す（機能名と例外の型。メッセージに個人情報が混ざりうるので、traceback は DEBUG のときだけ）。続けて `Arbiter.revoke_all(owner)` で資源を取り戻す。その機能は再起動しない（3.4、3.5）
 - `stop_all(timeout)` で全機能の `stop` を立て、合計 `timeout` 秒まで join する。残ったスレッドは見捨てる（デーモン化はできないため、Runtime は `os._exit` で終える）
+- 機能が終わったら（失敗・正常の終わり・見捨て）、`revoke_all(owner)` に続けて `on_finished(owner)` を呼ぶ。Runtime はそこで、その機能のボタンの待ち手（`ButtonRouter.remove_waiters(owner)`）と知らせの受け手（`EventBus.unsubscribe_owner(owner)`）をすべて外す。終わった機能の待ち手が押下を飲み込み、動いている機能に届かなくなるのを防ぐ（5.2、5.3）。見捨てた機能は、待つのをやめた時点と、スレッドが終わった時点の 2 回呼ぶ（何度呼んでもよい）。`on_finished` の例外は、機能名と例外の型だけをログに残し、終わりの処理を続ける
 
 **Contracts**: Service [x] / State [x]
 ```python
@@ -523,6 +525,8 @@ class FeatureState(Enum):
     STARTING = "starting"; RUNNING = "running"; FAILED = "failed"; STOPPED = "stopped"
 
 class FeatureSupervisor:
+    def __init__(self, arbiter: Arbiter, context_factory: Callable[[FeatureSpec], FeatureContext],
+                 *, on_finished: Callable[[str], None] | None = None) -> None: ...  # 終わった機能の名前を渡す
     def start(self, plans: Sequence[FeaturePlan]) -> None: ...
     def states(self) -> Mapping[str, FeatureState]: ...
     def stop_all(self, timeout: float) -> Sequence[str]: ...   # 応えなかった機能の名前
@@ -633,7 +637,7 @@ class NeckHandle(Protocol):
     def nod(self, times: int = 2) -> None: ...
     def look_around(self) -> None: ...
     def sleepy(self) -> None: ...
-    def dance(self, drive: "DriveHandle | None" = None) -> None: ...  # drive がないか、許可がなければタイヤを回さない（8.3）
+    def dance(self, drive: "DriveHandle | None" = None) -> None: ...  # drive がなければ首だけで踊り、ステアリングに触らない（4.1、4.9）。タイヤには許可も要る（8.3）
 class DriveHandle(Protocol):
     def drive(self, steering: float, speed: int) -> None: ...      # 度（±30）、速さ −100〜100（8.4）
     def stop(self) -> None: ...
@@ -723,7 +727,7 @@ def center(text: str, width: int = 16) -> str: ...
   - **nod**: チルト −20 → 10 を 0.25 秒ずつ、指定の回数くり返し、home に戻る
   - **look_around**: パン −30 → 30 → 0 を 0.35 秒ずつ
   - **sleepy**: パン 0、チルト −30
-  - **dance**: 6 拍、0.25 秒ずつ。パンは ±30、ステアリングは ∓25、チルトは 15。`allow_drive_in_dance` が真かつ DRIVE を借りているときだけ、速さ 20 で前後に動く。最後にモーターを止め、home に戻る（8.3）
+  - **dance**: 6 拍、0.25 秒ずつ。パンは ±30、チルトは 15。ステアリングは走行の側なので、DRIVE も借りているときだけ ∓25 に振る（4.1、4.9）。`allow_drive_in_dance` が真かつ DRIVE を借りているときだけ、速さ 20 で前後に動く（8.3）。最後に、タイヤを回したときはモーターを止める。DRIVE も借りていれば home に戻り、借りていなければ首だけを正面に戻す（ステアリングに触らない）
 - 複数の段階がある動きは、呼び出し元から渡された「続けてよいか」の判定（`should_continue: Callable[[], bool]`。Handle がリースの状態から作る）を、段階ごとに確かめる
   - 偽になったら、その時点でモーターを止めて中止し、`MotionAborted` を投げる（Handle が `LeaseRevoked` に変える）
   - 中止のときは home に戻さない。首は次の持ち主か、Arbiter の「首が空いたら正面に戻す」（4.8）に任せる
@@ -740,7 +744,7 @@ class MotionService:
     def nod(self, times: int, should_continue: Callable[[], bool]) -> None: ...
     def look_around(self, should_continue: Callable[[], bool]) -> None: ...
     def sleepy(self) -> None: ...
-    def dance(self, *, wheels: bool, should_continue: Callable[[], bool]) -> None: ...
+    def dance(self, *, drive: bool, should_continue: Callable[[], bool]) -> None: ...  # drive: DRIVE も借りているか
     def drive(self, steering: float, speed: int) -> None: ...
     def stop(self) -> None: ...
     def emergency_stop(self) -> None: ...
@@ -764,6 +768,7 @@ class MotionService:
   2. いなければ、`want_button_presses` で登録した待ち手のうち、最も優先度の高い機能の callback を呼ぶ（5.2）。同じ優先度なら先に登録した方
   3. どちらもいなければ捨てる（5.3）
 - リースの押下の待ち行列は、リースが終わったら捨てる（次の持ち主に持ち越さない）
+- 待ち手は持ち主（機能の名前）付きで登録する。`remove_waiters(owner)` で、その持ち主の待ち手をすべて外す。機能が終わったときに FeatureSupervisor の `on_finished` から呼ばれる（5.2、5.3）
 
 **Contracts**: Service [x] / Event [x]
 - Published events: `ButtonPress(at: float, source: Literal["usr", "extra"])` を、リースか待ち手に届ける
@@ -830,7 +835,8 @@ class QuietChanged:
     quiet: bool
 
 class EventBus:
-    def subscribe(self, event_type: type[E], callback: Callable[[E], None]) -> None: ...
+    def subscribe(self, event_type: type[E], callback: Callable[[E], None], *, owner: str | None = None) -> None: ...  # owner は機能の名前（基盤は None）
+    def unsubscribe_owner(self, owner: str) -> None: ...   # その持ち主の受け手をすべて外す（機能が終わったとき）
     def publish(self, event: object) -> None: ...   # 専用のスレッドで、登録順に配る。callback の例外はログに残して続ける
 ```
 - `SystemClock.is_synchronized()` は、TimeSyncPort（実機は `timedatectl show -p NTPSynchronized --value`。使えなければ `/run/systemd/timesync/synchronized` の有無）の結果を返す。一度 `True` になったら保つ

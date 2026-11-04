@@ -164,17 +164,20 @@ class NeckHandle:
         self._staged(self._motion.look_around)
 
     def dance(self, drive: DriveHandle | None = None) -> None:
-        """タイヤは、有効な走行の口を渡されたときだけ回す（設定の許可も要る、8.3）。"""
+        """ステアリングとタイヤは、有効な走行の口を渡されたときだけ動かす（4.1、4.9）。
+
+        渡されなければ首だけで踊る。タイヤには設定の許可も要る（8.3）。
+        """
         lease = self._lease
-        wheels = drive is not None and drive._may_move()
+        with_drive = drive is not None and drive._may_move()
 
         def go() -> bool:
             if not _may_move(lease):
                 return False
-            # タイヤを回すなら、走行のリースも続けて有効でなければならない
-            return not wheels or (drive is not None and drive._may_move())
+            # 走行の側も動かすなら、走行のリースも続けて有効でなければならない
+            return not with_drive or (drive is not None and drive._may_move())
 
-        self._staged(lambda ok: self._motion.dance(wheels=wheels, should_continue=ok), go)
+        self._staged(lambda ok: self._motion.dance(drive=with_drive, should_continue=ok), go)
 
     def _staged(self, run: _Run, go: _Go | None = None) -> None:
         lease = self._lease

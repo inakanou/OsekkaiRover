@@ -212,6 +212,28 @@ def button_waiter(probe: Probe) -> type[Feature]:
     return ButtonWaiter
 
 
+def greedy(probe: Probe) -> type[Feature]:
+    """高い優先度でボタンと知らせを待ち、合図で例外を出すか、正常に終わる。"""
+
+    class Greedy:
+        spec: ClassVar[FeatureSpec] = _spec("greedy", Priority.SCHEDULED, {Resource.VOICE})
+
+        def __init__(self, ctx: FeatureContext, config: FeatureConfig) -> None:
+            self.ctx = ctx
+            ctx.subscribe(QuietChanged, lambda e: probe.add("greedy.quiet", e.quiet))
+
+        def run(self, stop: threading.Event) -> None:
+            self.ctx.want_button_presses(lambda p: probe.add("greedy.presses", p.source))
+            probe.ev("greedy.ready").set()
+            crash, leave = probe.ev("greedy.crash"), probe.ev("greedy.leave")
+            while not (crash.is_set() or leave.is_set() or stop.is_set()):
+                stop.wait(0.01)
+            if crash.is_set():
+                raise RuntimeError("テストの例外")
+
+    return Greedy
+
+
 def quiet_toggler(probe: Probe) -> type[Feature]:
     """合図で静かな状態に入り、次の合図で終える。自分でも知らせを受ける。"""
 
@@ -472,6 +494,39 @@ def test_機能の異常でモーターが止まりほかの機能は動き続�
     assert probe.ev("waiter.borrowed").wait(WAIT_S)
     assert probe.get("waiter.drove") == [True]
     assert fakes.motors.speeds == (0, 0)  # 返したら止まる
+    assert _states(runtime)["waiter"] is FeatureState.RUNNING
+
+
+@pytest.mark.parametrize(
+    ("signal", "state"),
+    [("greedy.crash", FeatureState.FAILED), ("greedy.leave", FeatureState.STOPPED)],
+)
+def test_終わった機能の待ち手と受け手は外れてほかの機能に届く(
+    fakes: FakeDeviceSet,
+    clock: FakeClock,
+    probe: Probe,
+    start_runtime: Callable[..., Runtime],
+    signal: str,
+    state: FeatureState,
+) -> None:
+    runtime = start_runtime(fakes, clock, [greedy(probe), button_waiter(probe)])
+    assert runtime.bus is not None and runtime.quiet is not None
+    assert probe.ev("greedy.ready").wait(WAIT_S)
+    assert probe.ev("waiter.ready").wait(WAIT_S)
+
+    probe.ev(signal).set()
+    assert _wait_for(lambda: _states(runtime).get("greedy") is state)
+
+    # 終わった高い方の待ち手が押下を飲み込まず、動いている低い方に届く（5.2、5.3）
+    fakes.buttons.press("usr")
+    assert probe.ev("waiter.pressed").wait(WAIT_S)
+    assert probe.get("presses") == ["usr"]
+    assert probe.get("greedy.presses") == []
+
+    # 終わった機能には知らせが届かない（9.4）
+    runtime.quiet.request_quiet()
+    assert runtime.bus.wait_idle(WAIT_S)
+    assert probe.get("greedy.quiet") == []
     assert _states(runtime)["waiter"] is FeatureState.RUNNING
 
 

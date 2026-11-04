@@ -311,6 +311,20 @@ def test_ボタンの待ち手は優先度の高い機能に届く(kit: Kit) -> 
     assert got_low == []
 
 
+def test_ボタンの待ち手は機能の名前で外せる(kit: Kit) -> None:
+    low = kit.context(STARS)
+    high = kit.context(TALK)
+    got_low: list[ButtonPress] = []
+    got_high: list[ButtonPress] = []
+    low.want_button_presses(got_low.append)
+    high.want_button_presses(got_high.append)
+    kit.router.remove_waiters(TALK.name)
+    kit.clock.advance(0.2)
+    kit.fakes.buttons.press("usr")
+    _wait_until(lambda: len(got_low) == 1)
+    assert got_high == []
+
+
 # --- 待機画面（9.2、9.3） ---
 
 
@@ -367,6 +381,18 @@ def test_時刻が確かになった知らせを受け取れる(kit: Kit) -> Non
     kit.bus.publish(event)
     assert kit.bus.wait_idle(2.0)
     assert got == [event]
+
+
+def test_知らせの受け手は機能の名前で外せる(kit: Kit) -> None:
+    talk = kit.context(TALK)
+    stars = kit.context(STARS)
+    got: list[str] = []
+    talk.subscribe(TimeSynced, lambda e: got.append("talk"))
+    stars.subscribe(TimeSynced, lambda e: got.append("stars"))
+    kit.bus.unsubscribe_owner(TALK.name)
+    kit.bus.publish(TimeSynced())
+    assert kit.bus.wait_idle(2.0)
+    assert got == ["stars"]
 
 
 # --- ほかの機能に触れない ---

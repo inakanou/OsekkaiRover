@@ -29,15 +29,22 @@ class FeatureSupervisor:
     - 生成（道具の生成を含む）や `run` で例外が出たら、機能名と例外の型だけをログに残し
       （traceback は DEBUG のときだけ）、`revoke_all` で資源を取り上げて FAILED にする。再起動しない
     - 例外なしで戻ったときも、返し忘れのリースを `revoke_all` で返して STOPPED にする
+    - 終わった機能（失敗・正常の終わり・見捨て）の名前を `on_finished` に渡す。Runtime はそこで
+      その機能のボタンの待ち手と知らせの受け手を外す（終わった機能が押下を飲み込まないため）
     - `stop_all(timeout)` は全機能の `stop` を立て、合計 `timeout` 秒（実際の秒数）まで待つ。
       応えなかった機能は資源を取り上げて見捨て、その名前を返す
     """
 
     def __init__(
-        self, arbiter: Arbiter, context_factory: Callable[[FeatureSpec], FeatureContext]
+        self,
+        arbiter: Arbiter,
+        context_factory: Callable[[FeatureSpec], FeatureContext],
+        *,
+        on_finished: Callable[[str], None] | None = None,
     ) -> None:
         self._arbiter = arbiter
         self._context_factory = context_factory
+        self._on_finished = on_finished
         self._cond = threading.Condition()
         self._states: dict[str, FeatureState] = {}
         self._stops: dict[str, threading.Event] = {}
@@ -71,7 +78,7 @@ class FeatureSupervisor:
                 thread.join()  # 終わりの知らせの後は戻るだけ
         for name in left:
             logger.warning("機能 %s が停止に応えませんでした", name)
-            self._revoke(name)
+            self._clean_up(name)
         return left
 
     # --- 内側 ---
@@ -117,17 +124,25 @@ class FeatureSupervisor:
 
     def _finish(self, name: str, state: FeatureState) -> None:
         # 失敗でも正常の終わりでも、残ったリースを取り上げる（DRIVE ならモーターが止まる）
-        self._revoke(name)
+        self._clean_up(name)
         with self._cond:
             self._states[name] = state
             self._pending.discard(name)
             self._cond.notify_all()
 
-    def _revoke(self, name: str) -> None:
+    def _clean_up(self, name: str) -> None:
         try:
             self._arbiter.revoke_all(name)
         except Exception as exc:
             logger.error("機能 %s の資源を取り上げられませんでした: %s", name, type(exc).__name__)
+        # 待ち手と受け手も外す。見捨てた機能は、待つのをやめた時点と、スレッドの終わりの 2 回
+        on_finished = self._on_finished
+        if on_finished is None:
+            return
+        try:
+            on_finished(name)
+        except Exception as exc:
+            logger.error("機能 %s の後片付けに失敗しました: %s", name, type(exc).__name__)
 
     @staticmethod
     def _log_failure(message: str, name: str, exc: BaseException) -> None:

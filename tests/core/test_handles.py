@@ -123,6 +123,27 @@ def test_首の口の正面はステアリングに触らない(arbiter: Arbiter
     assert fakes.servos.angles["steering"] == 20
 
 
+def test_首だけの口のダンスはほかの持ち主のステアリングに触らない(
+    arbiter: Arbiter, fakes: FakeDeviceSet
+) -> None:
+    neck = arbiter.acquire("neck", Priority.INTERACTIVE, [N])
+    drive = arbiter.acquire("drive", Priority.INTERACTIVE, [R])
+    drive.drive.drive(20, 0)
+    before = len(fakes.servos.calls)
+    neck.neck.dance()
+    written = [c.args[0] for c in fakes.servos.calls[before:] if c.op == "set_angle"]
+    assert "steering" not in written
+    assert {"pan", "tilt"} <= set(written)
+    assert fakes.servos.angles["steering"] == 20
+
+
+def test_走行の口を渡したダンスはステアリングも振る(arbiter: Arbiter, fakes: FakeDeviceSet) -> None:
+    lease = arbiter.acquire("a", Priority.INTERACTIVE, [N, R])
+    lease.neck.dance(lease.drive)
+    steerings = [c.args[1] for c in fakes.servos.calls if c.args[0] == "steering"]
+    assert steerings == [-25.0, 25.0, -25.0, 25.0, -25.0, 25.0, 0.0]
+
+
 # --- 借りていない資源（4.9） ---
 
 

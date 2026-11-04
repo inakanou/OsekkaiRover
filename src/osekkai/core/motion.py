@@ -93,15 +93,20 @@ class MotionService:
         with self._lock:
             self._look(0.0, -30.0)
 
-    def dance(self, *, wheels: bool, should_continue: Callable[[], bool]) -> None:
-        # タイヤは、設定の許可と、走行を使ってよいという指示の両方があるときだけ
-        use_wheels = wheels and self._settings.allow_drive_in_dance
+    def dance(self, *, drive: bool, should_continue: Callable[[], bool]) -> None:
+        """drive は、呼び出し元が走行（DRIVE）も借りているか。
+
+        走行を借りていなければ首だけを動かし、ステアリングには触らない（4.1、4.9）。
+        タイヤは、走行を借りていて、設定の許可もあるときだけ回す（8.3）。
+        """
+        use_wheels = drive and self._settings.allow_drive_in_dance
         for beat in range(DANCE_BEATS):
             with self._lock:
                 self._check(should_continue)
                 sign = 1.0 if beat % 2 == 0 else -1.0
                 self._set("pan", 30.0 * sign)
-                self._set("steering", -25.0 * sign)
+                if drive:
+                    self._set("steering", -25.0 * sign)
                 self._set("tilt", 15.0)
                 if use_wheels:
                     self._speeds(int(DANCE_SPEED * sign))
@@ -110,7 +115,10 @@ class MotionService:
             # タイヤを回したときだけ止める（ほかの持ち主の走行を止めない）
             if use_wheels:
                 self._speeds(0)
-            self._home()
+            if drive:
+                self._home()
+            else:
+                self._home_neck()
 
     # --- 走行 ---
 

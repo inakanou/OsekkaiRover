@@ -320,7 +320,13 @@ class Runtime:
 
         # 開始しなかった機能と理由は、登録の側がログに出す
         plans = self._registry.plan(report)
-        supervisor = FeatureSupervisor(arbiter, context_factory)
+
+        def feature_finished(name: str) -> None:
+            # 終わった機能の待ち手と受け手を外す（5.2、5.3、9.4）
+            router.remove_waiters(name)
+            bus.unsubscribe_owner(name)
+
+        supervisor = FeatureSupervisor(arbiter, context_factory, on_finished=feature_finished)
         self.supervisor = supervisor
         supervisor.start(plans)
         self.started_features = [plan.feature_cls.spec.name for plan in plans]

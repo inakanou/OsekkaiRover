@@ -315,6 +315,88 @@ def test_応えない機能がいても上限で待つのをやめて名前を�
     wait_until(lambda: supervisor.states().get("stubborn") is FeatureState.STOPPED)
 
 
+# --- 終わった機能の待ち手と受け手の片付け（5.2、5.3、9.4） ---
+
+
+@pytest.fixture
+def ended() -> list[str]:
+    return []
+
+
+@pytest.fixture
+def tidy_supervisor(arbiter: Arbiter, ended: list[str]) -> Iterable[FeatureSupervisor]:
+    def factory(spec: FeatureSpec) -> FeatureContext:
+        return cast(FeatureContext, _Ctx(spec, arbiter))
+
+    sup = FeatureSupervisor(arbiter, factory, on_finished=ended.append)
+    yield sup
+    sup.stop_all(2.0)
+
+
+def test_失敗した機能は終わりの片付けに名前が渡る(
+    tidy_supervisor: FeatureSupervisor, probe: _Probe, ended: list[str]
+) -> None:
+    def boom(ctx: FeatureContext, stop: threading.Event) -> None:
+        raise RuntimeError(SECRET)
+
+    broken = make_feature("broken", probe, init_error=ValueError(SECRET))
+    tidy_supervisor.start(
+        [
+            plan(make_feature("a", probe, behavior=boom)),
+            plan(broken),
+            plan(make_feature("ok", probe)),
+        ]
+    )
+    wait_until(lambda: sorted(ended) == ["a", "broken"])
+    assert tidy_supervisor.states()["ok"] is FeatureState.RUNNING
+
+
+def test_正常に終わった機能も終わりの片付けに名前が渡る(
+    tidy_supervisor: FeatureSupervisor, probe: _Probe, ended: list[str]
+) -> None:
+    tidy_supervisor.start([plan(make_feature("a", probe, behavior=lambda c, s: None))])
+    wait_until(lambda: ended == ["a"])
+    assert tidy_supervisor.states()["a"] is FeatureState.STOPPED
+
+
+def test_見捨てた機能は待つのをやめた時点で片付けに名前が渡る(
+    tidy_supervisor: FeatureSupervisor, probe: _Probe, ended: list[str]
+) -> None:
+    release = threading.Event()
+
+    def stubborn(ctx: FeatureContext, stop: threading.Event) -> None:
+        probe.running.set()
+        release.wait(5.0)  # stop を見ない
+
+    tidy_supervisor.start([plan(make_feature("stubborn", probe, behavior=stubborn))])
+    probe.running.wait(2.0)
+    try:
+        assert tidy_supervisor.stop_all(0.1) == ["stubborn"]
+        assert ended == ["stubborn"]
+    finally:
+        release.set()
+    wait_until(lambda: tidy_supervisor.states().get("stubborn") is FeatureState.STOPPED)
+
+
+def test_片付けの失敗は型だけを残して終わりを妨げない(
+    arbiter: Arbiter, probe: _Probe, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.INFO, logger="osekkai")
+
+    def broken_cleanup(name: str) -> None:
+        raise RuntimeError(SECRET)
+
+    def factory(spec: FeatureSpec) -> FeatureContext:
+        return cast(FeatureContext, _Ctx(spec, arbiter))
+
+    sup = FeatureSupervisor(arbiter, factory, on_finished=broken_cleanup)
+    sup.start([plan(make_feature("a", probe, behavior=lambda c, s: None))])
+    wait_until(lambda: sup.states().get("a") is FeatureState.STOPPED)
+    assert sup.stop_all(1.0) == []
+    assert "RuntimeError" in caplog.text
+    assert SECRET not in caplog.text
+
+
 def test_機能がなければ停止はすぐ終わる(supervisor: FeatureSupervisor) -> None:
     supervisor.start([])
     assert supervisor.stop_all(1.0) == []

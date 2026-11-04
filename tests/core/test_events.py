@@ -40,6 +40,22 @@ def test_登録した型のイベントだけが登録順に届く(bus: EventBus
     assert received == ["a:True", "b:True", "synced", "a:False", "b:False"]
 
 
+def test_持ち主ごとに受け手をすべて外せる(bus: EventBus) -> None:
+    received: list[str] = []
+    bus.subscribe(QuietChanged, lambda e: received.append("a.quiet"), owner="a")
+    bus.subscribe(TimeSynced, lambda e: received.append("a.synced"), owner="a")
+    bus.subscribe(QuietChanged, lambda e: received.append("b.quiet"), owner="b")
+    bus.subscribe(QuietChanged, lambda e: received.append("core"))
+
+    bus.unsubscribe_owner("a")
+    bus.unsubscribe_owner("a")  # 何度呼んでもよい
+    bus.publish(QuietChanged(quiet=True))
+    bus.publish(TimeSynced())
+    assert bus.wait_idle(timeout=2.0)
+
+    assert received == ["b.quiet", "core"]
+
+
 def test_配達は専用のスレッドで行われる(bus: EventBus) -> None:
     threads: list[threading.Thread] = []
     bus.subscribe(TimeSynced, lambda e: threads.append(threading.current_thread()))

@@ -39,20 +39,34 @@ class EventBus:
     - 受け手は出したイベントの型と同じ型で登録したものだけ（親の型には配らない）
     - `close()` までに積んだイベントは配ってから止まる。閉じた後のイベントは捨てる
     - スレッドは daemon にする。受け手が固まっても、プロセスの終わりを妨げないため
+    - 機能の受け手は持ち主（機能の名前）付きで登録し、機能が終わったら `unsubscribe_owner` で外す
     """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._idle = threading.Condition(self._lock)
-        self._subscribers: dict[type, list[Callable[[Any], None]]] = {}
+        # 型ごとの (持ち主, 受け手)。持ち主は機能の名前、基盤の受け手は None
+        self._subscribers: dict[type, list[tuple[str | None, Callable[[Any], None]]]] = {}
         self._queue: queue.SimpleQueue[object] = queue.SimpleQueue()
         self._pending = 0
         self._closed = False
         self._thread: threading.Thread | None = None
 
-    def subscribe(self, event_type: type[E], callback: Callable[[E], None]) -> None:
+    def subscribe(
+        self, event_type: type[E], callback: Callable[[E], None], *, owner: str | None = None
+    ) -> None:
         with self._lock:
-            self._subscribers.setdefault(event_type, []).append(callback)
+            self._subscribers.setdefault(event_type, []).append((owner, callback))
+
+    def unsubscribe_owner(self, owner: str) -> None:
+        """その持ち主の受け手をすべて外す。機能が終わったときに監督から呼ばれる。"""
+        with self._lock:
+            for event_type, entries in list(self._subscribers.items()):
+                kept = [entry for entry in entries if entry[0] != owner]
+                if kept:
+                    self._subscribers[event_type] = kept
+                else:
+                    del self._subscribers[event_type]
 
     def publish(self, event: object) -> None:
         with self._lock:
@@ -110,7 +124,7 @@ class EventBus:
 
     def _deliver(self, event: object) -> None:
         with self._lock:
-            callbacks = list(self._subscribers.get(type(event), ()))
+            callbacks = [callback for _, callback in self._subscribers.get(type(event), ())]
         for callback in callbacks:
             try:
                 callback(event)

@@ -127,7 +127,7 @@ def test_ねむそうはパン0とチルトマイナス30(fakes: FakeDeviceSet, 
 
 def test_ダンスは6拍してモーターを止めて正面に戻る(fakes: FakeDeviceSet, clock: FakeClock) -> None:
     motion = _service(fakes, clock)
-    motion.dance(wheels=False, should_continue=_always)
+    motion.dance(drive=True, should_continue=_always)
     pans = [a[1] for a in _angles(fakes.servos) if a[0] == "pan"]
     steerings = [a[1] for a in _angles(fakes.servos) if a[0] == "steering"]
     tilts = [a[1] for a in _angles(fakes.servos) if a[0] == "tilt"]
@@ -137,6 +137,29 @@ def test_ダンスは6拍してモーターを止めて正面に戻る(fakes: Fa
     assert clock.sleeps == [0.25] * 6
     assert fakes.motors.speeds == (0, 0)
     assert fakes.servos.angles == {"pan": 0.0, "tilt": 0.0, "steering": 0.0}
+
+
+def test_走行を借りていないダンスはステアリングに書かない(
+    fakes: FakeDeviceSet, clock: FakeClock
+) -> None:
+    motion = _service(fakes, clock, MotionSettings(allow_drive_in_dance=True))
+    motion.dance(drive=False, should_continue=_always)
+    # 最後の正面に戻すのも首だけ（4.1、4.9）
+    assert [a for a in _angles(fakes.servos) if a[0] == "steering"] == []
+    assert fakes.servos.angles == {"pan": 0.0, "tilt": 0.0}
+    pans = [a[1] for a in _angles(fakes.servos) if a[0] == "pan"]
+    assert pans == [30.0, -30.0, 30.0, -30.0, 30.0, -30.0, 0.0]
+    assert "set_speeds" not in fakes.motors.ops()
+
+
+def test_走行を借りたダンスは許可がなくてもステアリングを振る(
+    fakes: FakeDeviceSet, clock: FakeClock
+) -> None:
+    motion = _service(fakes, clock, MotionSettings(allow_drive_in_dance=False))
+    motion.dance(drive=True, should_continue=_always)
+    steerings = [a[1] for a in _angles(fakes.servos) if a[0] == "steering"]
+    assert steerings == [-25.0, 25.0, -25.0, 25.0, -25.0, 25.0, 0.0]
+    assert "set_speeds" not in fakes.motors.ops()
 
 
 # --- ダンスのタイヤ（8.3） ---
@@ -150,7 +173,7 @@ def test_許可がなければダンスでモーターに速さが出ない(
     fakes: FakeDeviceSet, clock: FakeClock, allow: bool, wheels: bool
 ) -> None:
     motion = _service(fakes, clock, MotionSettings(allow_drive_in_dance=allow))
-    motion.dance(wheels=wheels, should_continue=_always)
+    motion.dance(drive=wheels, should_continue=_always)
     assert all(s == (0, 0) for s in _speeds(fakes.motors))
 
 
@@ -158,7 +181,7 @@ def test_許可があり走行を使えるときだけダンスで前後に動�
     fakes: FakeDeviceSet, clock: FakeClock
 ) -> None:
     motion = _service(fakes, clock, MotionSettings(allow_drive_in_dance=True))
-    motion.dance(wheels=True, should_continue=_always)
+    motion.dance(drive=True, should_continue=_always)
     speeds = _speeds(fakes.motors)
     assert speeds[:6] == [(20, 20), (-20, -20)] * 3
     assert speeds[-1] == (0, 0)
@@ -169,7 +192,7 @@ def test_タイヤを使わないダンスはほかの持ち主の走行を止�
 ) -> None:
     motion = _service(fakes, clock, MotionSettings(allow_drive_in_dance=True))
     motion.drive(0, 50)
-    motion.dance(wheels=False, should_continue=_always)
+    motion.dance(drive=False, should_continue=_always)
     assert _speeds(fakes.motors) == [(50, 50)]
     assert "stop_now" not in fakes.motors.ops()
     assert fakes.motors.speeds == (50, 50)
@@ -184,7 +207,7 @@ def test_途中で中止すると残りの段階を行わずモーターを止�
     motion = _service(fakes, clock, MotionSettings(allow_drive_in_dance=True))
     checks = iter([True, True, False])
     with pytest.raises(MotionAborted):
-        motion.dance(wheels=True, should_continue=lambda: next(checks))
+        motion.dance(drive=True, should_continue=lambda: next(checks))
     # 2 拍だけ動き、正面には戻さない
     assert [a[1] for a in _angles(fakes.servos) if a[0] == "pan"] == [30.0, -30.0]
     assert fakes.servos.angles["pan"] == -30.0
@@ -262,7 +285,7 @@ def test_段階のある動きが待つ間もほかの停止と走行は待た�
         elif move == "look_around":
             motion.look_around(_always)
         else:
-            motion.dance(wheels=False, should_continue=_always)
+            motion.dance(drive=False, should_continue=_always)
 
     mover = threading.Thread(target=run)
     mover.start()

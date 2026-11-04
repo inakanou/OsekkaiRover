@@ -194,6 +194,25 @@ def test_登録を解くと次の待ち手に届く(
     assert len(low) == 1
 
 
+def test_持ち主ごとに待ち手をすべて外せる(
+    router: ButtonRouter, fakes: FakeDeviceSet, clock: FakeClock
+) -> None:
+    high: list[ButtonPress] = []
+    low: list[ButtonPress] = []
+    router.add_waiter("high", 50, high.append)
+    router.add_waiter("high", 60, high.append)
+    unregister = router.add_waiter("low", 10, low.append)
+    router.remove_waiters("high")
+    router.remove_waiters("high")  # 何度呼んでもよい
+    router.remove_waiters("none")  # 知らない持ち主でもよい
+    _press(fakes, clock)
+    assert high == []
+    assert len(low) == 1
+    unregister()  # 外した後に解いてもよい
+    _press(fakes, clock)
+    assert len(low) == 1
+
+
 def test_待ち手の例外で配達が止まらない(
     router: ButtonRouter,
     fakes: FakeDeviceSet,

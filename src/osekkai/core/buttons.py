@@ -9,6 +9,7 @@ ButtonPort の立ち下がりの通知を受け、チャタリングを除いて
   時刻は ButtonPort が渡す単調な時刻を使う
 - リースの待ち行列は、リースが終わったら捨てる（次の持ち主に持ち越さない）
 - 待ち手の受け手は、ButtonPort の通知のスレッドで、ロックの外で呼ぶ。速やかに戻ること
+- 機能が終わったら、その機能の待ち手はすべて外す（`remove_waiters`）
 """
 
 from __future__ import annotations
@@ -97,6 +98,11 @@ class ButtonRouter:
                     self._waiters.remove(waiter)
 
         return unregister
+
+    def remove_waiters(self, owner: str) -> None:
+        """その持ち主の待ち手をすべて外す。機能が終わったときに監督から呼ばれる（5.2、5.3）。"""
+        with self._cond:
+            self._waiters = [w for w in self._waiters if w.owner != owner]
 
     # --- リースの待ち行列（ButtonHandle から使う） ---
 
