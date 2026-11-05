@@ -11,6 +11,9 @@ DISPLAY が空いたら借り直して描き直す。
 - 静かな間も DISPLAY は持ったまま（優先度 0 なので機能は借りられる）、空白を出して
   バックライトを消す。静かな状態を終えたらバックライトを点けて描き直す
 - 描けない間の警告は最初の 1 回だけ出す（毎秒描き直すので、LCD がないとログが埋まる）
+- 外からの知らせ（`NoticeBoard`、device-deployment 5.5・7.1）を渡されたら、描くたびに読み、
+  ある行を待機画面の行の代わりに出す（None の行は待機画面のまま）。画面を持っている間だけ読むので、
+  機能が画面を借りている間は出ない。静かな間も出さない
 - 専用のスレッドが `interval` 秒（実際の時間）ごとに `tick()` を呼び、分の変化を出す。
   待つのは止める合図の `threading.Event`（偽の時計は進めない）。テストは `tick()` で進める
 
@@ -40,6 +43,7 @@ from osekkai.core.types import (
 if TYPE_CHECKING:
     from osekkai.core.arbiter import Arbiter, Lease
     from osekkai.core.clock import Clock
+    from osekkai.core.notice import NoticeBoard
 
 logger = logging.getLogger(__name__)
 
@@ -74,11 +78,19 @@ def _cells(text: str) -> int:
 class IdleScreen:
     """何もしていないときの画面。"""
 
-    def __init__(self, arbiter: Arbiter, clock: Clock, *, interval: float = 1.0) -> None:
+    def __init__(
+        self,
+        arbiter: Arbiter,
+        clock: Clock,
+        *,
+        interval: float = 1.0,
+        notices: NoticeBoard | None = None,
+    ) -> None:
         if interval <= 0:
             raise ValueError("interval must be positive")
         self._arbiter = arbiter
         self._clock = clock
+        self._notices = notices
         self.interval = interval
         self._lock = threading.Lock()
         self._lease: Lease | None = None
@@ -236,7 +248,15 @@ class IdleScreen:
         cells = _cells(face)
         pad = (WIDTH - cells) // 2 + round(self._gaze * GAZE_CELLS)
         pad = max(0, min(pad, WIDTH - cells))
-        return line1, " " * pad + face
+        line2 = " " * pad + face
+        notice = self._notices.current() if self._notices is not None else None
+        if notice is not None:
+            row1, row2 = notice.rows
+            if row1 is not None:
+                line1 = _truncate(row1, WIDTH)
+            if row2 is not None:
+                line2 = _truncate(row2, WIDTH)
+        return line1, line2
 
     def _render(self) -> None:
         """ロックの中で呼ぶ。持っていなければ描かない。"""

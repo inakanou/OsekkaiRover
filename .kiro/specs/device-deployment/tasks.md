@@ -34,7 +34,7 @@
   - _Boundary: StatusReporter, MotionService_
   - _Requirements: 2.1, 2.2, 2.3, 6.7_
 
-- [ ] 2.2 (P) 外からの知らせを待機画面に出す仕組みを作る
+- [x] 2.2 (P) 外からの知らせを待機画面に出す仕組みを作る
   - 知らせのファイルを読み、期限内なら出す行を返す（ない・期限切れ・形が違う → なし。形が違うときは 1 回だけ警告し、中身はログに出さない）
   - 待機画面は、描くたびに知らせを読み、ある行を待機画面の行の代わりに出す。文字の変換と切り詰めは既存の処理を使う。機能が画面を持っている間は出さない
   - 完了の状態: 期限・形の誤り・片方の行だけの知らせ・待機画面に知らせの行が出るテストが通る
@@ -233,3 +233,5 @@
 - 2.1: 状態の型は `osekkai.core.status.ServiceSnapshot`（`from_dict` は形に厳しく、違えば `SnapshotUnreadable`）。`read_snapshot(path)` は読めなければ None。2.6 は `build_snapshot(arbiter=, motion=, version=, pid=, clock=, unavailable=, features=)` と `StatusReporter(Paths.runtime_dir / STATUS_FILE_NAME, snapshot)` でつなぐ
 - 2.1: `StatusReporter.stop()` は、Arbiter のロックを持ったまま呼ばない（報告のスレッドが `Arbiter.holder()` を待って止まる）
 - 2.1: `MotionService.driving` は「たぶん走行中」の側に倒す（非常停止が書き込みと重なっても True のまま）
+- 2.2: 2.6 は `IdleScreen(arbiter, clock, notices=NoticeBoard(Paths.runtime_dir / NOTICE_FILE_NAME, clock))` でつなぐ。`current()` はない・期限切れ・形の誤りで None（警告は続く間 1 回）。知らせは静かな状態の間も出さない
+- 2.2: Clock には壁時計のエポック秒の口がないので、`clock.now().timestamp()` を使う
