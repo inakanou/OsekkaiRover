@@ -56,6 +56,13 @@ class MotionService:
         self._settings = settings
         self._clock = clock
         self._lock = threading.Lock()
+        # 最後に送った速さが 0 でないか。ロックを取らずに読む（状態のファイルから読むため）
+        self._driving = False
+
+    @property
+    def driving(self) -> bool:
+        """最後に送った速さ（範囲に収めた後）が 0 でないか。"""
+        return self._driving
 
     # --- 首 ---
 
@@ -140,6 +147,7 @@ class MotionService:
         for attempt in range(1 + EMERGENCY_RETRIES):
             try:
                 motors.stop_now()
+                self._driving = False
                 return
             except Exception as error:
                 logger.warning(
@@ -192,8 +200,14 @@ class MotionService:
             raise DeviceUnavailable(motors.device)
         value = int(_clamp(speed, -SPEED_LIMIT, SPEED_LIMIT))
         left_dir, right_dir = self._settings.calibration.motor_direction
+        if value != 0:
+            # 書き込みに失敗しても、回っているかもしれないので走行中とみなす
+            self._driving = True
         with self._device_errors("motors"):
             motors.set_speeds(value * left_dir, value * right_dir)
+        # 非常停止はロックを取らずに走行中でなくするので、書いた後にもう一度決める
+        # （途中で割り込まれても、回っているなら走行中のままにする）
+        self._driving = value != 0
 
     @contextmanager
     def _device_errors(self, device: str) -> Iterator[None]:

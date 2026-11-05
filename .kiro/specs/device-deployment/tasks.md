@@ -25,7 +25,7 @@
   - _Requirements: 2.1, 2.2, 6.8, 7.1_
 
 - [ ] 2. 基盤（rover-core）への追加
-- [ ] 2.1 (P) 走行中の判定と、状態のファイルを書く仕組みを作る
+- [x] 2.1 (P) 走行中の判定と、状態のファイルを書く仕組みを作る
   - 走行の操作に、最後に送った速さ（範囲に収めた後）が 0 でないかを返す口を足す。緊急停止が成功したら 0 に戻す
   - 状態の型と、JSON との行き来（書く・読む。形が違えば読めない）を作る。self-check（2.3・2.8）もこの型を使う
   - 状態のファイル（版・pid・心拍・走行中・作業中の資源と持ち主・使えないデバイス・開始した機能）を 1 秒ごとに 0600 で書くスレッドを作る。基盤の内部の持ち主は作業中に含めない
@@ -230,3 +230,6 @@
 - 1.2: 状態は `StateStore(layout).load()/save()`、ロックは `DeployLock`、記録は `DeployLog(log_dir, deploy_id, clock=)` の `.event()`/`.result()`。読む側は `list_log_ids`・`latest_log_id`・`read_log_events`・`read_log_result`。`read_log_result` は結果の行が壊れていても None を返すので、follow では「まだ結果がない」と区別に気をつける。`state_from_dict` は deploy_id の形を確かめていない
 - 1.3: 共有の見本は `tests/fixtures/*.json`（status_driving_busy・status_idle・notice_version・notice_reminder・selfcheck_failed・selfcheck_ok・version_log）。読み込みは `from shared_fixtures import load_fixture, version_log_prefix`（tests/ が import の道にある）。見本のテストはキーの集合をちょうどで確かめるので、基盤と道具の書き出しは見本と同じキーにする
 - 1.3: tests の下は同じ名前のテストのファイルを置けない（tests/core と tests/deploy で名前を重ねない）
+- 2.1: 状態の型は `osekkai.core.status.ServiceSnapshot`（`from_dict` は形に厳しく、違えば `SnapshotUnreadable`）。`read_snapshot(path)` は読めなければ None。2.6 は `build_snapshot(arbiter=, motion=, version=, pid=, clock=, unavailable=, features=)` と `StatusReporter(Paths.runtime_dir / STATUS_FILE_NAME, snapshot)` でつなぐ
+- 2.1: `StatusReporter.stop()` は、Arbiter のロックを持ったまま呼ばない（報告のスレッドが `Arbiter.holder()` を待って止まる）
+- 2.1: `MotionService.driving` は「たぶん走行中」の側に倒す（非常停止が書き込みと重なっても True のまま）
