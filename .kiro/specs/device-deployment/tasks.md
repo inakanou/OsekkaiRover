@@ -186,7 +186,7 @@
   - _Boundary: Remote_
   - _Requirements: 1.6, 3.3, 3.4_
 
-- [ ] 5.4 開発 PC の入れ替えと普段の版に戻す流れを作る
+- [x] 5.4 開発 PC の入れ替えと普段の版に戻す流れを作る
   - 設定 → 版の解決 → 道具を送る → 事前の確認で今の版とこれからの版を表示 → バックアップを作って受け取る（初回はサンプルのバックアップも受け取り、受け取れたら記録）→ 切り離して適用 → 追跡 → 結果を表示して終了コードで終える
   - どれかが実機を変える前に失敗したら 10、追跡の途中で切れたら 13 で、版の確認を案内する。サンプルが動いているときは、使っていないことを確かめてから止めるよう案内する
   - 表示に設定の値・記録の中身・秘密を出さず、バックアップは場所と大きさだけを出す
@@ -270,3 +270,5 @@
 - 5.2: 版の解決は `rover_deploy.refs.resolve_ref(name, repo_root, run) -> Resolution(target, also_branch)`（設計の `-> Target` から変えた。also_branch は「タグとブランチの両方にあり、タグを選んだ」）。例外は `RefError` の仲間（BadRefName・RefNotFound(local_only)・UnpushedCommits・RemoteUnreachable）で、どれも exit_code=10。`refs.RemoteUnreachable` は origin に届かないの意味で、ssh の接続の失敗とは別
 - 5.3: ssh は `rover_deploy.remote.Remote(host, run, *, spawn, echo)`（`push_tool`・`agent(*args, tty=False) -> AgentReply(exit_code, data)`・`stream(*args)`・`fetch`・`send`）。例外は `RemoteError` の仲間で `exit_code` をそのまま終了コードにする（DeviceUnreachable 10、DeviceDisconnected 13、StreamProtocolError 13、AgentProtocolError・RemoteTimedOut・TransferFailed 10）。follow の `{"error": ...}` の行は普通の行として返るので、devcli で 13 に写す
 - 5.3: tty（provision）のときは、実機の進み具合と sudo の問いを手元に表示し、`{` で始まる行は隠す。実機のログインシェルは POSIX の sh 系（既定の bash）を前提にする（手順書に書く）
+- 5.4: 開発 PC の入口は `rover_deploy.devcli`（`DevContext` で差し替え、`_subcommands()` の表に足す。失敗は `Abort(message, code)`）。中止の判断は `_check_reasons(data, allowed=)` で reasons の一覧から行う。back は interrupted だけなら進めて片付ける（deploy は interrupted で中止して back を案内）。普段の版のサンプルで動いていれば back は何もせず 0
+- 5.4: apply を頼む途中の RemoteError は 13（実機で始まったかもしれない）。手順の行の reason（記録の中身）は表示しない
