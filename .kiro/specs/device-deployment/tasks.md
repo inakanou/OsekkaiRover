@@ -41,7 +41,7 @@
   - _Boundary: NoticeBoard, IdleScreen_
   - _Requirements: 5.5, 7.1_
 
-- [ ] 2.3 self-check の契約と実行の仕組みを作る
+- [x] 2.3 self-check の契約と実行の仕組みを作る
   - 確認の項目・結果（よい・だめ・飛ばした と固定の理由）・項目に渡す文脈（パス・検証した設定・サービスの報告・ハードを触ってよいか）を定める
   - 項目を別のスレッドで動かし、時間切れなら「だめ（時間切れ）」にして次へ進む。例外は「だめ」にして理由は型の名前だけにする
   - ハードの項目は、触ってよくなければサービスの報告で判定し（使えないデバイスに名前があればだめ）、報告もなければ「飛ばした」にする
@@ -235,3 +235,5 @@
 - 2.1: `MotionService.driving` は「たぶん走行中」の側に倒す（非常停止が書き込みと重なっても True のまま）
 - 2.2: 2.6 は `IdleScreen(arbiter, clock, notices=NoticeBoard(Paths.runtime_dir / NOTICE_FILE_NAME, clock))` でつなぐ。`current()` はない・期限切れ・形の誤りで None（警告は続く間 1 回）。知らせは静かな状態の間も出さない
 - 2.2: Clock には壁時計のエポック秒の口がないので、`clock.now().timestamp()` を使う
+- 2.3: self-check は `osekkai.core.selfcheck`（`Check(name, run, timeout_s, hardware, device)`・`CheckResult`・`CheckContext(paths, report, service, hardware_allowed)`・`SelfCheckRunner`・`collect_checks(base, specs)`・`render_lines`・`results_to_dict`/`results_to_json`・`exit_code`）。`core` の `__init__` からは出していない
+- 2.3: ハードの項目は `device=` に ServiceSnapshot.unavailable の名前（LCD は "display"、ほかは "hat"・"buttons"・"servos"）を入れる。入れないと、サービスの報告があっても「飛ばした」になる

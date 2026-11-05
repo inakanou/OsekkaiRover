@@ -19,6 +19,7 @@ from osekkai.core.events import EventBus
 from osekkai.core.idle import IdleScreen
 from osekkai.core.paths import Paths
 from osekkai.core.quiet import QuietMode
+from osekkai.core.selfcheck import Check
 from osekkai.core.storage import StateStore
 from osekkai.core.types import ButtonPress, Face, Priority, Resource
 
@@ -40,6 +41,7 @@ class FeatureSpec:
     priority: int  # Priority の帯の値に 0〜9 を足した値（10〜89）
     resources: frozenset[Resource]  # 使う可能性のある資源（acquire はこの中だけ）
     config_model: type[FeatureConfig] = FeatureConfig
+    checks: tuple[Check, ...] = ()  # self-check の項目（名前は "<機能の名前>.<項目>"）
 
 
 class FeatureContext(Protocol):
@@ -113,6 +115,11 @@ def validate_spec(spec: FeatureSpec) -> list[str]:
     model: object = spec.config_model  # 型の注釈に反する申告も確かめる
     if not (isinstance(model, type) and issubclass(model, FeatureConfig)):
         reasons.append("設定のモデルは FeatureConfig を継いでください")
+    checks: object = spec.checks
+    if not isinstance(checks, tuple) or not all(isinstance(c, Check) for c in checks):
+        reasons.append("確認の項目は Check の tuple で申告してください")
+    elif isinstance(spec.name, str) and any(c.owner != spec.name for c in checks):
+        reasons.append("確認の項目の名前は機能の名前で始めてください")
     return reasons
 
 
