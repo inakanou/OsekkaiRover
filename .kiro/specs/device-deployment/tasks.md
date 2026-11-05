@@ -51,7 +51,7 @@
   - _Depends: 2.1_
   - _Requirements: 6.2, 6.3, 6.4, 6.6, 6.7_
 
-- [ ] 2.4 (P) 安全停止に、失敗を終了コードで返す使い方を足す
+- [x] 2.4 (P) 安全停止に、失敗を終了コードで返す使い方を足す
   - 厳しい使い方のときは、失敗した段階があれば終了コード 1 を返す。今までの使い方（ExecStopPost）は 0 のまま
   - 完了の状態: 段階の失敗あり・なしで、厳しい使い方と今までの使い方の終了コードを確かめるテストが通る
   - _Boundary: safe_stop_
@@ -237,3 +237,4 @@
 - 2.2: Clock には壁時計のエポック秒の口がないので、`clock.now().timestamp()` を使う
 - 2.3: self-check は `osekkai.core.selfcheck`（`Check(name, run, timeout_s, hardware, device)`・`CheckResult`・`CheckContext(paths, report, service, hardware_allowed)`・`SelfCheckRunner`・`collect_checks(base, specs)`・`render_lines`・`results_to_dict`/`results_to_json`・`exit_code`）。`core` の `__init__` からは出していない
 - 2.3: ハードの項目は `device=` に ServiceSnapshot.unavailable の名前（LCD は "display"、ほかは "hat"・"buttons"・"servos"）を入れる。入れないと、サービスの報告があっても「飛ばした」になる
+- 2.4: `python -m osekkai.core.safe_stop --strict` は、段階の失敗に加えて、ハードに触らずに終えたとき（ロックをほかが持つ・EXIT_STATUS=75・アダプタなし）も終了コード 1。PC では必ず 1 になる。引数なしは今までどおり必ず 0
