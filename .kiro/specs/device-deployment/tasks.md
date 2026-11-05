@@ -142,7 +142,7 @@
   - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8_
 
 - [ ] 4. 実機の道具の流れ
-- [ ] 4.1 適用の流れ（切り替え・確認・切り戻し・停止）を作る
+- [x] 4.1 適用の流れ（切り替え・確認・切り戻し・停止）を作る
   - 準備 → 停止の直前の安全の確認 → 切り替え（初回の調整値の移し替え、動いているサービスの停止、リンクとユニット、知らせ、起動、普段の版だけを有効に）→ 確認 → 失敗なら前の版で同じ手順と確認 → それも失敗なら両方のユニットを止めて厳しい安全停止
   - 始めに途中の入れ替えを状態に書き、終わったら消す。経過と結果を記録に書き、状態の今と前の版・最後の入れ替え・試しを始めた時刻を更新する
   - 対象がサンプルのときはサンプルのユニットを起動して、30 秒の確認だけを行う。起動の前に相手のユニットが止まっていることを確かめる
@@ -258,3 +258,6 @@
 - 3.7: 初期設定は `rover_deploy.provision`（`provision_steps(ctx)`・`run_provision(steps, log) -> ProvisionReport`、`ProvisionContext(run, layout, releases, user, repo_url, target, data_dir, say, os_release, boot_config, now, fetch, assets)`）。`release` の手順には、開発 PC で解決した Target を渡す（--ref の既定は最新のタグ、なければ main）。`data_dir` は `backups.core_data_dir(layout, env)`。ロックは呼ぶ側が持つ
 - 3.7: 手順の順番は設計から 1 つ変えた: reminder は release の後（タイマーのファイルを今の版から写すため）。グループには systemd-journal も足す（adm に入っていれば足さない）。self-check のだめの項目は手順の失敗にせず、`ProvisionReport.self_check_ok` に入れる
 - 3.7: 声のファイルと顔のモデルは、取得元と sha256 を固定した `ASSETS`（実機のファイルと一致することを 2026-11-05 に確かめた）。open_jtalk は apt の open-jtalk を使うので、jtalk のディレクトリは取らない
+- 4.1: 入れ替えは `rover_deploy.transaction.Transaction`（`run(target, deploy_id, *, everyday) -> DeployResult`・`halt() -> list[str]`、作るときに `repo_url` が要る）。有効にするのは確認が通った後（設計の Switching から移した）。有効にできなければ outcome は succeeded のまま、failed_checks に "enable" が入る（5.4 の表示で扱う）
+- 4.1: 前の版がリンクの先と合わなければ前の版は None になり、切り戻さずに停止する。停止では current=None。予期しない例外は in_progress を残して上に投げる（確認の最中の例外だけは "verify" の失敗として切り戻す）
+- 4.1: 設計の穴（設計の Migration Strategy に記録）: 普段の版が新しい基盤の版になった後は、試しの版を入れたまま再起動すると試しの版で立ち上がる。daily-routine で普段の版を切り替える前に直す

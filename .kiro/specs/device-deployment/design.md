@@ -1003,4 +1003,5 @@ WantedBy=default.target
   2. 子どもが使っていない時間に `rover-deploy stop` → `rover-deploy deploy <版>`: 初回なので、サンプルのバックアップを開発 PC に受け取り、調整値を移す（今の実機は値がないので「移すものがない」）
   3. 試し終わったら `rover-deploy back`: サンプルに戻る
 - daily-routine の後: `rover-deploy everyday <タグ>` → `rover-deploy back` で、新しい基盤が有効になり、サンプルのユニットは無効になる（サンプルのファイルは残す）
+- 分かっている穴（daily-routine で普段の版を新しい基盤の版にする前に直す）: 普段の版が新しい基盤の版で `osekkai.service` が有効なとき、試しの版を入れると `current` とユニットが試しの版を指すので、再起動すると試しの版で立ち上がる。「再起動すれば普段の版に戻る」は、普段の版がサンプルの間だけ成り立つ。直し方の候補: 試しの版の間は `osekkai.service` を無効にして、普段の版のための別のユニット（またはリンク）を有効にする
 - 前のユニットの名前（`osekkai-rover.service`）は、新しい基盤には使わない。リポジトリの旧名のファイルは消す
