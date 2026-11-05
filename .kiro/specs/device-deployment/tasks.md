@@ -10,7 +10,7 @@
   - 完了の状態: `ruff`・`mypy`・`pytest` が道具のディレクトリを含めて通り、版の表示の文字列と、道具が `osekkai` を読み込まないことのテストが通る
   - _Requirements: 1.10, 7.3_
 
-- [ ] 1.2 実機の置き場所と、道具の状態・記録・ロックを作る
+- [x] 1.2 実機の置き場所と、道具の状態・記録・ロックを作る
   - 実機の置き場所（新しい基盤の置き場所、版のディレクトリ、current、道具、状態のディレクトリ、XDG の実行時のディレクトリ、サンプルの場所）を 1 か所で決める。XDG の実行時のディレクトリがないときの決まりは基盤と同じにする
   - 道具の状態（普段の版・今と前の版・試しを始めた時刻・知らせた時刻・サンプルの保存・調整値の移し替え・途中の入れ替え・最後の入れ替え）を 0600 で、一時ファイルからの置き換えで保存する。普段の版の既定は、サンプルの作業コピーがあればサンプル
   - 入れ替えのロック（取れなければすぐ断る）と、入れ替えの記録（1 行 1 件、最後の行が結果、最新 50 件を残す）を作る。記録には手順の名前・固定の理由・例外の型の名前だけを書く
@@ -226,3 +226,5 @@
 - 1.1: 外のコマンドは `rover_deploy.system` の Runner（`run(argv, *, input, timeout, check, cwd, env) -> RunResult`）で呼ぶ。systemctl・journalctl・git の包み（`is_active`・`show_unit`・`start_unit` など・`journal_since`・`git_describe`・`git_dirty_count`）も system.py にあり、後のタスクは system.py を直さない。例外は `CommandError` の仲間で、標準エラーを持たない
 - 1.1: テストの偽物は `tests/deploy/fake_runner.py` の `FakeRunner`（`from fake_runner import FakeRunner`、fixture は `fake_runner`）。前方一致で最長のものが勝ち、台本にないコマンドは AssertionError。tests に __init__.py がないので、`tests/deploy/conftest.py` は mypy の対象から外している（conftest の名前が重なる）。conftest には fixture だけを置く
 - 1.1: `Target` は作るときに形を確かめる（版は 40 桁の小文字の sha が要る）。`write_json_file` は 0600 で原子的に書くが、親のディレクトリは作らない
+- 1.2: 置き場所はすべて `rover_deploy.layout.Layout(home, env, uid)` から取る（`release_dir(sha)`・`current_link`・`state_dir`・`backups_dir`・`core_config_dir`・`core_state_dir`・`runtime_dir`・`sample_dir`・`sample_venv`・`sample_exists()` など）。`runtime_dir` は rover-core の `Paths` と同じく、XDG_RUNTIME_DIR が空か相対なら `/tmp/osekkai-<uid>`（設計の `/run/user` の段は誤りだったので直した）
+- 1.2: 状態は `StateStore(layout).load()/save()`、ロックは `DeployLock`、記録は `DeployLog(log_dir, deploy_id, clock=)` の `.event()`/`.result()`。読む側は `list_log_ids`・`latest_log_id`・`read_log_events`・`read_log_result`。`read_log_result` は結果の行が壊れていても None を返すので、follow では「まだ結果がない」と区別に気をつける。`state_from_dict` は deploy_id の形を確かめていない

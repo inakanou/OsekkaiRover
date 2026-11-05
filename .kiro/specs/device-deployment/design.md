@@ -702,7 +702,7 @@ def remind(state: DeployState, running: Running, now_epoch: float) -> bool: ...
 - 戻し忘れ（5.5）: `osekkai-trial-reminder.timer`（起動の 10 分後と、その後 1 時間ごと）が `agent remind` を呼ぶ。試しの版が動いていて、`trial_since` から `REMIND_AFTER_H`（既定 3 時間）を過ぎていれば:
   - 2 行目だけの知らせ「ためしのばん もどしてね」を `until` なしで書く（普段の版に戻すと消す）
   - journal に警告を 1 行出し、`state.json` の `reminded_at` を記録する。開発 PC の道具は、どのサブコマンドでも最初にこれを警告する
-- `$XDG_RUNTIME_DIR` が空なら `/run/user/<uid>` を使う（`rover-core` の `Paths` と同じ決まり。どちらもなければ `/tmp/osekkai-<uid>`）
+- `$XDG_RUNTIME_DIR` が空か相対パスなら `/tmp/osekkai-<uid>` を使う（`rover-core` の `Paths` と同じ決まり）
 
 #### Provision
 
