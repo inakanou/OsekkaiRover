@@ -116,7 +116,7 @@
   - _Boundary: Calibration_
   - _Requirements: 9.3_
 
-- [ ] 3.5 (P) LCD の知らせと、戻し忘れの確認を作る
+- [x] 3.5 (P) LCD の知らせと、戻し忘れの確認を作る
   - 版の知らせ（1 行目に版の表示を 16 セルに切り詰め、2 行目に普段の版か、試しと普段の版の短い名前。20 秒の期限）を書く・消す
   - 戻し忘れ: 試しの版が動いていて、試しを始めてから 3 時間を過ぎていれば、期限なしの 2 行目の知らせを書き、journal に警告を 1 行出し、知らせた時刻を記録する
   - 完了の状態: 共通の見本の形と一致する知らせ、文言と切り詰め、戻し忘れの時間の境目のテストが通る
@@ -251,3 +251,4 @@
 - 3.3: バックアップは `rover_deploy.backups`（`create_backup(layout, id, env=)`・`create_sample_backup(layout, id, run)`・`list_backups`・`prune`・`restore_backup(layout, path, include_sample=, env=)`・`recover_interrupted_restore(layout, env=)`・`estimate_backup_bytes(layout, include_sample=, env=)`）。ファイルは `backups_dir/backup-<id>.tar.gz` と `sample-<id>.tar.gz`。サンプルのバックアップは一覧・世代の削除・復元の対象外
 - 3.3: Layout は XDG_DATA_HOME を持たないので、backups の関数には Layout を作ったのと同じ env を必ず渡す。サービスを起動する前（preflight や stop の中、ロックを持って）に `recover_interrupted_restore` を呼び、途中で止まった復元を片付ける
 - 3.4: 調整値の移し替えは `rover_deploy.calibration.migrate(sample_conf, config_file, example)` → status（migrated・nothing_to_migrate・already_set・out_of_range・unreadable）。どの status でも入れ替えは続ける（失敗にしない）。結果は状態の `calibration_migrated` に記録して 2 回目以降は行わない（4.1）。見本は版の `src/osekkai/core/example_config.yaml`
+- 3.5: 知らせは `rover_deploy.notices`（`version_notice(target, everyday, now)`・`write_notice(runtime_dir, notice)`・`clear_notice(runtime_dir)`・`remind(state, running, now) -> bool`・`send_reminder(runtime_dir, state, now) -> DeployState`）。send_reminder が返した状態は呼ぶ側が保存する。普段の版に戻したら `clear_notice` で戻し忘れの知らせを消す。試しの版かどうかは `current != everyday`（Target のすべての欄で比べる）
