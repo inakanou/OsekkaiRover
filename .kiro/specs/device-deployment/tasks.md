@@ -165,7 +165,7 @@
   - _Requirements: 3.7, 4.6, 5.2, 5.5, 6.8, 7.2, 8.1, 11.2_
 
 - [ ] 5. 開発 PC の道具
-- [ ] 5.1 (P) 利用者の設定を読む
+- [x] 5.1 (P) 利用者の設定を読む
   - 環境変数の指定か既定の置き場所から、接続先の別名・バックアップの置き場所・リポジトリの URL を読む。URL がなければ origin から https の形を作る
   - 接続先がなければ設定の仕方を出して中止する。バックアップの置き場所が git の作業コピーの中なら拒む
   - 完了の状態: 接続先がないときの案内、作業コピーの中を拒む、既定値のテストが通る
@@ -266,3 +266,4 @@
 - 4.2: ssh の側と systemd-run の側で XDG_* の環境が違うと、ロックと状態の場所がずれる。手順書（6.1）に「XDG_* を変えない」と書く
 - 4.3: 実機のそのほかのコマンド: status・set-everyday・self-check・backups・restore・stop・remind・provision・log。新しい reason: no_backup・bad_backup_file・backups_unreadable・restore_failed・restore_leftover・stop_failed・start_failed_after・halt_failed・no_release・self_check_error・self_check_unreadable・running_unknown・notice_failed・provision_failed
 - 4.3: 開発 PC（5.x）への引き継ぎ: provision は ssh -t で動かすので、標準エラーと sudo の問いが同じ流れに混ざり、行の終わりが \r\n になる。最後の行の \r を取ってから JSON として読む。stop の結果が failed=["safe_stop"] だけなら「サービスは止めたが、モーターの停止は確かめられない（版がない）」と表示する。サンプルを止めてから restore した後は、サービスを起動し直すよう（または back を）案内する
+- 5.1: 開発 PC の設定は `rover_deploy.devconfig.load_dev_config(env, repo_root, run, home=None) -> DevConfig(host, backup_dir, repo_url)`。誤りは `ConfigError`（決まった文言、`exit_code`=10）。devcli はこれを終了コード 10 に写す。repo_url は https だけ（origin の ssh の別名からは作れない）
