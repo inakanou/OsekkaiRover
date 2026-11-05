@@ -93,7 +93,7 @@
   - _Boundary: ServiceStatus_
   - _Requirements: 2.1, 2.2, 2.3, 2.5_
 
-- [ ] 3.2 (P) 版のディレクトリの準備・切り替え・片付けを作る
+- [x] 3.2 (P) 版のディレクトリの準備・切り替え・片付けを作る
   - bare の写しの取得、sha の確認、worktree、版ごとの仮想環境と依存関係の導入。同じ sha でできていれば使い回し、途中で失敗したら作りかけだけを消す
   - current のリンクを一時名から置き換えて切り替え、前の先を返す。版のユニットを写して読み直す。手の変更の件数を数える（ファイルの名前は出さない）
   - 古い版の削除（今・前・普段の版と、新しい順に 3 つを残す）。サンプルの場所と XDG のディレクトリには何も書かない
@@ -247,3 +247,4 @@
 - 2.8: 重要: self-check がロックを持っている間に osekkai.service が起動すると、サービスは 75 で終わって再起動しない。入れた後の確認（3.6）は、self-check の前に「status.json があり、pid が MainPID と同じで、心拍が新しい」まで待つ（START_TIMEOUT_S の中で）。初期設定でサービスを起動するのは self-check の後にする。手順書（6.1）にも、self-check の最中にサービスを起動しないよう書く
 - 3.1: 安全の判断は `rover_deploy.service_status.check_safety(run, layout)` → `SafetyVerdict(ok, running, reason, busy)`。理由は ""・driving・busy・unknown・sample_running。`running=BOTH` で `reason=unknown` は「systemctl が答えなかった」の意味なので、動いているサービスとして表示しない
 - 3.1: 入れた後の確認がサービスを待つときは `service_reporting(read_status(status_path(layout)), core_main_pid(run), now_monotonic=)` を使う。service_status.py には壁時計の語（time.time・datetime など）を書かない（テストが文字で探す）
+- 3.2: 版は `rover_deploy.releases.Releases(layout, run)` の `prepare(target, repo_url)`・`current()`・`switch(dir)`・`install_unit(dir)`・`dirty_count(dir)`・`prune(keep)`。準備の失敗は `PrepareFailed(step)`（fetch・commit・worktree・venv・pip）、ほかは `ReleaseError`。取得は `fetch --prune --tags --force`（リモートで付け直したタグを受け入れる）。仕上げの印は `.venv/.osekkai-ready`
