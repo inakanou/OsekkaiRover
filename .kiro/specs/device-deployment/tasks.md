@@ -172,7 +172,7 @@
   - _Boundary: DevConfig_
   - _Requirements: 3.3, 10.1, 10.2_
 
-- [ ] 5.2 (P) タグとブランチを解決する
+- [x] 5.2 (P) タグとブランチを解決する
   - リモートのタグとブランチを探し、注釈付きのタグは先のコミットを使う。両方にあればタグを選んでその旨を返す
   - 手元のブランチにリモートにないコミットがあれば push が要る、手元が遅れているだけならリモートの最新、手元だけのタグは見つからない（push が要ると添える）
   - 完了の状態: 偽の Runner で、注釈付きのタグ・両方にある名前・手元だけのタグ・push していないコミット・手元が遅れているブランチ・見つからない、のテストが通る
@@ -267,3 +267,4 @@
 - 4.3: 実機のそのほかのコマンド: status・set-everyday・self-check・backups・restore・stop・remind・provision・log。新しい reason: no_backup・bad_backup_file・backups_unreadable・restore_failed・restore_leftover・stop_failed・start_failed_after・halt_failed・no_release・self_check_error・self_check_unreadable・running_unknown・notice_failed・provision_failed
 - 4.3: 開発 PC（5.x）への引き継ぎ: provision は ssh -t で動かすので、標準エラーと sudo の問いが同じ流れに混ざり、行の終わりが \r\n になる。最後の行の \r を取ってから JSON として読む。stop の結果が failed=["safe_stop"] だけなら「サービスは止めたが、モーターの停止は確かめられない（版がない）」と表示する。サンプルを止めてから restore した後は、サービスを起動し直すよう（または back を）案内する
 - 5.1: 開発 PC の設定は `rover_deploy.devconfig.load_dev_config(env, repo_root, run, home=None) -> DevConfig(host, backup_dir, repo_url)`。誤りは `ConfigError`（決まった文言、`exit_code`=10）。devcli はこれを終了コード 10 に写す。repo_url は https だけ（origin の ssh の別名からは作れない）
+- 5.2: 版の解決は `rover_deploy.refs.resolve_ref(name, repo_root, run) -> Resolution(target, also_branch)`（設計の `-> Target` から変えた。also_branch は「タグとブランチの両方にあり、タグを選んだ」）。例外は `RefError` の仲間（BadRefName・RefNotFound(local_only)・UnpushedCommits・RemoteUnreachable）で、どれも exit_code=10。`refs.RemoteUnreachable` は origin に届かないの意味で、ssh の接続の失敗とは別
