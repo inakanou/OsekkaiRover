@@ -194,7 +194,7 @@
   - _Depends: 4.2, 5.1, 5.2, 5.3_
   - _Requirements: 1.5, 1.6, 1.10, 2.1, 2.2, 2.3, 2.4, 3.2, 3.3, 4.3, 4.5, 5.1, 9.2, 10.3_
 
-- [ ] 5.5 開発 PC のそのほかのサブコマンドを作る
+- [x] 5.5 開発 PC のそのほかのサブコマンドを作る
   - 版の確認・普段の版の記録・self-check・バックアップの一覧と復元（開発 PC のファイルからの復元を含む）・停止・記録の表示・初期設定
   - どのサブコマンドでも、戻し忘れが知らされていれば最初に警告を出す
   - 完了の状態: 偽の Remote で、各サブコマンドの表示と終了コード、戻し忘れの警告のテストが通る
@@ -272,3 +272,5 @@
 - 5.3: tty（provision）のときは、実機の進み具合と sudo の問いを手元に表示し、`{` で始まる行は隠す。実機のログインシェルは POSIX の sh 系（既定の bash）を前提にする（手順書に書く）
 - 5.4: 開発 PC の入口は `rover_deploy.devcli`（`DevContext` で差し替え、`_subcommands()` の表に足す。失敗は `Abort(message, code)`）。中止の判断は `_check_reasons(data, allowed=)` で reasons の一覧から行う。back は interrupted だけなら進めて片付ける（deploy は interrupted で中止して back を案内）。普段の版のサンプルで動いていれば back は何もせず 0
 - 5.4: apply を頼む途中の RemoteError は 13（実機で始まったかもしれない）。手順の行の reason（記録の中身）は表示しない
+- 5.5: 開発 PC のそのほかのコマンド: status・everyday（タグか sample だけ）・self-check（0/1/10）・backups・restore（0/10/12）・stop（モーターの停止を確かめられなければ 12）・log・provision（--ref がなければ最新の vX.Y.Z、なければ main）。どのコマンドも道具を送った後に status を読み、3 時間以上の試しの版を最初に警告する。テストの偽物は `tests/deploy/devcli_fakes.py`
+- 5.5: 残っている小さな穴（後で agent.py の側で直す）: restore --file で送った `uploaded-<id>.tar.gz` は実機に残り、世代の削除の対象にならない。restore が busy で止まったとき、作業中の機能の名前が表示に出ない（agent の restore の返事に safety.busy がない）。restore --file は実機の XDG_STATE_HOME が既定であることを前提にする
