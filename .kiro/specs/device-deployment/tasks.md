@@ -86,7 +86,7 @@
   - _Requirements: 6.1, 6.2, 6.3, 6.7, 6.8_
 
 - [ ] 3. 実機の道具の部品
-- [ ] 3.1 (P) 動いているサービスの判定と、入れ替えてよいかの判断を作る
+- [x] 3.1 (P) 動いているサービスの判定と、入れ替えてよいかの判断を作る
   - どのサービスが動いているか（なし・新しい基盤・サンプル・両方）と MainPID を、systemctl から求める
   - 状態のファイルを読み、ない・形が違う・pid の不一致・心拍が 5 秒より古い → 確かめられない、走行中、作業中（機能の名前）、サンプルが動いている、を判断する。時刻は見ない
   - 完了の状態: 共通の見本を使い、止まっている・古い心拍・pid の不一致・走行中・作業中の名前・サンプル・時刻によらない、のテストが通る
@@ -245,3 +245,5 @@
 - 2.7: サンプルは単一の実行のロックを使わないので、サンプルが動いている間の self-check はハードの項目も走る（害はないが、初期設定ではサンプルが動いていれば `--no-hardware` を付ける）
 - 2.8: `python -m osekkai --self-check [--json] [--no-hardware] [--fake-hardware]` は、ロックを取れればハードの項目も行い、終わるまでロックを持つ（`--no-hardware` でも持つ。声の合成で最大 40 秒）。取れなければ status.json の報告で判定し、なければ「飛ばした」
 - 2.8: 重要: self-check がロックを持っている間に osekkai.service が起動すると、サービスは 75 で終わって再起動しない。入れた後の確認（3.6）は、self-check の前に「status.json があり、pid が MainPID と同じで、心拍が新しい」まで待つ（START_TIMEOUT_S の中で）。初期設定でサービスを起動するのは self-check の後にする。手順書（6.1）にも、self-check の最中にサービスを起動しないよう書く
+- 3.1: 安全の判断は `rover_deploy.service_status.check_safety(run, layout)` → `SafetyVerdict(ok, running, reason, busy)`。理由は ""・driving・busy・unknown・sample_running。`running=BOTH` で `reason=unknown` は「systemctl が答えなかった」の意味なので、動いているサービスとして表示しない
+- 3.1: 入れた後の確認がサービスを待つときは `service_reporting(read_status(status_path(layout)), core_main_pid(run), now_monotonic=)` を使う。service_status.py には壁時計の語（time.time・datetime など）を書かない（テストが文字で探す）
