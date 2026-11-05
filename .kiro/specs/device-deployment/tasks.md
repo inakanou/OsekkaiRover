@@ -1,7 +1,7 @@
 # Implementation Plan
 
 - [ ] 1. 土台: 道具のパッケージ・共通の型・状態の保存・共通の見本
-- [ ] 1.1 配置の道具のパッケージの骨組みと、テストの仕組みを整える
+- [x] 1.1 配置の道具のパッケージの骨組みと、テストの仕組みを整える
   - 標準ライブラリだけで動く道具のパッケージと、開発 PC の入口の実行ファイルを作る（入口は引数の解析だけで、サブコマンドは後のタスクで足す）
   - 型の確認とテストの対象に道具のディレクトリを足す（lint は既定で対象）。道具が `osekkai` のパッケージを読み込まないことをテストで縛る
   - 外のコマンドを呼ぶ口（Runner）と、テストで使う偽の Runner（呼ばれたコマンドを記録し、決めた結果を返す）を作る
@@ -223,3 +223,6 @@
   - _Requirements: 1.2, 2.1, 2.3, 4.2, 4.5, 5.3, 6.1, 6.7, 7.1, 8.2_
 
 ## Implementation Notes
+- 1.1: 外のコマンドは `rover_deploy.system` の Runner（`run(argv, *, input, timeout, check, cwd, env) -> RunResult`）で呼ぶ。systemctl・journalctl・git の包み（`is_active`・`show_unit`・`start_unit` など・`journal_since`・`git_describe`・`git_dirty_count`）も system.py にあり、後のタスクは system.py を直さない。例外は `CommandError` の仲間で、標準エラーを持たない
+- 1.1: テストの偽物は `tests/deploy/fake_runner.py` の `FakeRunner`（`from fake_runner import FakeRunner`、fixture は `fake_runner`）。前方一致で最長のものが勝ち、台本にないコマンドは AssertionError。tests に __init__.py がないので、`tests/deploy/conftest.py` は mypy の対象から外している（conftest の名前が重なる）。conftest には fixture だけを置く
+- 1.1: `Target` は作るときに形を確かめる（版は 40 桁の小文字の sha が要る）。`write_json_file` は 0600 で原子的に書くが、親のディレクトリは作らない
