@@ -157,7 +157,7 @@
   - _Depends: 1.2, 3.3, 4.1_
   - _Requirements: 1.5, 1.7, 1.9, 2.4, 3.1, 3.2, 4.5, 9.2_
 
-- [ ] 4.3 実機のそのほかのサブコマンドを作る
+- [x] 4.3 実機のそのほかのサブコマンドを作る
   - 版の確認（動いている版・普段の版・最後の入れ替え・試しの経過）、普段の版の記録、self-check、バックアップの一覧と復元（安全の確認 → 今のバックアップ → 停止 → 戻す → 起動）、停止（両方のユニットを止めて厳しい安全停止）、戻し忘れ、初期設定、入れ替えの記録の表示（id がなければ最新の 1 件。一覧も返せる）
   - 動いている版は、記録ではなく実際に動いているユニットとリンクの先から求める
   - 完了の状態: 偽の Runner で、各サブコマンドが JSON を 1 つ返し、復元が止めてから戻して起動する順番、記録の表示（id あり・なし）のテストが通る
@@ -264,3 +264,5 @@
 - 4.2: 実機のコマンドは `python3 -m rover_deploy.agent <sub>`（作業ディレクトリは `~/osekkai-rover/tool`）。標準出力に JSON を 1 つ（follow は JSON の行）、終了コードは 0（JSON の ok/reason を見る）・2（使い方の誤り。JSON がないこともある）・1（思わぬ失敗）。4.3 は `agent._handlers()` の表に足す。動いている版は `running_target(ctx, state, running)`
 - 4.2: preflight の reason は lock_busy・state_broken・interrupted・安全の理由（driving・busy・unknown・sample_running）・disk_low・dirty・dirty_unknown。apply は apply_running・apply_unknown・lock_busy・start_failed。follow の終わりは結果の行か、error（no_log・broken_result・ended_without_result・timeout）。ended_without_result は開発 PC で 13 と同じに扱う
 - 4.2: ssh の側と systemd-run の側で XDG_* の環境が違うと、ロックと状態の場所がずれる。手順書（6.1）に「XDG_* を変えない」と書く
+- 4.3: 実機のそのほかのコマンド: status・set-everyday・self-check・backups・restore・stop・remind・provision・log。新しい reason: no_backup・bad_backup_file・backups_unreadable・restore_failed・restore_leftover・stop_failed・start_failed_after・halt_failed・no_release・self_check_error・self_check_unreadable・running_unknown・notice_failed・provision_failed
+- 4.3: 開発 PC（5.x）への引き継ぎ: provision は ssh -t で動かすので、標準エラーと sudo の問いが同じ流れに混ざり、行の終わりが \r\n になる。最後の行の \r を取ってから JSON として読む。stop の結果が failed=["safe_stop"] だけなら「サービスは止めたが、モーターの停止は確かめられない（版がない）」と表示する。サンプルを止めてから restore した後は、サービスを起動し直すよう（または back を）案内する

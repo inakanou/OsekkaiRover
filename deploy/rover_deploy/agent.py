@@ -17,6 +17,17 @@
 - `run-apply`: 切り離された側。ロックを取り、適用の流れを最後まで行う
 - `follow`: 入れ替えの記録を、結果の行まで流す
 
+そのほかのサブコマンド（3.7、4.6、5.2、5.5、6.8、7.2、8.1、11.2）:
+- `status`: 動いている版・普段の版・最後の入れ替え・試しの経過。実機を変えない
+- `set-everyday`: 普段の版を記録する。入れ替えはしない
+- `self-check`: 今の版の self-check を行う
+- `backups` / `restore`: バックアップの一覧と復元
+  （安全の確認 → 今のバックアップ → 停止 → 戻す → 起動）
+- `stop`: 両方のユニットを止め、安全停止を `--strict` で行う
+- `remind`: 戻し忘れを確かめる（タイマーから呼ぶ）
+- `provision`: 初期設定。経過は標準エラーに出し、最後に JSON を 1 つ返す
+- `log`: 入れ替えの記録を返す（識別子がなければ最新の 1 件。`--list` で一覧）
+
 サブコマンドを足すときは、`_handlers` の表に名前と、引数を決める関数と、行う関数を足す。
 """
 
@@ -24,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import pwd
 import sys
 import time
 from collections.abc import Callable, Mapping, Sequence
@@ -35,11 +47,15 @@ from rover_deploy.backups import (
     BackupFailed,
     BackupInfo,
     RestoreFailed,
+    backup_path,
+    core_data_dir,
     create_backup,
     create_sample_backup,
     estimate_backup_bytes,
+    list_backups,
     prune,
     recover_interrupted_restore,
+    restore_backup,
     sample_backup_path,
 )
 from rover_deploy.common import (
@@ -54,9 +70,11 @@ from rover_deploy.common import (
     target_to_dict,
     version_label,
 )
-from rover_deploy.layout import Layout
+from rover_deploy.layout import CORE_UNIT_NAME, SAMPLE_UNIT_NAME, Layout
+from rover_deploy.notices import clear_notice, remind, send_reminder
+from rover_deploy.provision import ProvisionContext, provision_steps, run_provision
 from rover_deploy.releases import ReleaseError, Releases
-from rover_deploy.service_status import SafetyVerdict, check_safety
+from rover_deploy.service_status import SafetyVerdict, check_safety, detect_running
 from rover_deploy.state import (
     LOG_SUFFIX,
     DeployLock,
@@ -65,12 +83,23 @@ from rover_deploy.state import (
     StateBroken,
     StateStore,
     exception_reason,
+    latest_log_id,
+    list_log_ids,
+    make_deploy_id,
     read_log_events,
+    read_log_result,
     validate_deploy_id,
 )
-from rover_deploy.system import CommandError, Runner, SubprocessRunner, is_active
+from rover_deploy.system import (
+    CommandError,
+    Runner,
+    SubprocessRunner,
+    is_active,
+    start_unit,
+    stop_unit,
+)
 from rover_deploy.transaction import Transaction
-from rover_deploy.verify import Clock, SystemClock
+from rover_deploy.verify import SELF_CHECK_TIMEOUT_S, Clock, SystemClock, parse_self_check
 
 USAGE_ERROR = 2  # argparse の使い方の誤りと同じ
 UNEXPECTED_ERROR = 1
@@ -591,6 +620,477 @@ def _add_follow(parser: argparse.ArgumentParser) -> None:
     )
 
 
+# --- そのほかのサブコマンドの理由の名前 ---
+
+REASON_NO_BACKUP = "no_backup"  # その識別子のバックアップがない
+REASON_BAD_BACKUP_FILE = "bad_backup_file"  # バックアップの置き場所の外のファイル
+REASON_BACKUPS_UNREADABLE = "backups_unreadable"  # バックアップの一覧を読めない
+REASON_RESTORE_FAILED = "restore_failed"  # バックアップから戻せない
+REASON_STOP_FAILED = "stop_failed"  # 動いているサービスを止められない
+REASON_START_FAILED_AFTER = "start_failed_after"  # 戻した後にサービスを起動できない
+REASON_HALT_FAILED = "halt_failed"  # 停止のどこかが失敗した
+REASON_NO_RELEASE = "no_release"  # 今の版がない
+REASON_SELF_CHECK_ERROR = "self_check_error"  # self-check を行えない
+REASON_SELF_CHECK_UNREADABLE = "self_check_unreadable"  # self-check の結果が読めない
+REASON_RUNNING_UNKNOWN = "running_unknown"  # 何が動いているか分からない
+REASON_NOTICE_FAILED = "notice_failed"  # 知らせを書けない
+REASON_PROVISION_FAILED = "provision_failed"  # 初期設定の手順が失敗した
+
+
+# --- 版の確認（5.4、7.2） ---
+
+
+def _last_deploy_dict(state: DeployState) -> dict[str, object] | None:
+    last = state.last_deploy
+    if last is None:
+        return None
+    return {"id": last.deploy_id, "outcome": last.outcome, "finished_at": last.finished_at}
+
+
+def cmd_status(ctx: AgentContext, args: argparse.Namespace) -> int:
+    """動いている版・普段の版・最後の入れ替え・試しの経過を返す。実機を変えない。"""
+    state: DeployState | None
+    try:
+        state = ctx.state_store().load()
+    except StateBroken:
+        state = None
+    verdict = ctx.check_safety(ctx.run, ctx.layout)
+    current = running_target(ctx, state, verdict.running)
+    everyday = None if state is None else state.everyday
+    trial_since = None if state is None else state.trial_since
+    is_trial = current is not None and current != everyday
+    elapsed = None if trial_since is None or not is_trial else max(ctx.now() - trial_since, 0.0)
+    ctx.emit(
+        {
+            "ok": state is not None,
+            "reason": "" if state is not None else REASON_STATE_BROKEN,
+            "running": _running_label(verdict),
+            "current": _target_dict(current),
+            "current_label": _label(current),
+            "everyday": _target_dict(everyday),
+            "everyday_label": _label(everyday),
+            "is_trial": is_trial,
+            "trial_since": trial_since if is_trial else None,
+            "trial_elapsed_s": elapsed,
+            "reminded_at": None if state is None else state.reminded_at,
+            "last_deploy": None if state is None else _last_deploy_dict(state),
+            "in_progress": None
+            if state is None or state.in_progress is None
+            else state.in_progress.deploy_id,
+            "lock": "busy" if _lock_busy(ctx) else "free",
+        }
+    )
+    return 0
+
+
+# --- 普段の版の記録（5.2） ---
+
+
+def cmd_set_everyday(ctx: AgentContext, args: argparse.Namespace) -> int:
+    """普段の版を記録する。入れ替えはしない（入れ替えは開発 PC の back で行う）。
+
+    今の版が新しい普段の版と同じになれば試しは終わりなので、試しの時刻と戻し忘れの知らせを消す。
+    違う版になれば、試しを始めた時刻がなければ今から数える。
+    """
+    target = _parse_target(args.target)
+    lock = ctx.lock()
+    if not lock.try_acquire():
+        ctx.emit({"ok": False, "reason": REASON_LOCK_BUSY})
+        return 0
+    try:
+        store = ctx.state_store()
+        try:
+            state = store.load()
+        except StateBroken:
+            ctx.emit({"ok": False, "reason": REASON_STATE_BROKEN})
+            return 0
+        trial = state.current is not None and state.current != target
+        if trial:
+            since = ctx.now() if state.trial_since is None else state.trial_since
+            new_state = replace(state, everyday=target, trial_since=since)
+        else:
+            new_state = replace(state, everyday=target, trial_since=None, reminded_at=None)
+            if state.reminded_at is not None:
+                clear_notice(ctx.layout.runtime_dir)
+        store.save(new_state)
+        ctx.emit(
+            {
+                "ok": True,
+                "reason": "",
+                "everyday": target_to_dict(target),
+                "everyday_label": version_label(target),
+            }
+        )
+        return 0
+    finally:
+        lock.release()
+
+
+def _add_set_everyday(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--target", required=True, help="普段の版（JSON。サンプルか版）")
+
+
+# --- self-check（6.7、6.8） ---
+
+SELF_CHECK_PYTHON = Path(".venv/bin/python")
+
+
+def _self_check_results(text: str, returncode: int) -> list[dict[str, object]] | None:
+    """self-check の `--json` の出力から項目の一覧を返す。形が違えば None。
+
+    形の確かめは入れた後の確認と同じ `parse_self_check` で行う。理由は基盤の決まった文言だけ。
+    """
+    failed = parse_self_check(text)
+    if failed is None or returncode != (1 if failed else 0):
+        return None
+    data = load_json_object(text)
+    raw = data["results"]
+    assert isinstance(raw, list)
+    return [
+        {"name": item["name"], "status": item["status"], "reason": item["reason"]} for item in raw
+    ]
+
+
+def cmd_self_check(ctx: AgentContext, args: argparse.Namespace) -> int:
+    """今の版の self-check を行う（6.8）。
+
+    サンプルが動いているかもしれないときは `--no-hardware` を付ける（サンプルは単一の実行の
+    ロックを使わないので、ハードを取り合わないように）。基盤が動いていれば、ハードの項目は
+    基盤の報告で判定される（6.7）。入れ替えの最中にサービスを止めないよう、ロックを持って行う。
+    """
+    lock = ctx.lock()
+    if not lock.try_acquire():
+        ctx.emit({"ok": False, "reason": REASON_LOCK_BUSY})
+        return 0
+    try:
+        current = ctx.get_releases().current()
+        if current is None or not current.is_dir():
+            ctx.emit({"ok": False, "reason": REASON_NO_RELEASE})
+            return 0
+        verdict = ctx.check_safety(ctx.run, ctx.layout)
+        argv = [str(current / SELF_CHECK_PYTHON), "-m", "osekkai", "--self-check", "--json"]
+        no_hardware = verdict.running in (Running.SAMPLE, Running.BOTH)
+        if no_hardware:
+            argv.append("--no-hardware")
+        try:
+            result = ctx.run(argv, timeout=SELF_CHECK_TIMEOUT_S, cwd=current)
+        except CommandError:
+            ctx.emit({"ok": False, "reason": REASON_SELF_CHECK_ERROR})
+            return 0
+        results = _self_check_results(result.text, result.returncode)
+        if results is None:
+            ctx.emit({"ok": False, "reason": REASON_SELF_CHECK_UNREADABLE})
+            return 0
+        passed = all(item["status"] != "failed" for item in results)
+        ctx.emit(
+            {
+                "ok": passed,
+                "reason": "",
+                "no_hardware": no_hardware,
+                "running": _running_label(verdict),
+                "results": results,
+            }
+        )
+        return 0
+    finally:
+        lock.release()
+
+
+def _add_self_check(parser: argparse.ArgumentParser) -> None:
+    # 出力はいつも JSON。開発 PC の呼び方に合わせて受け付けるだけ
+    parser.add_argument("--json", action="store_true", help="JSON で返す（いつも JSON）")
+
+
+# --- バックアップの一覧と復元（3.7） ---
+
+
+def cmd_backups(ctx: AgentContext, args: argparse.Namespace) -> int:
+    """普段のバックアップの一覧（新しい順）。場所は返さない。"""
+    try:
+        found = list_backups(ctx.layout)
+    except BackupFailed:
+        ctx.emit({"ok": False, "reason": REASON_BACKUPS_UNREADABLE})
+        return 0
+    ctx.emit(
+        {
+            "ok": True,
+            "reason": "",
+            "backups": [{"id": info.backup_id, "size_bytes": info.size_bytes} for info in found],
+        }
+    )
+    return 0
+
+
+def _restore_source(ctx: AgentContext, args: argparse.Namespace) -> Path:
+    """戻すバックアップのファイル。`--file` は実機のバックアップの置き場所の中だけを受け付ける。"""
+    if args.file is not None:
+        backups_dir = os.path.realpath(ctx.layout.backups_dir)
+        path = os.path.realpath(args.file)
+        if os.path.dirname(path) != backups_dir:
+            raise UsageError(REASON_BAD_BACKUP_FILE)
+        return Path(path)
+    backup_id = _parse_deploy_id(args.backup_id)
+    return backup_path(ctx.layout, backup_id)
+
+
+def _running_units(running: Running) -> list[str]:
+    """動いているユニットの名前。"""
+    units: list[str] = []
+    if running in (Running.CORE, Running.BOTH):
+        units.append(CORE_UNIT_NAME)
+    if running in (Running.SAMPLE, Running.BOTH):
+        units.append(SAMPLE_UNIT_NAME)
+    return units
+
+
+def _start_units(ctx: AgentContext, units: Sequence[str]) -> list[str]:
+    """ユニットを順に起動し、起動できたものを返す。"""
+    started: list[str] = []
+    for unit in units:
+        try:
+            start_unit(ctx.run, unit)
+        except CommandError:
+            continue
+        started.append(unit)
+    return started
+
+
+def cmd_restore(ctx: AgentContext, args: argparse.Namespace) -> int:
+    """バックアップから戻す（3.7）。
+
+    安全の確認 → 今の状態のバックアップ → 動いているサービスを止める → 中身を元の場所に戻す
+    （サンプルのデータは `--include-sample` のときだけ）→ 止めたサービスを起動する。
+    """
+    source = _restore_source(ctx, args)
+    lock = ctx.lock()
+    if not lock.try_acquire():
+        ctx.emit({"ok": False, "reason": REASON_LOCK_BUSY})
+        return 0
+    try:
+        report: dict[str, object] = {
+            "ok": False,
+            "reason": "",
+            "include_sample": args.include_sample,
+            "pre_backup": None,
+            "stopped": [],
+            "started": [],
+        }
+
+        def finish(reason: str) -> int:
+            report["ok"] = not reason
+            report["reason"] = reason
+            ctx.emit(report)
+            return 0
+
+        if not source.is_file():
+            return finish(REASON_NO_BACKUP)
+        verdict = ctx.check_safety(ctx.run, ctx.layout)
+        if not verdict.ok:
+            return finish(verdict.reason)
+
+        # 今の状態を残す。戻すファイルを上書きしないよう、同じ名前があれば作らない
+        pre_id = make_deploy_id(ctx.now())
+        if backup_path(ctx.layout, pre_id).exists():
+            return finish(REASON_BACKUP_FAILED)
+        try:
+            pre = create_backup(ctx.layout, pre_id, env=ctx.env)
+        except BackupFailed:
+            return finish(REASON_BACKUP_FAILED)
+        report["pre_backup"] = {"id": pre.backup_id, "size_bytes": pre.size_bytes}
+
+        stopped: list[str] = []
+        report["stopped"] = stopped
+        for unit in _running_units(verdict.running):
+            try:
+                stop_unit(ctx.run, unit)
+            except CommandError:
+                report["started"] = _start_units(ctx, stopped)
+                return finish(REASON_STOP_FAILED)
+            stopped.append(unit)
+
+        reason = ""
+        try:
+            restore_backup(ctx.layout, source, include_sample=args.include_sample, env=ctx.env)
+        except RestoreFailed:
+            reason = REASON_RESTORE_FAILED
+            try:
+                # 元の場所がない状態で起動しないよう、途中の残りを片付けてから起動する
+                recover_interrupted_restore(ctx.layout, env=ctx.env)
+            except RestoreFailed:
+                return finish(REASON_RESTORE_LEFTOVER)
+
+        started = _start_units(ctx, stopped)
+        report["started"] = started
+        if not reason and len(started) != len(stopped):
+            reason = REASON_START_FAILED_AFTER
+        return finish(reason)
+    finally:
+        lock.release()
+
+
+def _add_restore(parser: argparse.ArgumentParser) -> None:
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("backup_id", nargs="?", help="戻すバックアップの識別子")
+    group.add_argument("--file", help="実機のバックアップの置き場所に送ったファイル")
+    parser.add_argument("--include-sample", action="store_true", help="サンプルのデータも戻す")
+
+
+# --- 停止（11.2） ---
+
+
+def cmd_stop(ctx: AgentContext, args: argparse.Namespace) -> int:
+    """両方のユニットを止め、安全停止を `--strict` で行う。失敗した段階の名前を返す。"""
+    lock = ctx.lock()
+    if not lock.try_acquire():
+        ctx.emit({"ok": False, "reason": REASON_LOCK_BUSY})
+        return 0
+    try:
+        # 停止だけを使うので、リポジトリの URL は要らない
+        failed = Transaction(ctx.layout, ctx.run, repo_url="", clock=ctx.clock, now=ctx.now).halt()
+        ctx.emit(
+            {"ok": not failed, "reason": REASON_HALT_FAILED if failed else "", "failed": failed}
+        )
+        return 0
+    finally:
+        lock.release()
+
+
+# --- 戻し忘れ（5.5） ---
+
+
+def cmd_remind(ctx: AgentContext, args: argparse.Namespace) -> int:
+    """タイマーから呼ぶ。試しの版が長く入っていれば、LCD に知らせて時刻を記録する。
+
+    入れ替えの最中（ロックが取られている）や、分からないことがあれば、何もしない。
+    """
+    lock = ctx.lock()
+    if not lock.try_acquire():
+        ctx.emit({"ok": True, "reason": REASON_LOCK_BUSY, "reminded": False})
+        return 0
+    try:
+        store = ctx.state_store()
+        try:
+            state = store.load()
+        except StateBroken:
+            ctx.emit({"ok": False, "reason": REASON_STATE_BROKEN, "reminded": False})
+            return 0
+        try:
+            running = detect_running(ctx.run)
+        except CommandError:
+            ctx.emit({"ok": False, "reason": REASON_RUNNING_UNKNOWN, "reminded": False})
+            return 0
+        now = ctx.now()
+        if not remind(state, running, now):
+            ctx.emit({"ok": True, "reason": "", "reminded": False})
+            return 0
+        try:
+            new_state = send_reminder(ctx.layout.runtime_dir, state, now)
+        except OSError:
+            ctx.emit({"ok": False, "reason": REASON_NOTICE_FAILED, "reminded": False})
+            return 0
+        store.save(new_state)
+        ctx.emit({"ok": True, "reason": "", "reminded": True})
+        return 0
+    finally:
+        lock.release()
+
+
+# --- 初期設定（8.1〜8.8） ---
+
+
+def _user_name(env: Mapping[str, str]) -> str:
+    name = env.get("USER") or env.get("LOGNAME")
+    return name if name else pwd.getpwuid(os.getuid()).pw_name
+
+
+def _say(step: str, text: str) -> None:
+    # 標準出力は JSON だけにするので、人に向けた経過は標準エラーに出す
+    sys.stderr.write(f"[{step}] {text}\n")
+    sys.stderr.flush()
+
+
+def cmd_provision(ctx: AgentContext, args: argparse.Namespace) -> int:
+    """初期設定を行う。経過は標準エラーに出し、最後に結果の JSON を 1 つ返す。"""
+    target = None if args.target is None else _parse_target(args.target)
+    lock = ctx.lock()
+    if not lock.try_acquire():
+        ctx.emit({"ok": False, "reason": REASON_LOCK_BUSY})
+        return 0
+    try:
+        pctx = ProvisionContext(
+            run=ctx.run,
+            layout=ctx.layout,
+            releases=Releases(ctx.layout, ctx.run),
+            user=_user_name(ctx.env),
+            repo_url=args.repo_url,
+            target=target,
+            data_dir=core_data_dir(ctx.layout, ctx.env),
+            say=_say,
+            now=ctx.now,
+        )
+        report = run_provision(provision_steps(pctx), _say)
+        ctx.emit(
+            {
+                "ok": report.ok,
+                "reason": "" if report.ok else REASON_PROVISION_FAILED,
+                "skipped": list(report.skipped),
+                "applied": list(report.applied),
+                "failed_step": report.failed_step,
+                "retry_hint": report.retry_hint,
+                "needs_reboot": report.needs_reboot,
+                "self_check_ok": report.self_check_ok,
+            }
+        )
+        return 0
+    finally:
+        lock.release()
+
+
+def _add_provision(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--target", help="最初の版（JSON）。版のディレクトリがないときに使う")
+    parser.add_argument("--repo-url", required=True, help="版を取るリポジトリの URL")
+
+
+# --- 入れ替えの記録の表示（4.6） ---
+
+
+def cmd_log(ctx: AgentContext, args: argparse.Namespace) -> int:
+    """入れ替えの記録を返す。識別子がなければ最新の 1 件。`--list` なら識別子の一覧（新しい順）。"""
+    log_dir = ctx.layout.log_dir
+    if args.list:
+        ctx.emit({"ok": True, "reason": "", "ids": list(reversed(list_log_ids(log_dir)))})
+        return 0
+    deploy_id = (
+        latest_log_id(log_dir) if args.deploy_id is None else _parse_deploy_id(args.deploy_id)
+    )
+    if deploy_id is None or not (log_dir / f"{deploy_id}{LOG_SUFFIX}").is_file():
+        ctx.emit({"ok": False, "reason": FOLLOW_NO_LOG})
+        return 0
+    events = [
+        _step_line(event) for event in read_log_events(log_dir, deploy_id) if "result" not in event
+    ]
+    result = read_log_result(log_dir, deploy_id)
+    ctx.emit(
+        {
+            "ok": True,
+            "reason": "",
+            "deploy_id": deploy_id,
+            "events": events,
+            "result": None if result is None else result_to_dict(result),
+        }
+    )
+    return 0
+
+
+def _add_log(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("deploy_id", nargs="?", help="入れ替えの識別子（なければ最新）")
+    parser.add_argument("--list", action="store_true", help="識別子の一覧を返す")
+
+
+def _no_arguments(parser: argparse.ArgumentParser) -> None:
+    return None
+
+
 # --- 入口 ---
 
 Handler = Callable[[AgentContext, argparse.Namespace], int]
@@ -620,6 +1120,15 @@ def _handlers() -> list[Subcommand]:
             "run-apply", "切り離された適用（apply から呼ぶ）", _add_apply_arguments, cmd_run_apply
         ),
         Subcommand("follow", "入れ替えの記録を結果まで流す", _add_follow, cmd_follow),
+        Subcommand("status", "版の確認（実機を変えない）", _no_arguments, cmd_status),
+        Subcommand("set-everyday", "普段の版を記録する", _add_set_everyday, cmd_set_everyday),
+        Subcommand("self-check", "今の版の self-check を行う", _add_self_check, cmd_self_check),
+        Subcommand("backups", "バックアップの一覧", _no_arguments, cmd_backups),
+        Subcommand("restore", "バックアップから戻す", _add_restore, cmd_restore),
+        Subcommand("stop", "両方のサービスを止め、厳しい安全停止を行う", _no_arguments, cmd_stop),
+        Subcommand("remind", "戻し忘れを確かめる（タイマーから呼ぶ）", _no_arguments, cmd_remind),
+        Subcommand("provision", "初期設定", _add_provision, cmd_provision),
+        Subcommand("log", "入れ替えの記録を表示する", _add_log, cmd_log),
     ]
 
 
