@@ -109,7 +109,7 @@
   - _Boundary: Backups_
   - _Requirements: 3.1, 3.2, 3.4, 3.5, 3.7, 9.2_
 
-- [ ] 3.4 (P) 首の調整値の移し替えを作る
+- [x] 3.4 (P) 首の調整値の移し替えを作る
   - サンプルの調整値のファイルから 4 つのキーを読み、首の左右と上下は符号を反転、向きの値はそのまま移す
   - キーがない → 移すものがない、範囲の外 → 何も書かない、新しい設定の調整値が既定値でない → 上書きしない。設定がなければ版の見本から作り、調整値の節の行だけを置き換えて注釈を残す。値はログに出さない
   - 完了の状態: 符号の反転・範囲の外・キーがない・既定値でない設定を書かない・注釈が残る、のテストが通る
@@ -250,3 +250,4 @@
 - 3.2: 版は `rover_deploy.releases.Releases(layout, run)` の `prepare(target, repo_url)`・`current()`・`switch(dir)`・`install_unit(dir)`・`dirty_count(dir)`・`prune(keep)`。準備の失敗は `PrepareFailed(step)`（fetch・commit・worktree・venv・pip）、ほかは `ReleaseError`。取得は `fetch --prune --tags --force`（リモートで付け直したタグを受け入れる）。仕上げの印は `.venv/.osekkai-ready`
 - 3.3: バックアップは `rover_deploy.backups`（`create_backup(layout, id, env=)`・`create_sample_backup(layout, id, run)`・`list_backups`・`prune`・`restore_backup(layout, path, include_sample=, env=)`・`recover_interrupted_restore(layout, env=)`・`estimate_backup_bytes(layout, include_sample=, env=)`）。ファイルは `backups_dir/backup-<id>.tar.gz` と `sample-<id>.tar.gz`。サンプルのバックアップは一覧・世代の削除・復元の対象外
 - 3.3: Layout は XDG_DATA_HOME を持たないので、backups の関数には Layout を作ったのと同じ env を必ず渡す。サービスを起動する前（preflight や stop の中、ロックを持って）に `recover_interrupted_restore` を呼び、途中で止まった復元を片付ける
+- 3.4: 調整値の移し替えは `rover_deploy.calibration.migrate(sample_conf, config_file, example)` → status（migrated・nothing_to_migrate・already_set・out_of_range・unreadable）。どの status でも入れ替えは続ける（失敗にしない）。結果は状態の `calibration_migrated` に記録して 2 回目以降は行わない（4.1）。見本は版の `src/osekkai/core/example_config.yaml`
