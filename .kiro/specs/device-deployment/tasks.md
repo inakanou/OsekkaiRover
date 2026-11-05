@@ -64,7 +64,7 @@
   - _Boundary: systemd units_
   - _Requirements: 5.5, 9.4, 9.5_
 
-- [ ] 2.6 状態のファイルと知らせを起動と停止の順番に組み込む
+- [x] 2.6 状態のファイルと知らせを起動と停止の順番に組み込む
   - 機能の開始の後に状態のファイルを書き始め、停止の最初に止める（止まっている途中を作業中でないと見せない）。待機画面に知らせの仕組みを渡す
   - 版のログの文言の頭を定数にし、共通の見本の文言と一致することをテストで確かめる
   - 完了の状態: 偽のデバイスで Runtime を動かし、走行中と作業中の機能が状態のファイルに出て、停止でファイルが消える結合テストが通る。既存のテストがすべて通る
@@ -240,3 +240,4 @@
 - 2.4: `python -m osekkai.core.safe_stop --strict` は、段階の失敗に加えて、ハードに触らずに終えたとき（ロックをほかが持つ・EXIT_STATUS=75・アダプタなし）も終了コード 1。PC では必ず 1 になる。引数なしは今までどおり必ず 0
 - 2.5: 新しい基盤のユニットは `deploy/systemd/osekkai.service`（旧名のファイルは消した）。戻し忘れは `osekkai-trial-reminder.service`（`/usr/bin/python3 -m rover_deploy.agent remind`、作業ディレクトリは `~/osekkai-rover/tool`）と `.timer`（起動の 10 分後と 1 時間ごと）。道具は `tool/rover_deploy/` に展開する前提
 - 2.5: `Conflicts=` は新しい基盤の側だけに書き、systemd が両方向に効かせる。サンプルのユニットは直さない
+- 2.6: 基盤は機能の開始の後に状態のファイルを書き始め、停止の最初に消す（停止の途中は「ファイルがない」= 道具からは確かめられない）。`features` と `unavailable` は起動のときの値で固定、`driving` と `busy` は毎回の値。版のログの頭は `osekkai.core.runtime.VERSION_LOG_PREFIX`

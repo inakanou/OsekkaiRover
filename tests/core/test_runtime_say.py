@@ -11,6 +11,7 @@ from osekkai.core.instance_lock import InstanceLock
 from osekkai.core.paths import Paths
 from osekkai.core.registry import FeatureRegistry
 from osekkai.core.runtime import ALREADY_RUNNING_MESSAGE, ExitCode, Runtime
+from osekkai.core.status import STATUS_FILE_NAME
 
 
 @pytest.fixture
@@ -44,6 +45,13 @@ def test_文章を話して終了コード_0_で終わり_ほかのデバイス�
     assert fakes.synth.lines == ["こんにちは"]
     assert len(fakes.player.played) == 1
     _untouched(fakes)
+
+
+def test_状態のファイルを書かない(fakes: FakeDeviceSet, paths: Paths, clock: FakeClock) -> None:
+    # 話して終わるのはサービスではないので、サービスの報告を出さない（device-deployment 6.7）
+    runtime = _runtime(fakes, paths, clock)
+    assert runtime.say_and_exit("こんにちは") is ExitCode.OK
+    assert not (paths.runtime_dir / STATUS_FILE_NAME).exists()
 
 
 def test_話し終えたらロックを放す(fakes: FakeDeviceSet, paths: Paths, clock: FakeClock) -> None:
