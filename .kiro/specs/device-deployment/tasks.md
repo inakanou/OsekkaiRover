@@ -71,7 +71,7 @@
   - _Depends: 2.1, 2.2_
   - _Requirements: 2.1, 2.2, 6.7, 7.1_
 
-- [ ] 2.7 基盤の確認の項目と、実機の軽い確かめを作る
+- [x] 2.7 基盤の確認の項目と、実機の軽い確かめを作る
   - 動かさない・鳴らさない確かめの口（I2C の応答、GPIO の線を入力として取れるか、再生先があるか、決まった短い文の合成、時刻の同期）を、実機用と偽物の両方で作る
   - 基盤の確認の項目（設定・保存先・時刻・声の合成・再生先・LCD・HAT・ボタン・サーボ）を組み立てる。理由は固定の文言で、値・名前・文章を出さない
   - 完了の状態: 偽の確かめで、各項目のよい・だめと、ハードの項目の印、理由に設定の値が出ないことのテストが通る。実機用の確かめはモーターとサーボに書き込まない
@@ -241,3 +241,5 @@
 - 2.5: 新しい基盤のユニットは `deploy/systemd/osekkai.service`（旧名のファイルは消した）。戻し忘れは `osekkai-trial-reminder.service`（`/usr/bin/python3 -m rover_deploy.agent remind`、作業ディレクトリは `~/osekkai-rover/tool`）と `.timer`（起動の 10 分後と 1 時間ごと）。道具は `tool/rover_deploy/` に展開する前提
 - 2.5: `Conflicts=` は新しい基盤の側だけに書き、systemd が両方向に効かせる。サンプルのユニットは直さない
 - 2.6: 基盤は機能の開始の後に状態のファイルを書き始め、停止の最初に消す（停止の途中は「ファイルがない」= 道具からは確かめられない）。`features` と `unavailable` は起動のときの値で固定、`driving` と `busy` は毎回の値。版のログの頭は `osekkai.core.runtime.VERSION_LOG_PREFIX`
+- 2.7: 基盤の確認の項目は `osekkai.checks.base_checks(probes)`。実機は `osekkai.adapters.pi.probes.PiProbes`、偽物は `osekkai.adapters.fake.probes.FakeProbes`。I2C の確かめはデータのない quick write、ボタンの線は入力で取ってすぐ放す。声の合成の項目の時間切れは 40 秒
+- 2.7: サンプルは単一の実行のロックを使わないので、サンプルが動いている間の self-check はハードの項目も走る（害はないが、初期設定ではサンプルが動いていれば `--no-hardware` を付ける）
