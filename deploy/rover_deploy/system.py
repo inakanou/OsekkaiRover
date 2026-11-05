@@ -197,15 +197,18 @@ def daemon_reload(run: Runner) -> None:
     run([*SYSTEMCTL, "daemon-reload"], timeout=CHANGE_TIMEOUT_S, check=True)
 
 
-# --- journalctl --user ---
+# --- journalctl ---
 
 
 def journal_since(run: Runner, unit: str, since: str) -> list[str]:
-    """ユニットの、`since`（journalctl の時刻の書き方）以降のログの文を、行の一覧で返す。"""
+    """ユーザーのユニットの、`since`（journalctl の時刻の書き方）以降のログの文を、行の一覧で返す。
+
+    `--user` は付けない。利用者ごとの journal のファイルがない実機では、`--user` だと何も読めない。
+    `--user-unit=` はシステムの journal から読む（利用者が journal を読めるグループに要る）。
+    """
     argv = [
         "journalctl",
-        "--user",
-        f"_SYSTEMD_USER_UNIT={unit}",
+        f"--user-unit={unit}",
         "--since",
         since,
         "-o",

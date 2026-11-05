@@ -124,7 +124,7 @@
   - _Depends: 1.3_
   - _Requirements: 5.4, 5.5, 7.1, 7.3_
 
-- [ ] 3.6 (P) 入れた後の確認を作る
+- [x] 3.6 (P) 入れた後の確認を作る
   - 版: 起動を待ち（最大 30 秒）、版の self-check の JSON から失敗の項目を集め、30 秒の間 MainPID と再起動の回数が変わらないこと、journal に版のログ（その版の git describe）があることを確かめる
   - 版のログの文言の頭は、道具の側にも定数で持ち、共通の見本の文言と一致することをテストで確かめる（道具は `osekkai` を読み込まない）
   - サンプル: 30 秒動き続けることだけ
@@ -252,3 +252,6 @@
 - 3.3: Layout は XDG_DATA_HOME を持たないので、backups の関数には Layout を作ったのと同じ env を必ず渡す。サービスを起動する前（preflight や stop の中、ロックを持って）に `recover_interrupted_restore` を呼び、途中で止まった復元を片付ける
 - 3.4: 調整値の移し替えは `rover_deploy.calibration.migrate(sample_conf, config_file, example)` → status（migrated・nothing_to_migrate・already_set・out_of_range・unreadable）。どの status でも入れ替えは続ける（失敗にしない）。結果は状態の `calibration_migrated` に記録して 2 回目以降は行わない（4.1）。見本は版の `src/osekkai/core/example_config.yaml`
 - 3.5: 知らせは `rover_deploy.notices`（`version_notice(target, everyday, now)`・`write_notice(runtime_dir, notice)`・`clear_notice(runtime_dir)`・`remind(state, running, now) -> bool`・`send_reminder(runtime_dir, state, now) -> DeployState`）。send_reminder が返した状態は呼ぶ側が保存する。普段の版に戻したら `clear_notice` で戻し忘れの知らせを消す。試しの版かどうかは `current != everyday`（Target のすべての欄で比べる）
+- 3.6: 入れた後の確認は `rover_deploy.verify.verify_release(release_dir, run, clock, layout, *, since_epoch, expected_describe=None)` と `verify_sample(run, clock)`。`since_epoch` はユニットを起動する直前の壁時計の時刻を呼ぶ側が渡す。失敗の名前は start・status・self_check・self_check:<項目>・alive・version_log
+- 3.6: 実機（2026-11-05 に読み取りだけで確認）には利用者ごとの journal のファイルがなく、`journalctl --user` は何も読めない。`journal_since` は `--user` を付けずに `--user-unit=` で読むよう直した。利用者が journal を読めるグループ（systemd-journal か adm）に入っている要があるので、初期設定（3.7）のグループの手順で確かめる
+- 3.6: 起動と報告の待ちは合わせて 30 秒（START_TIMEOUT_S）。実機確認（6.3）で起動の時間を測り、足りなければ報告の待ちに別の予算を持たせる

@@ -238,8 +238,7 @@ def test_時刻以降の_journal_を読む(fake_runner: FakeRunner) -> None:
     assert fake_runner.argvs == [
         (
             "journalctl",
-            "--user",
-            "_SYSTEMD_USER_UNIT=osekkai.service",
+            "--user-unit=osekkai.service",
             "--since",
             "2026-11-04 21:00:00",
             "-o",
