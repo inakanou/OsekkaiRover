@@ -101,7 +101,7 @@
   - _Boundary: Releases_
   - _Requirements: 1.1, 1.2, 1.8, 1.9, 3.6, 4.2, 9.1_
 
-- [ ] 3.3 (P) バックアップの作成・世代の削除・一覧・復元を作る
+- [x] 3.3 (P) バックアップの作成・世代の削除・一覧・復元を作る
   - 設定・記録・データ（取り直せる素材を除く）と、サンプルのデータ（声のキャッシュを除く）を tar.gz に、0600（ディレクトリは 0700）で作る。作れなければ専用の例外
   - 初回用のサンプルのバックアップ（作業コピー全体、ユニットのファイル、仮想環境の pip freeze）。サンプルがなければ作らない
   - 5 世代を残して古いものを消す。一覧。中身を元の場所に戻す（サンプルのデータは指定のときだけ）
@@ -248,3 +248,5 @@
 - 3.1: 安全の判断は `rover_deploy.service_status.check_safety(run, layout)` → `SafetyVerdict(ok, running, reason, busy)`。理由は ""・driving・busy・unknown・sample_running。`running=BOTH` で `reason=unknown` は「systemctl が答えなかった」の意味なので、動いているサービスとして表示しない
 - 3.1: 入れた後の確認がサービスを待つときは `service_reporting(read_status(status_path(layout)), core_main_pid(run), now_monotonic=)` を使う。service_status.py には壁時計の語（time.time・datetime など）を書かない（テストが文字で探す）
 - 3.2: 版は `rover_deploy.releases.Releases(layout, run)` の `prepare(target, repo_url)`・`current()`・`switch(dir)`・`install_unit(dir)`・`dirty_count(dir)`・`prune(keep)`。準備の失敗は `PrepareFailed(step)`（fetch・commit・worktree・venv・pip）、ほかは `ReleaseError`。取得は `fetch --prune --tags --force`（リモートで付け直したタグを受け入れる）。仕上げの印は `.venv/.osekkai-ready`
+- 3.3: バックアップは `rover_deploy.backups`（`create_backup(layout, id, env=)`・`create_sample_backup(layout, id, run)`・`list_backups`・`prune`・`restore_backup(layout, path, include_sample=, env=)`・`recover_interrupted_restore(layout, env=)`・`estimate_backup_bytes(layout, include_sample=, env=)`）。ファイルは `backups_dir/backup-<id>.tar.gz` と `sample-<id>.tar.gz`。サンプルのバックアップは一覧・世代の削除・復元の対象外
+- 3.3: Layout は XDG_DATA_HOME を持たないので、backups の関数には Layout を作ったのと同じ env を必ず渡す。サービスを起動する前（preflight や stop の中、ロックを持って）に `recover_interrupted_restore` を呼び、途中で止まった復元を片付ける
