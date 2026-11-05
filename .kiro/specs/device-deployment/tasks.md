@@ -208,7 +208,7 @@
   - 完了の状態: 手順書があり、禁止ファイルの検査（接続先・個人の値がない）が通る
   - _Requirements: 11.1, 11.2, 11.3, 10.1_
 
-- [ ] 6.2 開発 PC から実機の道具までをつなぐ結合テストを書く
+- [x] 6.2 開発 PC から実機の道具までをつなぐ結合テストを書く
   - 偽の Remote が実機の道具を同じプロセスで呼ぶ形で、入れ替え・切り戻し・普段の版に戻す・接続の切断を通しで動かす
   - 基盤が書く状態のファイル・知らせ・self-check の JSON と、道具の読み取りを、同じ見本で確かめる
   - 完了の状態: 結合テストと全体のテスト・lint・型が CI の両方の Python の版で通る
@@ -276,3 +276,4 @@
 - 5.5: 残っている小さな穴（後で agent.py の側で直す）: restore --file で送った `uploaded-<id>.tar.gz` は実機に残り、世代の削除の対象にならない。restore が busy で止まったとき、作業中の機能の名前が表示に出ない（agent の restore の返事に safety.busy がない）。restore --file は実機の XDG_STATE_HOME が既定であることを前提にする
 - 6.1: 手順書は `docs/deploy.md`。9 章の見出し「失敗したときに人がすること」は devcli の HALT_DOC の文言と合わせてある（変えるときは両方を直す）
 - 6.1: 後のスペックへの引き継ぎ: 手順書と初期設定は API キーを `~/.config/osekkai/env` に置くよう案内するが、`osekkai.service` に EnvironmentFile= はなく、基盤もこのファイルを読まない。API キーを使う機能のスペックで読み込みをつなぐ
+- 6.2: 通しの結合テストは `tests/integration/test_deploy_end_to_end.py`・`test_deploy_shared_contracts.py` と、偽の実機の `tests/deploy_loopback.py`（本物の devcli・Remote・agent・Transaction を、状態を持つ偽の systemd の上で動かす）。偽の systemd は Conflicts= と daemon-reload を見ないので、そこは実機確認（6.3）で確かめる。停止（12）の通しの場合はない（devcli の単体テストにはある）
