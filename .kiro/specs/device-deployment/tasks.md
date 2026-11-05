@@ -150,7 +150,7 @@
   - _Depends: 2.4, 3.1, 3.2, 3.4, 3.5, 3.6_
   - _Requirements: 1.1, 1.2, 1.10, 3.6, 4.2, 4.3, 4.4, 4.6, 5.1, 5.3, 9.4, 9.5_
 
-- [ ] 4.2 実機の入れ替えのサブコマンドを作る
+- [x] 4.2 実機の入れ替えのサブコマンドを作る
   - 事前の確認（動いているサービスと版、安全の判断、空き容量、手の変更の件数、ロック、途中で終わった入れ替え）を、実機を変えずに JSON で返す
   - バックアップ（ロックを取り、初回はサンプルのバックアップも作る）、サンプルを受け取れたことの記録、適用を systemd-run で切り離して始める（同じ名前のユニットがあれば断る）、切り離された側の適用、記録を結果の行まで流す追跡
   - 完了の状態: 偽の Runner で、事前の確認の各中止の理由、切り離しのコマンドと二重の断り、追跡が結果の行で終わる、のテストが通る
@@ -261,3 +261,6 @@
 - 4.1: 入れ替えは `rover_deploy.transaction.Transaction`（`run(target, deploy_id, *, everyday) -> DeployResult`・`halt() -> list[str]`、作るときに `repo_url` が要る）。有効にするのは確認が通った後（設計の Switching から移した）。有効にできなければ outcome は succeeded のまま、failed_checks に "enable" が入る（5.4 の表示で扱う）
 - 4.1: 前の版がリンクの先と合わなければ前の版は None になり、切り戻さずに停止する。停止では current=None。予期しない例外は in_progress を残して上に投げる（確認の最中の例外だけは "verify" の失敗として切り戻す）
 - 4.1: 設計の穴（設計の Migration Strategy に記録）: 普段の版が新しい基盤の版になった後は、試しの版を入れたまま再起動すると試しの版で立ち上がる。daily-routine で普段の版を切り替える前に直す
+- 4.2: 実機のコマンドは `python3 -m rover_deploy.agent <sub>`（作業ディレクトリは `~/osekkai-rover/tool`）。標準出力に JSON を 1 つ（follow は JSON の行）、終了コードは 0（JSON の ok/reason を見る）・2（使い方の誤り。JSON がないこともある）・1（思わぬ失敗）。4.3 は `agent._handlers()` の表に足す。動いている版は `running_target(ctx, state, running)`
+- 4.2: preflight の reason は lock_busy・state_broken・interrupted・安全の理由（driving・busy・unknown・sample_running）・disk_low・dirty・dirty_unknown。apply は apply_running・apply_unknown・lock_busy・start_failed。follow の終わりは結果の行か、error（no_log・broken_result・ended_without_result・timeout）。ended_without_result は開発 PC で 13 と同じに扱う
+- 4.2: ssh の側と systemd-run の側で XDG_* の環境が違うと、ロックと状態の場所がずれる。手順書（6.1）に「XDG_* を変えない」と書く
