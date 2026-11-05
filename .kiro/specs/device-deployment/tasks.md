@@ -179,7 +179,7 @@
   - _Boundary: RefResolver_
   - _Requirements: 1.1, 1.2, 1.3, 1.4_
 
-- [ ] 5.3 (P) ssh の操作をまとめる
+- [x] 5.3 (P) ssh の操作をまとめる
   - 道具を tar で送って実機に展開する、実機のサブコマンドを呼んで JSON を読む、JSON 行を流す、ファイルを受け取る（0700 のディレクトリに 0600 で）、送る
   - 端末を割り当てない呼び方と接続の時間切れを付け、初期設定だけ端末を割り当てる。つながらなければ専用の例外
   - 完了の状態: 偽の Runner で、ssh の引数・つながらないときの例外・受け取ったファイルの権限のテストが通る
@@ -268,3 +268,5 @@
 - 4.3: 開発 PC（5.x）への引き継ぎ: provision は ssh -t で動かすので、標準エラーと sudo の問いが同じ流れに混ざり、行の終わりが \r\n になる。最後の行の \r を取ってから JSON として読む。stop の結果が failed=["safe_stop"] だけなら「サービスは止めたが、モーターの停止は確かめられない（版がない）」と表示する。サンプルを止めてから restore した後は、サービスを起動し直すよう（または back を）案内する
 - 5.1: 開発 PC の設定は `rover_deploy.devconfig.load_dev_config(env, repo_root, run, home=None) -> DevConfig(host, backup_dir, repo_url)`。誤りは `ConfigError`（決まった文言、`exit_code`=10）。devcli はこれを終了コード 10 に写す。repo_url は https だけ（origin の ssh の別名からは作れない）
 - 5.2: 版の解決は `rover_deploy.refs.resolve_ref(name, repo_root, run) -> Resolution(target, also_branch)`（設計の `-> Target` から変えた。also_branch は「タグとブランチの両方にあり、タグを選んだ」）。例外は `RefError` の仲間（BadRefName・RefNotFound(local_only)・UnpushedCommits・RemoteUnreachable）で、どれも exit_code=10。`refs.RemoteUnreachable` は origin に届かないの意味で、ssh の接続の失敗とは別
+- 5.3: ssh は `rover_deploy.remote.Remote(host, run, *, spawn, echo)`（`push_tool`・`agent(*args, tty=False) -> AgentReply(exit_code, data)`・`stream(*args)`・`fetch`・`send`）。例外は `RemoteError` の仲間で `exit_code` をそのまま終了コードにする（DeviceUnreachable 10、DeviceDisconnected 13、StreamProtocolError 13、AgentProtocolError・RemoteTimedOut・TransferFailed 10）。follow の `{"error": ...}` の行は普通の行として返るので、devcli で 13 に写す
+- 5.3: tty（provision）のときは、実機の進み具合と sudo の問いを手元に表示し、`{` で始まる行は隠す。実機のログインシェルは POSIX の sh 系（既定の bash）を前提にする（手順書に書く）
