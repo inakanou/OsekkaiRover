@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "pid": 4321,
+  "version": "v0.2.0",
+  "heartbeat": 1234.5,
+  "driving": false,
+  "busy": {},
+  "unavailable": [],
+  "features": []
+}

@@ -17,7 +17,7 @@
   - 完了の状態: 状態の読み書き・権限 0600/0700・ロックの二重取得の拒否・記録の世代の削除のテストが通る
   - _Requirements: 1.7, 4.6, 5.2, 10.2, 10.3_
 
-- [ ] 1.3 基盤と道具が共有するファイルの形の見本を作る
+- [x] 1.3 基盤と道具が共有するファイルの形の見本を作る
   - 状態のファイル（走行中・作業中・使えないデバイス・心拍を含む）、知らせのファイル、self-check の JSON の見本を、設計の Data Models の形で置く
   - 版のログの文言の頭（`版: `）も見本に置き、基盤と道具の両方がそれと同じ文言を使うことを後のタスクのテストで確かめる
   - 見本は基盤のテストと道具のテストの両方から読む（形のずれを防ぐ）。この段階では見本が JSON として読め、必要なキーを持つことだけを確かめる
@@ -228,3 +228,5 @@
 - 1.1: `Target` は作るときに形を確かめる（版は 40 桁の小文字の sha が要る）。`write_json_file` は 0600 で原子的に書くが、親のディレクトリは作らない
 - 1.2: 置き場所はすべて `rover_deploy.layout.Layout(home, env, uid)` から取る（`release_dir(sha)`・`current_link`・`state_dir`・`backups_dir`・`core_config_dir`・`core_state_dir`・`runtime_dir`・`sample_dir`・`sample_venv`・`sample_exists()` など）。`runtime_dir` は rover-core の `Paths` と同じく、XDG_RUNTIME_DIR が空か相対なら `/tmp/osekkai-<uid>`（設計の `/run/user` の段は誤りだったので直した）
 - 1.2: 状態は `StateStore(layout).load()/save()`、ロックは `DeployLock`、記録は `DeployLog(log_dir, deploy_id, clock=)` の `.event()`/`.result()`。読む側は `list_log_ids`・`latest_log_id`・`read_log_events`・`read_log_result`。`read_log_result` は結果の行が壊れていても None を返すので、follow では「まだ結果がない」と区別に気をつける。`state_from_dict` は deploy_id の形を確かめていない
+- 1.3: 共有の見本は `tests/fixtures/*.json`（status_driving_busy・status_idle・notice_version・notice_reminder・selfcheck_failed・selfcheck_ok・version_log）。読み込みは `from shared_fixtures import load_fixture, version_log_prefix`（tests/ が import の道にある）。見本のテストはキーの集合をちょうどで確かめるので、基盤と道具の書き出しは見本と同じキーにする
+- 1.3: tests の下は同じ名前のテストのファイルを置けない（tests/core と tests/deploy で名前を重ねない）
