@@ -1,0 +1,12 @@
+# 試しの版の戻し忘れの確認を、起動の 10 分後と、その後 1 時間ごとに行う
+
+[Unit]
+Description=Osekkai Rover trial reminder timer
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=1h
+Unit=osekkai-trial-reminder.service
+
+[Install]
+WantedBy=timers.target

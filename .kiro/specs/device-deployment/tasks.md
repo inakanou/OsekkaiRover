@@ -57,7 +57,7 @@
   - _Boundary: safe_stop_
   - _Requirements: 4.4_
 
-- [ ] 2.5 (P) 新しい基盤のユニットと、戻し忘れのタイマーを作る
+- [x] 2.5 (P) 新しい基盤のユニットと、戻し忘れのタイマーを作る
   - 旧名のユニットを新しい名前に改め、置き場所を版のリンクの下に変える。サンプルのユニットとの排他、再生のサービスの後に起動、停止と再起動の約束は今までどおり
   - 戻し忘れの確認のサービスとタイマー（起動の 10 分後と、その後 1 時間ごと）を作る
   - 完了の状態: ユニットのテストが新しい名前・置き場所・排他・タイマーの間隔を確かめて通り、旧名のファイルがない
@@ -238,3 +238,5 @@
 - 2.3: self-check は `osekkai.core.selfcheck`（`Check(name, run, timeout_s, hardware, device)`・`CheckResult`・`CheckContext(paths, report, service, hardware_allowed)`・`SelfCheckRunner`・`collect_checks(base, specs)`・`render_lines`・`results_to_dict`/`results_to_json`・`exit_code`）。`core` の `__init__` からは出していない
 - 2.3: ハードの項目は `device=` に ServiceSnapshot.unavailable の名前（LCD は "display"、ほかは "hat"・"buttons"・"servos"）を入れる。入れないと、サービスの報告があっても「飛ばした」になる
 - 2.4: `python -m osekkai.core.safe_stop --strict` は、段階の失敗に加えて、ハードに触らずに終えたとき（ロックをほかが持つ・EXIT_STATUS=75・アダプタなし）も終了コード 1。PC では必ず 1 になる。引数なしは今までどおり必ず 0
+- 2.5: 新しい基盤のユニットは `deploy/systemd/osekkai.service`（旧名のファイルは消した）。戻し忘れは `osekkai-trial-reminder.service`（`/usr/bin/python3 -m rover_deploy.agent remind`、作業ディレクトリは `~/osekkai-rover/tool`）と `.timer`（起動の 10 分後と 1 時間ごと）。道具は `tool/rover_deploy/` に展開する前提
+- 2.5: `Conflicts=` は新しい基盤の側だけに書き、systemd が両方向に効かせる。サンプルのユニットは直さない
