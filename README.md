@@ -27,13 +27,13 @@ Claude Code のスキル（`/kiro-*` コマンド）を使い、要件 → 設�
 | ソースコード | 基盤（`src/osekkai/core`）とハードなしの実行（`src/osekkai/adapters/fake`）を実装中。実機のアダプタはこれから |
 | ステアリング（product / tech / structure） | 作成済み（`.kiro/steering/`） |
 | スペック | `rover-core`（基盤）を実装中（`.kiro/specs/rover-core/`） |
-| 実機へのデプロイの仕組み | 未作成 |
+| 実機へのデプロイの仕組み | `device-deployment` で実装中（`deploy/`、手順書は [`docs/deploy.md`](docs/deploy.md)） |
 
 ## 今後の予定
 
 1. **サンプルの取り込み**: スペックを起票して取り込みます。あわせて、停止時にモーターを必ず止める対策と、CI の lint・テストも入れます
 2. **ステアリング**: コードが入ったら `/kiro-steering` で product / tech / structure を作ります
-3. **デプロイの仕組み**: 実機にタグの版を入れる、動作確認する、失敗したら前の版に戻す。この仕組みをスペックにして作ります
+3. **デプロイの仕組み**: 実機に版を入れる、動作確認する、失敗したら前の版に戻す。`device-deployment` で作っています（[実機への配置](#実機への配置)）
 
 ## ディレクトリ構成
 
@@ -42,6 +42,8 @@ Claude Code のスキル（`/kiro-*` コマンド）を使い、要件 → 設�
 ├── CLAUDE.md                 # Claude Code 向けのプロジェクト指示（開発ルール・ワークフロー）
 ├── .github/                  # CI（GitHub Actions）と PR テンプレート
 ├── scripts/                  # 開発用スクリプト
+├── deploy/                   # 実機への配置の道具（rover-deploy）と systemd のユニット
+├── docs/                     # 手順書（deploy.md など）
 ├── .claude/
 │   └── skills/kiro-*/        # /kiro-* コマンドの本体（SKILL.md）
 └── .kiro/
@@ -138,6 +140,20 @@ Claude Code のスキル（`/kiro-*` コマンド）を使い、要件 → 設�
 
 どれもリポジトリの外にあるので、版を入れ替えても残ります。個人の設定はコミットしません。
 
+## 実機への配置
+
+実機に版を入れる・普段の版に戻す・初期設定・バックアップから戻す・self-check は、開発 PC から道具 `deploy/rover-deploy` で行います。
+手で実機の版を切り替えないでください。
+
+```sh
+deploy/rover-deploy deploy <タグかブランチ>   # 版を入れる（だめなら自動で前の版に戻す）
+deploy/rover-deploy back                    # 普段の版に戻す
+deploy/rover-deploy status                  # 版の確認
+```
+
+接続先の設定の仕方、初期設定、失敗したときに人がすること、モーターを確実に止める方法は、手順書 [`docs/deploy.md`](docs/deploy.md) を見てください。
+接続先（ホスト名・IP アドレス・ユーザー名）は、開発 PC の `~/.ssh/config` と `~/.config/osekkai-deploy/config.toml` にだけ書きます。
+
 ## 開発の流れ（ブランチ・PR・リリース）
 
 詳しくは [`.kiro/steering/git-workflow.md`](.kiro/steering/git-workflow.md) を参照してください。
@@ -145,7 +161,7 @@ Claude Code のスキル（`/kiro-*` コマンド）を使い、要件 → 設�
 - `main` と短命な作業ブランチ（`feat/<feature>`、`fix/*`、`docs/*`、`chore/*`）だけを使います。`main` への直接 push はできません。
 - PR は CI の `guard`（禁止ファイルと秘密情報のチェック）が通ってから squash でマージします。
 - ハードに関わる変更は、マージ前に実機（Raspberry Pi 5）で確認します。
-- 実機に入れるのはタグ `vX.Y.Z` を付けた版だけです。
+- 実機の普段の版にするのは、タグ `vX.Y.Z` を付けた版だけです。作業ブランチは、試しの版として入れて確かめられます（[`docs/deploy.md`](docs/deploy.md)）。
 - 公開リポジトリなので、個人設定・記録・顔の特徴・写真や音声・API キー・pin は絶対にコミットしません。手元で確かめるには次を実行します。
   ```sh
   bash scripts/check-forbidden-files.sh
