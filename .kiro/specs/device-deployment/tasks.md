@@ -133,7 +133,7 @@
   - _Depends: 1.3_
   - _Requirements: 4.1, 4.3_
 
-- [ ] 3.7 初期設定の手順を作る
+- [x] 3.7 初期設定の手順を作る
   - 手順の並び（OS の確認、apt、起動の設定、グループ、リンガリング、置き場所、声のファイルと顔のモデル（sha256 を固定）、戻し忘れのタイマー、最初の版のディレクトリ、秘密の置き場所の案内、self-check）と、各手順の「済んでいるか」「行う」を作る
   - 済んでいる手順は飛ばし、失敗で止めてやり直し方を出し、再起動が要れば最後に知らせる（自分では再起動しない）。対応していない OS では何も変えない
   - すでにある個人の設定・記録・秘密を上書きせず、秘密を作らない。sha256 が違う同じ名前のファイルは上書きせず警告する
@@ -255,3 +255,6 @@
 - 3.6: 入れた後の確認は `rover_deploy.verify.verify_release(release_dir, run, clock, layout, *, since_epoch, expected_describe=None)` と `verify_sample(run, clock)`。`since_epoch` はユニットを起動する直前の壁時計の時刻を呼ぶ側が渡す。失敗の名前は start・status・self_check・self_check:<項目>・alive・version_log
 - 3.6: 実機（2026-11-05 に読み取りだけで確認）には利用者ごとの journal のファイルがなく、`journalctl --user` は何も読めない。`journal_since` は `--user` を付けずに `--user-unit=` で読むよう直した。利用者が journal を読めるグループ（systemd-journal か adm）に入っている要があるので、初期設定（3.7）のグループの手順で確かめる
 - 3.6: 起動と報告の待ちは合わせて 30 秒（START_TIMEOUT_S）。実機確認（6.3）で起動の時間を測り、足りなければ報告の待ちに別の予算を持たせる
+- 3.7: 初期設定は `rover_deploy.provision`（`provision_steps(ctx)`・`run_provision(steps, log) -> ProvisionReport`、`ProvisionContext(run, layout, releases, user, repo_url, target, data_dir, say, os_release, boot_config, now, fetch, assets)`）。`release` の手順には、開発 PC で解決した Target を渡す（--ref の既定は最新のタグ、なければ main）。`data_dir` は `backups.core_data_dir(layout, env)`。ロックは呼ぶ側が持つ
+- 3.7: 手順の順番は設計から 1 つ変えた: reminder は release の後（タイマーのファイルを今の版から写すため）。グループには systemd-journal も足す（adm に入っていれば足さない）。self-check のだめの項目は手順の失敗にせず、`ProvisionReport.self_check_ok` に入れる
+- 3.7: 声のファイルと顔のモデルは、取得元と sha256 を固定した `ASSETS`（実機のファイルと一致することを 2026-11-05 に確かめた）。open_jtalk は apt の open-jtalk を使うので、jtalk のディレクトリは取らない
