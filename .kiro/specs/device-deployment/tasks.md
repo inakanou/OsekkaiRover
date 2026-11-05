@@ -78,7 +78,7 @@
   - _Depends: 2.3_
   - _Requirements: 6.1, 6.5, 6.6_
 
-- [ ] 2.8 起動の口に self-check をつなぐ（統合）
+- [x] 2.8 起動の口に self-check をつなぐ（統合）
   - `--self-check`・`--json`・`--no-hardware` を足す。単一の実行のロックを取ってみて、取れればハードを触ってよい（終わったら放す）。取れなければ状態のファイルを読んでサービスの報告にする
   - 基盤の項目の後に、登録された機能の項目を並べる
   - 完了の状態: `python -m osekkai --self-check --fake-hardware --json` が共通の見本の形で出て、だめがあれば終了コード 1 になる。ロックが取られているときにハードの項目がサービスの報告で判定されるテストが通る
@@ -243,3 +243,5 @@
 - 2.6: 基盤は機能の開始の後に状態のファイルを書き始め、停止の最初に消す（停止の途中は「ファイルがない」= 道具からは確かめられない）。`features` と `unavailable` は起動のときの値で固定、`driving` と `busy` は毎回の値。版のログの頭は `osekkai.core.runtime.VERSION_LOG_PREFIX`
 - 2.7: 基盤の確認の項目は `osekkai.checks.base_checks(probes)`。実機は `osekkai.adapters.pi.probes.PiProbes`、偽物は `osekkai.adapters.fake.probes.FakeProbes`。I2C の確かめはデータのない quick write、ボタンの線は入力で取ってすぐ放す。声の合成の項目の時間切れは 40 秒
 - 2.7: サンプルは単一の実行のロックを使わないので、サンプルが動いている間の self-check はハードの項目も走る（害はないが、初期設定ではサンプルが動いていれば `--no-hardware` を付ける）
+- 2.8: `python -m osekkai --self-check [--json] [--no-hardware] [--fake-hardware]` は、ロックを取れればハードの項目も行い、終わるまでロックを持つ（`--no-hardware` でも持つ。声の合成で最大 40 秒）。取れなければ status.json の報告で判定し、なければ「飛ばした」
+- 2.8: 重要: self-check がロックを持っている間に osekkai.service が起動すると、サービスは 75 で終わって再起動しない。入れた後の確認（3.6）は、self-check の前に「status.json があり、pid が MainPID と同じで、心拍が新しい」まで待つ（START_TIMEOUT_S の中で）。初期設定でサービスを起動するのは self-check の後にする。手順書（6.1）にも、self-check の最中にサービスを起動しないよう書く
