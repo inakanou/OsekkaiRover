@@ -234,8 +234,8 @@ def test_branch_deploy_succeeds_and_shows_trial_on_lcd(world: World) -> None:
 
     # LCD の知らせ: 道具が書いたものを、基盤の Notice がそのまま読める（7.1）
     notice = Notice.from_dict(json.loads(device.notice_file.read_text(encoding="utf-8")))
-    # 1 行目は LCD の 16 セルに切り詰めた版の名前
-    assert notice.rows == (BRANCH_LABEL[:16], "ためし ふだん:さんぷる")
+    # 1 行目は 16 セル。長いブランチの名前は名前のほうを縮め、コミットの識別子を残す
+    assert notice.rows == ("feat/try@" + "b" * 7, "ためし ふだん:さんぷる")
     # 期限は切り替えのときから VERSION_NOTICE_S 秒（起動の後の確認より前に書く）
     assert notice.until is not None
     assert notice.until - VERSION_NOTICE_S <= state.trial_since

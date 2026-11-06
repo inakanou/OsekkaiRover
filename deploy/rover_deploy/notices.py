@@ -82,9 +82,18 @@ def _short_name(everyday: Target | None) -> str:
     return version_label(everyday)
 
 
+def _version_row(target: Target) -> str:
+    """1 行目。ブランチの名前が長ければ名前のほうを縮め、`@` とコミットの識別子は残す。"""
+    label = version_label(target)
+    if target.ref_kind != "branch" or target.ref is None or lcd_cells(label) <= LCD_CELLS:
+        return _cut(label)
+    suffix = label[len(target.ref) :]  # "@abc1234"
+    return _cut(target.ref, LCD_CELLS - lcd_cells(suffix)) + suffix
+
+
 def version_notice(target: Target, everyday: Target | None, now_epoch: float) -> Notice:
     """入れた版の知らせ（7.1、5.4、7.3）。"""
-    row1 = _cut(version_label(target))
+    row1 = _version_row(target)
     if everyday is not None and target == everyday:
         row2 = EVERYDAY_TEXT
     else:

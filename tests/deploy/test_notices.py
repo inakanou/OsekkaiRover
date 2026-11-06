@@ -94,11 +94,25 @@ def test_version_notice_long_everyday_name_fits_16_cells() -> None:
     assert lcd_cells(row2) == len(to_lcd_codes(row2))
 
 
-def test_version_notice_row1_cut_to_16() -> None:
+def test_version_notice_row1_long_branch_keeps_short_sha() -> None:
+    """長いブランチの名前は名前のほうを縮め、コミットの識別子を残す（実機確認で決めた）。"""
     target = Target(kind="release", ref="feature/very-long-name", ref_kind="branch", sha=SHA)
     row1 = version_notice(target, SAMPLE, NOW).rows[0]
-    assert row1 == "feature/very-lon"
+    assert row1 == f"feature/@{SHA[:7]}"
     assert len(to_lcd_codes(row1)) == 16
+
+
+def test_version_notice_row1_long_tag_cut_to_16() -> None:
+    target = Target(kind="release", ref="v10.20.30-rc1-extra", ref_kind="tag", sha=SHA)
+    row1 = version_notice(target, SAMPLE, NOW).rows[0]
+    assert row1 == "v10.20.30-rc1-ex"
+
+
+def test_version_notice_row1_branch_that_fits_is_kept() -> None:
+    target = Target(kind="release", ref="feat/abcdefg", ref_kind="branch", sha=SHA)
+    assert version_notice(target, SAMPLE, NOW).rows[0] == f"feat/abc@{SHA[:7]}"
+    target = Target(kind="release", ref="feat/abc", ref_kind="branch", sha=SHA)  # ちょうど 16
+    assert version_notice(target, SAMPLE, NOW).rows[0] == f"feat/abc@{SHA[:7]}"
 
 
 def test_version_notice_row1_short_label_kept() -> None:
