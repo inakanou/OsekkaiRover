@@ -48,12 +48,13 @@ class ReleaseError(Exception):
 
 
 class PrepareFailed(ReleaseError):
-    """版の準備の失敗。`step` は fetch・commit・worktree・venv・pip のどれか。"""
+    """版の準備の失敗。`step` は fetch・commit・worktree・unit・venv・pip のどれか。"""
 
     _MESSAGES = {
         "fetch": "リポジトリから取得できませんでした",
         "commit": "指定のコミットがリポジトリにありません",
         "worktree": "版のディレクトリを作れませんでした",
+        "unit": "その版には新しい基盤のユニットがありません（この道具より前の版です）",
         "venv": "仮想環境を作れませんでした",
         "pip": "依存関係を入れられませんでした",
     }
@@ -184,6 +185,9 @@ class Releases:
                 timeout=GIT_TIMEOUT_S,
                 check=True,
             )
+            if not (directory / UNIT_SOURCE).is_file():
+                # この道具より前の版。仮想環境を作る前に断る（切り替えてから気づかない）
+                raise PrepareFailed("unit")
             step = "venv"
             venv = directory / ".venv"
             self._run(
@@ -213,6 +217,8 @@ class Releases:
         sha = target.sha
         directory = self._layout.release_dir(sha)
         if self._reusable(directory, sha):
+            if not (directory / UNIT_SOURCE).is_file():
+                raise PrepareFailed("unit")
             os.utime(directory)  # 使い回した版も、新しい順の前に来る
             return directory
         if self._same_path(directory, self.current()):

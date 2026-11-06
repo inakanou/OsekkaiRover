@@ -31,7 +31,7 @@ from typing import BinaryIO
 
 from rover_deploy.common import Running, Target
 from rover_deploy.layout import Layout, ensure_private_dir
-from rover_deploy.releases import Releases
+from rover_deploy.releases import UNIT_SOURCE, PrepareFailed, Releases
 from rover_deploy.service_status import detect_running
 from rover_deploy.state import exception_reason, make_deploy_id
 from rover_deploy.system import (
@@ -570,15 +570,22 @@ def _current(ctx: ProvisionContext) -> Path | None:
 
 
 def _release_step(ctx: ProvisionContext) -> Step:
+    def usable(current: Path | None) -> bool:
+        # 前の実行でユニットのない版に向いたまま止まったときは、指定の版で作り直す
+        return current is not None and (current / UNIT_SOURCE).is_file()
+
     def is_done() -> bool:
-        return _current(ctx) is not None and ctx.layout.core_unit_file.is_file()
+        return usable(_current(ctx)) and ctx.layout.core_unit_file.is_file()
 
     def apply() -> None:
         current = _current(ctx)
-        if current is None:
+        if current is None or not usable(current):
             if ctx.target is None or ctx.target.kind != "release":
                 raise StepFailed("最初の版の指定がありません")
-            current = ctx.releases.prepare(ctx.target, ctx.repo_url)
+            try:
+                current = ctx.releases.prepare(ctx.target, ctx.repo_url)
+            except PrepareFailed as error:
+                raise StepFailed(str(error)) from None  # 決まった文言だけを出す
             ctx.releases.switch(current)
         # ユニットを置いて読み直させるだけ。起動も有効化もしない
         ctx.releases.install_unit(current)
@@ -587,7 +594,10 @@ def _release_step(ctx: ProvisionContext) -> Step:
         "release",
         is_done,
         apply,
-        retry_hint="ネットワークを確かめ、provision --ref <タグかブランチ> で、もう一度実行します",
+        retry_hint=(
+            "ネットワークを確かめるか、新しい基盤に対応した版を "
+            "provision --ref <タグかブランチ> で指定して、もう一度実行します"
+        ),
     )
 
 

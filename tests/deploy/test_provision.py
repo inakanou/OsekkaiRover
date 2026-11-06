@@ -31,7 +31,7 @@ from rover_deploy.provision import (
     run_provision,
     secrets_guidance,
 )
-from rover_deploy.releases import Releases
+from rover_deploy.releases import PrepareFailed, Releases
 from rover_deploy.system import CommandFailed
 
 USER = "pi-user"
@@ -710,6 +710,39 @@ def test_release_done_when_current_exists(env: Env) -> None:
     env.make_current()
     assert env.steps()["release"].is_done()
     assert env.fake.argvs == []
+
+
+def test_release_redone_when_current_has_no_core_unit(env: Env) -> None:
+    """前の実行で、ユニットのない版に current が向いたまま止まっても、--ref の版でやり直せる。"""
+    old = env.make_current()
+    (old / "deploy/systemd" / CORE_UNIT_NAME).unlink()
+    env.layout.core_unit_file.unlink()
+    new_sha = "c" * 40
+    env.target = Target(kind="release", ref="feat/x", ref_kind="branch", sha=new_sha)
+    env.fake.script(["systemctl", "--user", "daemon-reload"])
+    s = env.steps()["release"]
+    assert not s.is_done()
+    s.apply()
+    assert env.releases.current() == env.layout.release_dir(new_sha)
+    assert env.layout.core_unit_file.is_file()
+    assert s.is_done()
+
+
+def test_release_not_done_when_current_has_no_core_unit(env: Env) -> None:
+    old = env.make_current()
+    (old / "deploy/systemd" / CORE_UNIT_NAME).unlink()
+    assert not env.steps()["release"].is_done()
+
+
+def test_release_shows_fixed_message_when_prepare_fails(env: Env) -> None:
+    def refuse(target: Target, repo_url: str) -> Path:
+        raise PrepareFailed("unit")
+
+    env.releases.prepare = refuse  # type: ignore[method-assign]
+    s = env.steps()["release"]
+    with pytest.raises(StepFailed, match="新しい基盤のユニットがありません"):
+        s.apply()
+    assert env.releases.current() is None
 
 
 def test_release_without_target_fails(env: Env) -> None:

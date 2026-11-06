@@ -45,6 +45,7 @@ class Sim:
     def __init__(self, fake: FakeRunner) -> None:
         self.fake = fake
         self.heads: dict[Path, str] = {}
+        self.without_unit: set[str] = set()  # ユニットのファイルがない版（この道具より前の版）
 
     def __call__(
         self,
@@ -66,9 +67,10 @@ class Sim:
             directory, sha = Path(args[6]), args[7]
             directory.mkdir(parents=True)
             (directory / ".git").write_text("gitdir: x\n", encoding="utf-8")
-            unit = directory / "deploy/systemd/osekkai.service"
-            unit.parent.mkdir(parents=True)
-            unit.write_text(f"unit {sha}\n", encoding="utf-8")
+            if sha not in self.without_unit:
+                unit = directory / "deploy/systemd/osekkai.service"
+                unit.parent.mkdir(parents=True)
+                unit.write_text(f"unit {sha}\n", encoding="utf-8")
             self.heads[directory] = sha
         elif args[:1] == ("git",) and args[3:6] == ("worktree", "remove", "--force"):
             shutil.rmtree(args[6], ignore_errors=True)
@@ -712,3 +714,35 @@ def test_本物の_git_でタグとブランチの版を準備して片付ける
     assert not first.exists()
     assert second.exists()
     assert str(first) not in _git(layout.repo_git, "worktree", "list", "--porcelain")
+
+
+# --- ユニットのない版（実機確認で見つけた穴） ---
+
+
+def test_prepare_refuses_release_without_core_unit_before_venv(
+    layout: Layout, sim: Sim, rel: Releases
+) -> None:
+    """新しい基盤のユニットがない版（この道具より前の版）は、仮想環境を作る前に断る。"""
+    sim.without_unit.add(SHA_A)
+    with pytest.raises(PrepareFailed) as info:
+        rel.prepare(tag(SHA_A), URL)
+    assert info.value.step == "unit"
+    assert not layout.release_dir(SHA_A).exists()  # 作りかけは消す
+    assert not any(argv[:3] == ("python3", "-m", "venv") for argv in sim.fake.argvs)
+    assert rel.current() is None
+
+
+def test_prepare_refuses_reused_release_without_core_unit(
+    layout: Layout, sim: Sim, rel: Releases
+) -> None:
+    directory = make_release(layout, SHA_A)
+    (directory / "deploy/systemd/osekkai.service").unlink()
+    sim.heads[directory] = SHA_A
+    with pytest.raises(PrepareFailed) as info:
+        rel.prepare(tag(SHA_A), URL)
+    assert info.value.step == "unit"
+    assert directory.is_dir()  # 使い回しの版は消さない
+    assert rel.current() is None
+    assert not any(
+        "fetch" in argv or argv[:3] == ("python3", "-m", "venv") for argv in sim.fake.argvs
+    )
