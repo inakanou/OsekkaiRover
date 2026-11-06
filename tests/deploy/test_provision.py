@@ -438,6 +438,7 @@ def test_missing_os_release_is_unsupported(env: Env) -> None:
 def test_apt_installs_only_missing(env: Env) -> None:
     env.script_apt_installed(missing=("open-jtalk", "open-jtalk-mecab-naist-jdic"))
     env.fake.script(["sudo", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get"])
+    env.fake.script(["apt-get", "-s", "install"])
     s = env.steps()["apt"]
     assert not s.is_done()
     s.apply()
@@ -455,6 +456,45 @@ def test_apt_installs_only_missing(env: Env) -> None:
             "open-jtalk-mecab-naist-jdic",
         ),
     ]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "Inst linux-image-6.12.47+rpt-rpi-2712 (1:6.12.47-1+rpt1 Raspberry Pi:stable [arm64])",
+        "Inst raspi-firmware [1:1.20250430-1] (1:1.20250915-1 Raspberry Pi:stable [all])",
+        "Inst rpi-eeprom [28.2-1] (28.4-1 Raspberry Pi:stable [all])",
+        "Inst initramfs-tools [0.142] (0.142+rpt1 Raspberry Pi:stable [all])",
+    ],
+)
+def test_apt_refuses_when_install_would_touch_boot(env: Env, line: str) -> None:
+    """入れるとカーネルや起動のファイルも新しくなるときは、入れずに止める（実機確認で見つけた）。"""
+    env.script_apt_installed(missing=("python3-picamera2",))
+    env.fake.script(
+        ["apt-get", "-s", "install", "python3-picamera2"],
+        stdout=f"Inst python3-picamera2 (0.3.30-1 Raspberry Pi:stable [all])\n{line}\n",
+    )
+    env.fake.script(["sudo", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get"])
+    s = env.steps()["apt"]
+    with pytest.raises(StepFailed, match="カーネルか起動のファイル"):
+        s.apply()
+    installs = [a for a in env.fake.argvs if a[0] == "sudo" and "install" in a]
+    assert installs == []
+
+
+def test_apt_installs_when_simulation_is_clean(env: Env) -> None:
+    env.script_apt_installed(missing=("open-jtalk",))
+    env.fake.script(
+        ["apt-get", "-s", "install", "open-jtalk"],
+        stdout=(
+            "Inst libhts3 (1.10-1 Debian:13 [arm64])\nInst open-jtalk (1.11-1 Debian:13 [arm64])\n"
+        ),
+    )
+    env.fake.script(["sudo", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get"])
+    env.steps()["apt"].apply()
+    sims = [a for a in env.fake.argvs if a[:2] == ("apt-get", "-s")]
+    assert sims == [("apt-get", "-s", "install", "open-jtalk")]
+    assert any(a[0] == "sudo" and "install" in a for a in env.fake.argvs)
 
 
 def test_apt_done_when_all_installed(env: Env) -> None:
@@ -930,6 +970,7 @@ def test_first_run_on_fresh_os_needs_reboot_and_never_reboots(env: Env) -> None:
     env.script_os()
     env.script_apt_installed(missing=("open-jtalk",))
     env.fake.script(["sudo"])  # sudo のコマンドはすべて成功
+    env.fake.script(["apt-get", "-s", "install"])  # 試しの結果に、起動に関わるものはない
     env.script_groups("pi-user\n")
     env.script_linger("no")
     env.make_assets()

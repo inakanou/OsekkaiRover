@@ -114,7 +114,7 @@ rover-deploy provision --ref v0.2.0
 | 手順 | すること |
 | --- | --- |
 | `os` | Debian 13（trixie）か 12（bookworm）の aarch64 かを確かめます。違えば何も変えずに中止します |
-| `apt` | 要るパッケージ（`git`、`python3-venv`、`open-jtalk` など）のうち、入っていないものを入れます |
+| `apt` | 要るパッケージ（`git`、`python3-venv`、`open-jtalk` など）のうち、入っていないものを入れます。入れるとカーネルか起動のファイルも新しくなるときは、入れずに止まります（下の「カーネルの更新」） |
 | `boot_config` | `/boot/firmware/config.txt` に I2C と音声の行がなければ足します（足す前に写しを取ります）。再起動が要ります |
 | `groups` | `gpio`・`i2c`・`audio` と、journal を読めるグループ（`systemd-journal` か `adm`）に入れます。再起動（ログインし直し）が要ります |
 | `linger` | ログインしていなくてもユーザーサービスが動くようにします（`loginctl enable-linger`） |
@@ -124,6 +124,22 @@ rover-deploy provision --ref v0.2.0
 | `reminder` | 戻し忘れのタイマー（`osekkai-trial-reminder.timer`）を置いて有効にします |
 | `secrets` | API キーなどの置き場所と、作り方を表示します。ファイルは作りません |
 | `self_check` | 新しい基盤の self-check を行い、結果を表示します |
+
+### カーネルの更新
+
+足りないパッケージを入れると、カーネルや起動のファイル（`/boot/firmware`）まで新しくなることがあります。
+実機確認で、そのあとの再起動で起動の区画が壊れ、SD カードを作り直しました。
+そのため `apt` の手順は、先に試し（`apt-get -s install`）を行い、カーネルや起動のファイルが入るなら止まります。
+
+止まったときは、子どもが使っていない時間に、実機で次を行ってから、もう一度 provision を実行します。
+
+```sh
+sudo apt update
+sudo apt full-upgrade
+sudo reboot
+```
+
+再起動の後に立ち上がらなければ、すぐ気づけるように、画面をつないでおくと安心です。
 
 ### sudo のパスワード
 

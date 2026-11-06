@@ -87,6 +87,19 @@ APT_PACKAGES = (
 )
 APT_INSTALLED = "install ok installed"
 APT_TIMEOUT_S = 1800.0
+# 入れるとカーネルや起動の区画のファイルを書き換えるパッケージ（名前の頭）。これが入るなら止める
+BOOT_PACKAGE_PREFIXES = (
+    "linux-image",
+    "raspi-firmware",
+    "raspberrypi-kernel",
+    "raspberrypi-bootloader",
+    "rpi-eeprom",
+    "initramfs-tools",
+)
+MSG_APT_TOUCHES_BOOT = (
+    "パッケージを入れると、カーネルか起動のファイルも新しくなります。入れずに止めました"
+)
+
 # sudo は環境変数を渡さないので、env で付ける（設定の問い合わせで止まらない）
 APT_GET = ("sudo", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get")
 
@@ -338,12 +351,28 @@ def _missing_packages(ctx: ProvisionContext) -> list[str]:
     return missing
 
 
+def _touches_boot(ctx: ProvisionContext, missing: list[str]) -> bool:
+    """入れると、カーネルか起動のファイルも入るか新しくなるか。sudo なしの試しで調べる。
+
+    実機確認で、足りないパッケージを入れたときにカーネルなども更新され、
+    その後の再起動で起動の区画が壊れていた。起動に関わる更新は、人が見ている所で行う。
+    """
+    result = ctx.run(["apt-get", "-s", "install", *missing], timeout=APT_TIMEOUT_S, check=True)
+    for line in result.text.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0] == "Inst" and parts[1].startswith(BOOT_PACKAGE_PREFIXES):
+            return True
+    return False
+
+
 def _apt_step(ctx: ProvisionContext) -> Step:
     def apply() -> None:
         missing = _missing_packages(ctx)
         if not missing:
             return
         ctx.run([*APT_GET, "update"], timeout=APT_TIMEOUT_S, check=True)
+        if _touches_boot(ctx, missing):
+            raise StepFailed(MSG_APT_TOUCHES_BOOT)
         ctx.run([*APT_GET, "install", "-y", *missing], timeout=APT_TIMEOUT_S, check=True)
 
     return Step(
@@ -351,7 +380,8 @@ def _apt_step(ctx: ProvisionContext) -> Step:
         lambda: not _missing_packages(ctx),
         apply,
         retry_hint="ネットワークを確かめ、実機で sudo apt-get update を行ってから、"
-        "もう一度 provision を実行します",
+        "もう一度 provision を実行します。カーネルか起動のファイルで止まったときは、"
+        "子どもが使っていない時間に、実機で sudo apt full-upgrade と再起動を済ませてから行います",
     )
 
 

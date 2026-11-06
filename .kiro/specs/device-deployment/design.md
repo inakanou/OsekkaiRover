@@ -724,7 +724,7 @@ def run_provision(steps: Sequence[Step], log: Callable[[str, str], None]) -> Pro
 ```
 - 手順の並び（`PROVISION_STEPS`）:
   1. `os`: `/etc/os-release` が Debian 13（trixie）か 12（bookworm）、`uname -m` が aarch64。違えば何も変えずに中止し、対応している版を出す（8.7）
-  2. `apt`: `git python3-venv python3-lgpio python3-numpy python3-smbus2 python3-yaml python3-opencv python3-picamera2 i2c-tools pipewire-pulse pulseaudio-utils open-jtalk open-jtalk-mecab-naist-jdic`。入っていないものだけを入れる
+  2. `apt`: `git python3-venv python3-lgpio python3-numpy python3-smbus2 python3-yaml python3-opencv python3-picamera2 i2c-tools pipewire-pulse pulseaudio-utils open-jtalk open-jtalk-mecab-naist-jdic`。入っていないものだけを入れる。先に `apt-get -s install` で試し、カーネルか起動のファイル（`linux-image`・`raspi-firmware`・`rpi-eeprom`・`initramfs-tools` など）が入るなら、入れずに止める（実機確認で、その後の再起動で起動の区画が壊れたため）
   3. `boot_config`: `/boot/firmware/config.txt` に `dtparam=i2c_arm=on` と `dtoverlay=hifiberry-dac` がなければ足す（足す前に写しを取る）。再起動が要る
   4. `groups`: `gpio`・`i2c`・`audio` に入っていなければ入れる。再起動（ログインし直し）が要る
   5. `linger`: `loginctl enable-linger`
