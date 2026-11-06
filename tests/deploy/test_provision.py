@@ -57,6 +57,9 @@ def write(path: Path, text: str) -> Path:
     return path
 
 
+EXAMPLE_CONFIG = "# 設定の見本\ncore: {}\n"
+
+
 def make_release(layout: Layout, sha: str = SHA) -> Path:
     """版のディレクトリの形だけを作る（worktree の印・ユニットのファイル・仮想環境の python）。"""
     directory = layout.release_dir(sha)
@@ -65,6 +68,7 @@ def make_release(layout: Layout, sha: str = SHA) -> Path:
     for name in REMINDER_UNITS:
         write(directory / "deploy/systemd" / name, f"# {name}\n")
     write(directory / ".venv/bin/python", "")
+    write(directory / "src/osekkai/core/example_config.yaml", EXAMPLE_CONFIG)
     return directory
 
 
@@ -231,6 +235,7 @@ class Env:
         self.install_reminder(current)
         self.script_reminder_enabled()
         write(self.layout.core_config_dir / "env", f"KEY={SECRET}\n")
+        write(self.layout.core_config_dir / "config.yaml", "core: {}\n")
         return current
 
 
@@ -861,6 +866,34 @@ def test_reminder_without_current_fails(env: Env) -> None:
 
 
 # --- secrets（8.5、8.6） ---
+
+
+# --- config ---
+
+
+def test_config_placed_from_current_example_when_missing(env: Env) -> None:
+    """self-check はファイルを作らないので、初期設定が見本から置く（validate-impl で決めた）。"""
+    env.make_current()
+    s = env.steps()["config"]
+    assert not s.is_done()
+    s.apply()
+    config = env.layout.core_config_dir / "config.yaml"
+    assert config.read_text(encoding="utf-8") == EXAMPLE_CONFIG
+    assert (env.layout.core_config_dir.stat().st_mode & 0o777) == 0o700
+    assert s.is_done()
+
+
+def test_config_never_overwritten(env: Env) -> None:
+    env.make_current()
+    config = env.layout.core_config_dir / "config.yaml"
+    write(config, "core:\n  cache_max_mb: 300\n")
+    s = env.steps()["config"]
+    assert s.is_done()
+
+
+def test_config_without_current_fails(env: Env) -> None:
+    with pytest.raises(StepFailed):
+        env.steps()["config"].apply()
 
 
 def test_secrets_never_created_and_place_shown(env: Env) -> None:

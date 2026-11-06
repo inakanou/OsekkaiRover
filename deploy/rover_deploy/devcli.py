@@ -73,6 +73,8 @@ REASON_INTERRUPTED = "interrupted"
 MSG_STATE_BROKEN = "実機の道具の状態のファイルが読めません。何も変えずに中止します"
 MSG_BAD_BACKUP = "実機のバックアップの答えの形が違います。何も変えずに中止します"
 
+ABORT_PREFIX = "中止の理由: "
+
 # 中止の理由の名前 → 文言。busy と disk_low は詳しい文言を別に作る
 REASON_MESSAGES: Mapping[str, str] = {
     "driving": "実機が走行中です。止まってからやり直してください",
@@ -276,7 +278,7 @@ def _reason_text(reason: str, report: Mapping[str, object]) -> str:
                 f"要る: {_size_text(needed)}）"
             )
         return "実機の空き容量が足りないか、確かめられません"
-    return REASON_MESSAGES.get(reason, f"中止の理由: {reason}")
+    return REASON_MESSAGES.get(reason, f"{ABORT_PREFIX}{reason}")
 
 
 def _reasons(report: Mapping[str, object]) -> list[str]:
@@ -476,9 +478,12 @@ def _abort_texts(names: Sequence[str]) -> list[str]:
         if kind == "prepare":
             texts.append(f"準備: {prepare_message(detail)}")
         elif kind == "safety":
-            texts.append(_reason_text(detail, {"safety": {"busy": busy}}))
+            # 知らない理由の文言は「中止の理由: 」で始まるので、表示の頭と重ねない
+            texts.append(
+                _reason_text(detail, {"safety": {"busy": busy}}).removeprefix(ABORT_PREFIX)
+            )
         else:
-            texts.append(REASON_MESSAGES.get(name, f"中止の理由: {name}"))
+            texts.append(REASON_MESSAGES.get(name, name))
     return texts
 
 
@@ -490,7 +495,7 @@ def _report(ctx: DevContext, result: DeployResult) -> int:
     failed = [name for name in result.failed_checks if name != ENABLE_FAILED]
     if result.outcome == "aborted":
         for text in _abort_texts(failed):
-            ctx.say(f"中止の理由: {text}")
+            ctx.say(f"{ABORT_PREFIX}{text}")
     elif failed:
         ctx.say(f"失敗した確認: {', '.join(failed)}")
     if ENABLE_FAILED in result.failed_checks:

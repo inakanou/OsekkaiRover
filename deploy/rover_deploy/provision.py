@@ -58,6 +58,7 @@ PROVISION_STEPS = (
     "voices",
     "models",
     "release",
+    "config",
     "reminder",
     "secrets",
     "self_check",
@@ -648,6 +649,38 @@ def _release_step(ctx: ProvisionContext) -> Step:
     )
 
 
+# --- config ---
+
+CONFIG_FILE_NAME = "config.yaml"
+# 基盤の設定の見本（版の中の場所。rover-core の EXAMPLE_RESOURCE）
+CONFIG_EXAMPLE = Path("src/osekkai/core/example_config.yaml")
+
+
+def _config_step(ctx: ProvisionContext) -> Step:
+    """基盤の設定ファイルがなければ、今の版の見本から置く。あれば触らない。
+
+    self-check は確かめるだけでファイルを作らないので、初期設定が置く（validate-impl で決めた）。
+    """
+    config = ctx.layout.core_config_dir / CONFIG_FILE_NAME
+
+    def apply() -> None:
+        current = _current(ctx)
+        example = None if current is None else current / CONFIG_EXAMPLE
+        if example is None or not example.is_file():
+            raise StepFailed("今の版に設定の見本がありません")
+        ensure_private_dir(ctx.layout.core_config_dir)
+        tmp = config.with_name(f".{CONFIG_FILE_NAME}.tmp")
+        shutil.copyfile(example, tmp)
+        os.replace(tmp, config)
+
+    return Step(
+        "config",
+        config.is_file,
+        apply,
+        retry_hint="release の手順が済んでいるかを確かめてから、もう一度 provision を実行します",
+    )
+
+
 # --- reminder ---
 
 
@@ -807,6 +840,7 @@ def provision_steps(ctx: ProvisionContext) -> list[Step]:
         _assets_step(ctx, VOICES_DIR_NAME),
         _assets_step(ctx, MODELS_DIR_NAME),
         _release_step(ctx),
+        _config_step(ctx),
         _reminder_step(ctx),
         _secrets_step(ctx),
         _self_check_step(ctx),

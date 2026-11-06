@@ -463,6 +463,17 @@ def test_適用の側の準備の中止は人向けの文言で出す(tmp_path: 
     assert "prepare:unit" not in s.text
 
 
+def test_適用の側の知らない中止の理由は名前を一度だけ出す(tmp_path: Path) -> None:
+    lines: list[dict[str, object] | BaseException] = [
+        result_line("aborted", SAMPLE, ("safety:weird", "odd"))
+    ]
+    s = make_setup(tmp_path, happy_remote(lines=lines))
+    assert s.run("deploy", "v0.2.0") == ExitCode.ABORTED
+    assert "中止の理由: weird" in s.text
+    assert "中止の理由: odd" in s.text
+    assert "中止の理由: 中止の理由" not in s.text
+
+
 def test_適用の側の作業中の中止は機能の名前をまとめて出す(tmp_path: Path) -> None:
     lines: list[dict[str, object] | BaseException] = [
         result_line("aborted", SAMPLE, ("safety:busy", "busy:daruma", "busy:greeting"))

@@ -732,6 +732,7 @@ def run_provision(steps: Sequence[Step], log: Callable[[str, str], None]) -> Pro
   7. `voices`・`models`: 取得元と sha256 を道具に固定し、ないものだけを取る。同じ名前で sha256 が違うファイルがあれば上書きせず警告する（8.5）
   8. `reminder`: 戻し忘れのタイマーを写して有効にする
   9. `release`: `current` がないか、`current` の版にユニットのファイルがなければ（前の実行がユニットのない版で止まったとき）、`--ref`（既定は最新のタグ、なければ `main`）を準備し、`current` とユニットを置く。起動も有効化もしない
+  9a. `config`: 基盤の設定ファイル（`~/.config/osekkai/config.yaml`）がなければ、`current` の版の見本（`src/osekkai/core/example_config.yaml`）から置く。あれば触らない（self-check はファイルを作らないため。validate-impl で決めた）
   10. `secrets`: API キーなどを置く場所（`~/.config/osekkai/env`、0600）と手順を表示する。作らない（8.6）
   11. `self_check`: 新しい基盤の self-check を行い、結果を出す。サンプルが動いていれば `--no-hardware` を付ける（8.8）
 - 済んでいる手順は飛ばし、その旨を出す（8.2）。失敗したらそこで止め、手順の名前と `retry_hint` を出す（8.3）

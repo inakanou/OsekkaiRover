@@ -120,7 +120,8 @@ rover-deploy provision --ref v0.2.0
 | `linger` | ログインしていなくてもユーザーサービスが動くようにします（`loginctl enable-linger`） |
 | `layout` | `~/osekkai-rover/` と道具の状態のディレクトリを作ります |
 | `voices`・`models` | 声のファイルと顔のモデルのうち、ないものを取ります。取得元と sha256 は道具に決めてあります。同じ名前で中身の違うファイルがあれば、上書きせずに警告します |
-| `release` | 版のディレクトリが 1 つもなければ、最初の版を用意し、`current` とユニットを置きます。起動も、自動の起動の設定もしません |
+| `release` | 今の版がなければ（またはユニットのない版なら）、最初の版を用意し、`current` とユニットを置きます。起動も、自動の起動の設定もしません |
+| `config` | 基盤の設定ファイル（`~/.config/osekkai/config.yaml`）がなければ、今の版の見本から置きます。あれば触りません |
 | `reminder` | 戻し忘れのタイマー（`osekkai-trial-reminder.timer`）を置いて有効にします |
 | `secrets` | API キーなどの置き場所と、作り方を表示します。ファイルは作りません |
 | `self_check` | 新しい基盤の self-check を行い、結果を表示します |

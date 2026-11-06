@@ -170,7 +170,7 @@ def _load_report(paths: Paths, registry: FeatureRegistry, config: Path | None) -
     models = feature_models(cls.spec for cls in registry.feature_classes())
     try:
         return ConfigLoader(paths, models).load(config, create_missing=False)
-    except OSError as error:  # 見本から作れないなど。中身（パス）は出さない
+    except OSError as error:  # 読めないなど。中身（パス）は出さない
         logger.error("%s: %s", CONFIG_UNREADABLE, type(error).__name__)
         return ConfigReport(core=CoreConfig(), features={}, fatal_errors=[CONFIG_UNREADABLE])
 
