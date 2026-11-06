@@ -46,6 +46,7 @@ from rover_deploy.layout import TOOL_APP_NAME
 from rover_deploy.notices import REMIND_AFTER_H
 from rover_deploy.refs import GIT_ENV, NETWORK_TIMEOUT_S, RefError, Resolution, resolve_ref
 from rover_deploy.refs import RemoteUnreachable as OriginUnreachable
+from rover_deploy.releases import prepare_message
 from rover_deploy.remote import REMOTE_TOOL_DIR, AgentReply, Remote, RemoteError
 from rover_deploy.state import make_deploy_id, validate_deploy_id
 from rover_deploy.system import CommandError, Runner, SubprocessRunner
@@ -464,13 +465,33 @@ def _follow(ctx: DevContext, remote: RemotePort, deploy_id: str) -> DeployResult
     raise Abort(MSG_DISCONNECTED, ExitCode.UNKNOWN)
 
 
+def _abort_texts(names: Sequence[str]) -> list[str]:
+    """適用の側の中止の名前（prepare:<段階>・safety:<理由>・busy:<機能>）を人向けの文言にする。"""
+    busy = [n.removeprefix("busy:") for n in names if n.startswith("busy:")]
+    texts: list[str] = []
+    for name in names:
+        kind, _, detail = name.partition(":")
+        if kind == "busy":
+            continue
+        if kind == "prepare":
+            texts.append(f"準備: {prepare_message(detail)}")
+        elif kind == "safety":
+            texts.append(_reason_text(detail, {"safety": {"busy": busy}}))
+        else:
+            texts.append(REASON_MESSAGES.get(name, f"中止の理由: {name}"))
+    return texts
+
+
 def _report(ctx: DevContext, result: DeployResult) -> int:
     """結果を表示し、終了コードを返す（1.10、4.3）。"""
     ctx.say(f"結果: {OUTCOME_NAMES[result.outcome]}")
     running = "なし（止まっています）" if result.running is None else version_label(result.running)
     ctx.say(f"動いている版: {running}")
     failed = [name for name in result.failed_checks if name != ENABLE_FAILED]
-    if failed:
+    if result.outcome == "aborted":
+        for text in _abort_texts(failed):
+            ctx.say(f"中止の理由: {text}")
+    elif failed:
         ctx.say(f"失敗した確認: {', '.join(failed)}")
     if ENABLE_FAILED in result.failed_checks:
         ctx.say(

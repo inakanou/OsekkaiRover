@@ -37,7 +37,7 @@
 ### Out of Boundary
 - 停止の時の安全な処理そのもの（SIGTERM の扱い、`ExecStopPost` の安全停止の中身）は `rover-core` が持つ。ここは呼ぶだけ
 - 機能ごとの確認の項目の中身
-- サンプルのコード・仮想環境・ユニット・データの変更（読む・写す・止める・起動するだけ）
+- サンプルのコード・仮想環境・ユニットのファイル・データの変更（読む・写す・止める・起動するだけ）。例外は 2 つ: 普段の版を切り替えるときのサンプルのユニットの有効・無効の設定（`systemctl --user enable/disable`）と、`restore --include-sample` でのサンプルの `data/` の書き戻し
 - サンプルの記録と顔の特徴の新しい保存先への移し替え
 - 接続先（ssh の設定）そのもの。開発 PC の利用者が持つ
 
@@ -574,7 +574,7 @@ class Releases:
     def prune(self, keep: Collection[Path]) -> None: ...
 ```
 - 置き場所: `~/osekkai-rover/repo.git`（bare の写し）、`releases/<sha の先頭 12 桁>/`（worktree、切り離した HEAD）、`releases/<…>/.venv`、`current`（リンク）
-- `prepare`: `git fetch --prune --tags origin`、sha があることを確かめ、worktree を作り、`python3 -m venv --system-site-packages .venv`、`.venv/bin/pip install -e '.[pi]'`。同じ sha のディレクトリがあり、仮想環境ができていれば使い回す。途中で失敗したら、そのディレクトリを消す（今の版には触れない）
+- `prepare`: `git fetch --prune --tags origin`、sha があることを確かめ、worktree を作り、worktree に `deploy/systemd/osekkai.service` がなければ `PrepareFailed("unit")` で断り（この道具より前の版。仮想環境の前・切り替えの前。実機確認で決めた）、`python3 -m venv --system-site-packages .venv`、`.venv/bin/pip install -e '.[pi]'`。同じ sha のディレクトリがあり、仮想環境ができていれば使い回す。途中で失敗したら、そのディレクトリを消す（今の版には触れない）。使い回すディレクトリにユニットがないときも断る
 - 依存関係は版ごとの仮想環境にあるので、切り戻しはリンクとユニットを戻すだけで、依存関係も戻る（1.8、4.2）
 - `prune`: 残すのは今・前・普段の版と、新しい順に `KEEP_RELEASES`（既定 3）。リポジトリの外の XDG のディレクトリには触れない（3.6）
 - サンプルの場所（`~/works/OsekkaiRover`、`~/.venvs/osekkai`）には何も書かない（9.1）
@@ -731,7 +731,7 @@ def run_provision(steps: Sequence[Step], log: Callable[[str, str], None]) -> Pro
   6. `layout`: `~/osekkai-rover/{releases,tool}`、`~/.local/state/osekkai-deploy/` を 0700 で作る
   7. `voices`・`models`: 取得元と sha256 を道具に固定し、ないものだけを取る。同じ名前で sha256 が違うファイルがあれば上書きせず警告する（8.5）
   8. `reminder`: 戻し忘れのタイマーを写して有効にする
-  9. `release`: 版のディレクトリが 1 つもなければ、`--ref`（既定は最新のタグ、なければ `main`）を準備し、`current` とユニットを置く。起動も有効化もしない
+  9. `release`: `current` がないか、`current` の版にユニットのファイルがなければ（前の実行がユニットのない版で止まったとき）、`--ref`（既定は最新のタグ、なければ `main`）を準備し、`current` とユニットを置く。起動も有効化もしない
   10. `secrets`: API キーなどを置く場所（`~/.config/osekkai/env`、0600）と手順を表示する。作らない（8.6）
   11. `self_check`: 新しい基盤の self-check を行い、結果を出す。サンプルが動いていれば `--no-hardware` を付ける（8.8）
 - 済んでいる手順は飛ばし、その旨を出す（8.2）。失敗したらそこで止め、手順の名前と `retry_hint` を出す（8.3）

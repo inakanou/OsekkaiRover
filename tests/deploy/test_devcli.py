@@ -449,7 +449,28 @@ def test_適用の側の中止は10で理由を出す(tmp_path: Path) -> None:
     s = make_setup(tmp_path, happy_remote(lines=lines))
     assert s.run("deploy", "v0.2.0") == ExitCode.ABORTED
     assert "結果: 中止" in s.text
-    assert "safety:driving" in s.text
+    assert "中止の理由: 実機が走行中です。止まってからやり直してください" in s.text
+    assert "safety:driving" not in s.text
+
+
+def test_適用の側の準備の中止は人向けの文言で出す(tmp_path: Path) -> None:
+    lines: list[dict[str, object] | BaseException] = [
+        result_line("aborted", SAMPLE, ("prepare:unit",))
+    ]
+    s = make_setup(tmp_path, happy_remote(lines=lines))
+    assert s.run("deploy", "v0.2.0") == ExitCode.ABORTED
+    assert "中止の理由: 準備: その版には新しい基盤のユニットがありません" in s.text
+    assert "prepare:unit" not in s.text
+
+
+def test_適用の側の作業中の中止は機能の名前をまとめて出す(tmp_path: Path) -> None:
+    lines: list[dict[str, object] | BaseException] = [
+        result_line("aborted", SAMPLE, ("safety:busy", "busy:daruma", "busy:greeting"))
+    ]
+    s = make_setup(tmp_path, happy_remote(lines=lines))
+    assert s.run("deploy", "v0.2.0") == ExitCode.ABORTED
+    assert "中止の理由: 実機で作業中の機能があります（作業中の機能: daruma、greeting）" in s.text
+    assert "busy:" not in s.text
 
 
 def test_成功しても自動の起動の設定ができなければ警告する(tmp_path: Path) -> None:

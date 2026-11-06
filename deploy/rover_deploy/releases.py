@@ -43,6 +43,21 @@ _LINK_TMP_NAME = ".current.tmp"
 _UNIT_TMP_NAME = f".{CORE_UNIT_NAME}.tmp"
 
 
+# 版の準備の段階 → 文言（開発 PC の表示でも使う）
+PREPARE_MESSAGES: dict[str, str] = {
+    "fetch": "リポジトリから取得できませんでした",
+    "commit": "指定のコミットがリポジトリにありません",
+    "worktree": "版のディレクトリを作れませんでした",
+    "unit": "その版には新しい基盤のユニットがありません（この道具より前の版です）",
+    "venv": "仮想環境を作れませんでした",
+    "pip": "依存関係を入れられませんでした",
+}
+
+
+def prepare_message(step: str) -> str:
+    return PREPARE_MESSAGES.get(step, "版を準備できませんでした")
+
+
 class ReleaseError(Exception):
     """版のディレクトリを扱えなかった。文言は決まったものだけ。"""
 
@@ -50,17 +65,8 @@ class ReleaseError(Exception):
 class PrepareFailed(ReleaseError):
     """版の準備の失敗。`step` は fetch・commit・worktree・unit・venv・pip のどれか。"""
 
-    _MESSAGES = {
-        "fetch": "リポジトリから取得できませんでした",
-        "commit": "指定のコミットがリポジトリにありません",
-        "worktree": "版のディレクトリを作れませんでした",
-        "unit": "その版には新しい基盤のユニットがありません（この道具より前の版です）",
-        "venv": "仮想環境を作れませんでした",
-        "pip": "依存関係を入れられませんでした",
-    }
-
     def __init__(self, step: str) -> None:
-        super().__init__(self._MESSAGES.get(step, "版を準備できませんでした"))
+        super().__init__(prepare_message(step))
         self.step = step
 
 
