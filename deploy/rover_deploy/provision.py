@@ -87,7 +87,8 @@ APT_PACKAGES = (
 )
 APT_INSTALLED = "install ok installed"
 APT_TIMEOUT_S = 1800.0
-# 入れるとカーネルや起動の区画のファイルを書き換えるパッケージ（名前の頭）。これが入るなら止める
+# 入れる・消すと、カーネルや起動の区画のファイル（initramfs を含む）を書き換えるパッケージ
+# （名前の頭）。これが入るか消えるなら止める。既にあるものが新しくなるときも、すべて止める
 BOOT_PACKAGE_PREFIXES = (
     "linux-image",
     "raspi-firmware",
@@ -95,9 +96,17 @@ BOOT_PACKAGE_PREFIXES = (
     "raspberrypi-bootloader",
     "rpi-eeprom",
     "initramfs-tools",
+    "dracut",
+    "firmware-",
+    "udev",
+    "systemd",
+    "kmod",
+    "busybox",
+    "klibc-utils",
+    "plymouth",
 )
 MSG_APT_TOUCHES_BOOT = (
-    "パッケージを入れると、カーネルか起動のファイルも新しくなります。入れずに止めました"
+    "パッケージを入れると、既にあるものか、カーネル・起動のファイルも変わります。入れずに止めました"
 )
 
 # sudo は環境変数を渡さないので、env で付ける（設定の問い合わせで止まらない）
@@ -352,7 +361,9 @@ def _missing_packages(ctx: ProvisionContext) -> list[str]:
 
 
 def _touches_boot(ctx: ProvisionContext, missing: list[str]) -> bool:
-    """入れると、カーネルか起動のファイルも入るか新しくなるか。sudo なしの試しで調べる。
+    """入れると、既にあるものが新しくなるか、起動に関わるものが入る・消えるか。
+
+    sudo なしの試し（`apt-get -s`）で調べる。
 
     実機確認で、足りないパッケージを入れたときにカーネルなども更新され、
     その後の再起動で起動の区画が壊れていた。起動に関わる更新は、人が見ている所で行う。
@@ -360,7 +371,13 @@ def _touches_boot(ctx: ProvisionContext, missing: list[str]) -> bool:
     result = ctx.run(["apt-get", "-s", "install", *missing], timeout=APT_TIMEOUT_S, check=True)
     for line in result.text.splitlines():
         parts = line.split()
-        if len(parts) >= 2 and parts[0] == "Inst" and parts[1].startswith(BOOT_PACKAGE_PREFIXES):
+        if len(parts) < 2 or parts[0] not in ("Inst", "Remv"):
+            continue
+        if parts[1].startswith(BOOT_PACKAGE_PREFIXES):
+            return True
+        # 既にあるものが新しくなる（"Inst 名前 [今の版] (新しい版 ...)"）。
+        # udev などの更新でも initramfs が作り直され、起動の区画に書かれるので止める
+        if parts[0] == "Inst" and len(parts) >= 3 and parts[2].startswith("["):
             return True
     return False
 

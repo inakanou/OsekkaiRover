@@ -465,6 +465,14 @@ def test_apt_installs_only_missing(env: Env) -> None:
         "Inst raspi-firmware [1:1.20250430-1] (1:1.20250915-1 Raspberry Pi:stable [all])",
         "Inst rpi-eeprom [28.2-1] (28.4-1 Raspberry Pi:stable [all])",
         "Inst initramfs-tools [0.142] (0.142+rpt1 Raspberry Pi:stable [all])",
+        # 既にあるものが新しくなる（udev の更新でも initramfs が作り直される）
+        "Inst udev [257.8-1~deb13u1] (257.9-1~deb13u2 Debian:13 [arm64])",
+        "Inst libcamera0.5 [0.5.1+rpt1] (0.5.2+rpt1 Raspberry Pi:stable [arm64])",
+        # 新しく入るだけでも、initramfs を作り直すもの
+        "Inst firmware-brcm80211 (1:20250410-2+rpt1 Raspberry Pi:stable [all])",
+        "Inst dracut (106-6 Debian:13 [arm64])",
+        # 起動に関わるものが消える
+        "Remv initramfs-tools [0.142]",
     ],
 )
 def test_apt_refuses_when_install_would_touch_boot(env: Env, line: str) -> None:
@@ -476,10 +484,31 @@ def test_apt_refuses_when_install_would_touch_boot(env: Env, line: str) -> None:
     )
     env.fake.script(["sudo", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get"])
     s = env.steps()["apt"]
-    with pytest.raises(StepFailed, match="カーネルか起動のファイル"):
+    with pytest.raises(StepFailed, match="カーネル・起動のファイル"):
         s.apply()
     installs = [a for a in env.fake.argvs if a[0] == "sudo" and "install" in a]
     assert installs == []
+
+
+def test_apt_ignores_conf_lines(env: Env) -> None:
+    env.script_apt_installed(missing=("open-jtalk",))
+    env.fake.script(
+        ["apt-get", "-s", "install", "open-jtalk"],
+        stdout="Inst open-jtalk (1.11-1 Debian:13 [arm64])\nConf open-jtalk (1.11-1 Debian:13)\n",
+    )
+    env.fake.script(["sudo", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get"])
+    env.steps()["apt"].apply()
+    assert any(a[0] == "sudo" and "install" in a for a in env.fake.argvs)
+
+
+def test_apt_simulation_failure_blocks_install(env: Env) -> None:
+    """試しが失敗したら（依存を解けないなど）、本当には入れない。"""
+    env.script_apt_installed(missing=("open-jtalk",))
+    env.fake.script(["apt-get", "-s", "install", "open-jtalk"], returncode=100)
+    env.fake.script(["sudo", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get"])
+    with pytest.raises(Exception):  # noqa: B017
+        env.steps()["apt"].apply()
+    assert not any(a[0] == "sudo" and "install" in a for a in env.fake.argvs)
 
 
 def test_apt_installs_when_simulation_is_clean(env: Env) -> None:
