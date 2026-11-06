@@ -166,9 +166,10 @@ def _build_probes(fake_hardware: bool) -> Probes:
 
 
 def _load_report(paths: Paths, registry: FeatureRegistry, config: Path | None) -> ConfigReport:
+    """self-check の設定の読み込み。確かめるだけなので、ファイルがなくても作らない。"""
     models = feature_models(cls.spec for cls in registry.feature_classes())
     try:
-        return ConfigLoader(paths, models).load(config)
+        return ConfigLoader(paths, models).load(config, create_missing=False)
     except OSError as error:  # 見本から作れないなど。中身（パス）は出さない
         logger.error("%s: %s", CONFIG_UNREADABLE, type(error).__name__)
         return ConfigReport(core=CoreConfig(), features={}, fatal_errors=[CONFIG_UNREADABLE])

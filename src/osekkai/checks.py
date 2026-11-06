@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
 # 固定の理由の文言
 REASON_CONFIG: Final = "設定の誤りがある（{count} 件）"
+REASON_CONFIG_MISSING: Final = "設定ファイルがない"
 REASON_NOT_WRITABLE: Final = "書き込めない"
 REASON_NOT_SYNCED: Final = "同期していない"
 REASON_NO_WAV: Final = "音声ができない"
@@ -63,6 +64,8 @@ def _failed(reason: str) -> CheckResult:
 
 def _check_config(ctx: CheckContext) -> CheckResult:
     report = ctx.report
+    if report.missing:
+        return _failed(REASON_CONFIG_MISSING)
     count = len(report.fatal_errors) + sum(len(e) for e in report.feature_errors.values())
     return _failed(config_reason(count)) if count else OK
 

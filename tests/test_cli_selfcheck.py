@@ -16,7 +16,7 @@ import pytest
 from osekkai import __main__ as cli
 from osekkai.adapters.fake.probes import FakeProbes
 from osekkai.core import Feature, FeatureConfig, FeatureContext, FeatureSpec, Resource
-from osekkai.core.config import ConfigLoader
+from osekkai.core.config import ConfigLoader, example_config_bytes
 from osekkai.core.instance_lock import InstanceLock
 from osekkai.core.paths import Paths
 from osekkai.core.registry import FeatureRegistry
@@ -46,8 +46,16 @@ BASE_NAMES = [
 HARDWARE_NAMES = ["core.lcd", "core.hat", "core.buttons", "core.servos"]
 
 
+def _place_config() -> None:
+    """self-check は設定ファイルを作らないので、見本から置いておく。"""
+    config = Paths().config_file
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_bytes(example_config_bytes())
+
+
 @pytest.fixture
 def probes(xdg_dirs: dict[str, Path], monkeypatch: pytest.MonkeyPatch) -> FakeProbes:
+    _place_config()
     fake = FakeProbes()
     monkeypatch.setattr(cli, "_build_probes", lambda fake_hardware: fake)
     return fake
@@ -116,6 +124,17 @@ def test_JSON_は共通の見本と同じキーで_よければ_0(
     assert all(row["status"] == "ok" for row in data["results"])
 
 
+def test_設定ファイルがなくても作らず_設定をだめにする(
+    probes: FakeProbes, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = Paths().config_file
+    config.unlink()
+    assert cli.main(["--self-check", "--fake-hardware", "--json"]) == 1
+    assert not config.exists()
+    rows = _by_name(_json(capsys))
+    assert rows["core.config"]["status"] == "failed"
+
+
 def test_だめがあれば_1_で_JSON_の_ok_は偽(
     probes: FakeProbes, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -152,6 +171,7 @@ def test_ロックを取れればハードを確かめ_終わったら放す(
 def test_ハードを確かめている間はロックを持つ(
     xdg_dirs: dict[str, Path], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    _place_config()
     held: list[bool] = []
 
     class _Probing(FakeProbes):
@@ -256,7 +276,9 @@ def test_デバイスも_Runtime_も作らない(
 def test_設定を読めなくても止まらず_設定の項目をだめにする(
     probes: FakeProbes, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    def _broken(self: ConfigLoader, override: Path | None = None) -> None:
+    def _broken(
+        self: ConfigLoader, override: Path | None = None, *, create_missing: bool = True
+    ) -> None:
         raise PermissionError("secret-path")
 
     monkeypatch.setattr(ConfigLoader, "load", _broken)
@@ -281,6 +303,7 @@ def test_表示とログに設定の値を出さない(
 def test_実機の確かめを読み込めなくてもハードでない項目は確かめる(
     xdg_dirs: dict[str, Path], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    _place_config()
     monkeypatch.setattr(cli, "PI_PROBES_MODULE", "osekkai.adapters.no_such_module")
     assert cli.main(["--self-check", "--json"]) == 1
     rows = _by_name(_json(capsys))

@@ -102,6 +102,7 @@ class ConfigReport:
     feature_errors: Mapping[str, Sequence[str]] = field(default_factory=dict)
     warnings: Sequence[str] = field(default_factory=list)
     created_from_example: bool = False
+    missing: bool = False  # 作らない読み方で、設定ファイルがなかった
 
 
 def example_config_bytes() -> bytes:
@@ -169,6 +170,9 @@ def _yaml_error_message(exc: yaml.YAMLError) -> str:
     return f"YAML: {type(exc).__name__}"
 
 
+MSG_CONFIG_MISSING = "設定ファイルがありません"
+
+
 class ConfigLoader:
     """設定ファイルを読み、基盤と機能の設定を検証して報告にまとめる。"""
 
@@ -176,13 +180,23 @@ class ConfigLoader:
         self._paths = paths
         self._feature_models = dict(feature_models)
 
-    def load(self, override: Path | None = None) -> ConfigReport:
+    def load(self, override: Path | None = None, *, create_missing: bool = True) -> ConfigReport:
+        """設定を読む。`create_missing` が偽なら（self-check）、ファイルがなくても作らない。"""
         created = False
         if override is not None:
             path = override
         else:
             path = self._paths.config_file
             if not path.exists():
+                if not create_missing:
+                    report = ConfigReport(
+                        core=CoreConfig(),
+                        features={},
+                        fatal_errors=[MSG_CONFIG_MISSING],
+                        missing=True,
+                    )
+                    _log(report)
+                    return report
                 self._create_from_example(path)
                 created = True
 

@@ -278,6 +278,7 @@ rover-deploy self-check
 ```
 
 - 実機の今の版（`~/osekkai-rover/current`）で self-check を行い、項目ごとに「よい・だめ・飛ばした」を出します。だめがあれば終了コード 1 です
+- self-check は確かめるだけで、ファイルを作りません。設定ファイル（`~/.config/osekkai/config.yaml`）がないときは「core.config: だめ（設定ファイルがない）」と出ます。設定ファイルは、新しい基盤を初めて起動したとき（最初の入れ替え）に見本から作られます
 - 実機で直接行うときは、`~/osekkai-rover/current/.venv/bin/python -m osekkai --self-check` です（`--json` で JSON、`--no-hardware` でハードの項目を飛ばします）
 - 新しい基盤のサービスが動いている間は、ハードの項目はハードに触らず、サービスの報告で判定します
 - サンプルが動いている間は、ハードの項目を確かめません

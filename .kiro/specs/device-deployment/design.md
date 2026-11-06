@@ -838,7 +838,7 @@ class SelfCheckRunner:
 
 | 項目 | hardware | 確かめること |
 |------|----------|---------------|
-| `core.config` | いいえ | 設定を読めて、致命の誤りがない。機能の節の誤りもだめにする（件数だけを出す） |
+| `core.config` | いいえ | 設定を読めて、致命の誤りがない。機能の節の誤りもだめにする（件数だけを出す）。設定ファイルがなければ作らずにだめ（`ConfigLoader.load(create_missing=False)`。validate-impl で決めた） |
 | `core.storage` | いいえ | 状態とキャッシュのディレクトリに、一時ファイルを書いて消せる |
 | `core.timesync` | いいえ | 時刻が同期している |
 | `core.voice_synth` | いいえ | 決まった短い文を一時ディレクトリに合成でき、WAV ができる（再生しない） |

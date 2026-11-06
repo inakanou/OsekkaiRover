@@ -10,6 +10,7 @@ import pytest
 from osekkai.adapters.fake.probes import FakeProbes
 from osekkai.checks import (
     REASON_CALIBRATION,
+    REASON_CONFIG_MISSING,
     REASON_NO_ANSWER,
     REASON_NO_SINK,
     REASON_NO_WAV,
@@ -129,6 +130,14 @@ def test_設定の致命の誤りはだめで件数だけを出す(tmp_path: Pat
     result = _one(FakeProbes(), _ctx(tmp_path, report=report), "core.config")
     assert result == CheckResult(CheckStatus.FAILED, "設定の誤りがある（2 件）")
     assert "secret" not in result.reason
+
+
+def test_設定ファイルがなければだめ(tmp_path: Path) -> None:
+    report = ConfigReport(
+        core=CoreConfig(), features={}, fatal_errors=["設定ファイルがありません"], missing=True
+    )
+    result = _one(FakeProbes(), _ctx(tmp_path, report=report), "core.config")
+    assert result == CheckResult(CheckStatus.FAILED, REASON_CONFIG_MISSING)
 
 
 def test_機能の節の誤りもだめにする(tmp_path: Path) -> None:
