@@ -1,9 +1,12 @@
-"""待機画面（IdleScreen）のテスト（1.2、9.1〜9.3、10.2）。"""
+"""待機画面（IdleScreen）のテスト（1.2、9.1〜9.3、10.2、device-deployment 5.5・7.1）。"""
 
+import json
 import threading
 import time
 from collections.abc import Callable, Iterator
 from datetime import datetime
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -15,6 +18,7 @@ from osekkai.core.display import DisplayService
 from osekkai.core.idle import IDLE_OWNER, IdleScreen, IdleState
 from osekkai.core.lcd_text import to_lcd_codes
 from osekkai.core.motion import MotionService
+from osekkai.core.notice import NOTICE_FILE_NAME, NoticeBoard
 from osekkai.core.types import Face, Glyph, Priority, Resource
 
 D = Resource.DISPLAY
@@ -396,3 +400,135 @@ def test_描けるようになった後にまた使えなくなれば警告し�
     idle.tick()
     idle.tick()
     assert _unavailable_warnings(caplog) == 2
+
+
+# --- 外からの知らせ（device-deployment 5.5、7.1） ---
+
+
+@pytest.fixture
+def notice_path(tmp_path: Path) -> Path:
+    return tmp_path / NOTICE_FILE_NAME
+
+
+@pytest.fixture
+def noticed(arbiter: Arbiter, clock: FakeClock, notice_path: Path) -> Iterator[IdleScreen]:
+    screen = IdleScreen(arbiter, clock, notices=NoticeBoard(notice_path, clock))
+    yield screen
+    screen.stop()
+
+
+def _put_notice(path: Path, rows: list[str | None], until: float | None) -> None:
+    data: dict[str, Any] = {"schema": 1, "rows": rows, "until": until}
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+
+_IDLE_ROWS = [_row("03/07 08:05"), _face_row(Face.NORMAL, 0)]
+
+
+def test_知らせがなければいつもの待機画面(noticed: IdleScreen, fakes: FakeDeviceSet) -> None:
+    noticed.start(run_thread=False)
+    assert fakes.display.rows == _IDLE_ROWS
+
+
+def test_知らせの2行を待機画面の行の代わりに出す(
+    noticed: IdleScreen, fakes: FakeDeviceSet, clock: FakeClock, notice_path: Path
+) -> None:
+    _put_notice(notice_path, ["v0.2.0", "ためし ふだん:さんぷる"], clock.now().timestamp() + 20)
+    noticed.start(run_thread=False)
+    assert fakes.display.rows == [_row("v0.2.0"), _row("ためし ふだん:さんぷる")]
+
+
+def test_片方の行だけの知らせは残りの行を待機画面のままにする(
+    noticed: IdleScreen, fakes: FakeDeviceSet, clock: FakeClock, notice_path: Path
+) -> None:
+    # 戻し忘れの知らせは 1 行目がなく、期限もない
+    _put_notice(notice_path, [None, "ためしのばん もどしてね"], None)
+    noticed.start(run_thread=False)
+    assert fakes.display.rows == [_row("03/07 08:05"), _row("ためしのばん もどしてね")]
+    clock.advance(60)
+    noticed.tick()
+    assert fakes.display.rows == [_row("03/07 08:06"), _row("ためしのばん もどしてね")]
+
+
+def test_1行目だけの知らせは顔を残す(
+    noticed: IdleScreen, fakes: FakeDeviceSet, notice_path: Path
+) -> None:
+    _put_notice(notice_path, ["v0.2.0", None], None)
+    noticed.start(run_thread=False)
+    assert fakes.display.rows == [_row("v0.2.0"), _face_row(Face.NORMAL, 0)]
+
+
+def test_描くたびに知らせを読み期限を過ぎると戻る(
+    noticed: IdleScreen, fakes: FakeDeviceSet, clock: FakeClock, notice_path: Path
+) -> None:
+    noticed.start(run_thread=False)
+    assert fakes.display.rows == _IDLE_ROWS
+    _put_notice(notice_path, ["v0.2.0", "ふだんのばん"], clock.now().timestamp() + 20)
+    noticed.tick()
+    assert fakes.display.rows == [_row("v0.2.0"), _row("ふだんのばん")]
+    clock.advance(19)
+    noticed.tick()
+    assert fakes.display.rows == [_row("v0.2.0"), _row("ふだんのばん")]
+    clock.advance(1)
+    noticed.tick()
+    assert fakes.display.rows == [_row("03/07 08:05"), _face_row(Face.NORMAL, 0)]
+
+
+def test_知らせを消すと待機画面に戻る(
+    noticed: IdleScreen, fakes: FakeDeviceSet, notice_path: Path
+) -> None:
+    _put_notice(notice_path, [None, "ためしのばん もどしてね"], None)
+    noticed.start(run_thread=False)
+    notice_path.unlink()
+    noticed.tick()
+    assert fakes.display.rows == _IDLE_ROWS
+
+
+def test_知らせの長い行は16セルに切り詰め濁点だけを残さない(
+    noticed: IdleScreen, fakes: FakeDeviceSet, notice_path: Path
+) -> None:
+    # 「が」は 2 セル。15 セルの後に置くと、16 セル目に濁点だけが残らないよう落とす
+    _put_notice(notice_path, ["a" * 15 + "が", "b" * 20], None)
+    noticed.start(run_thread=False)
+    assert fakes.display.rows == [_row("a" * 15), _row("b" * 16)]
+
+
+def test_機能が画面を借りている間は知らせを出さず返すと出す(
+    noticed: IdleScreen, arbiter: Arbiter, fakes: FakeDeviceSet, notice_path: Path
+) -> None:
+    noticed.start(run_thread=False)
+    lease = arbiter.acquire("feature", Priority.BACKGROUND, [D])
+    lease.display.show("ABC", "DEF")
+    _put_notice(notice_path, ["v0.2.0", "ふだんのばん"], None)
+    noticed.tick()
+    assert fakes.display.rows == [_row("ABC"), _row("DEF")]
+    lease.release()
+    assert fakes.display.rows == [_row("v0.2.0"), _row("ふだんのばん")]
+
+
+def test_静かな間は知らせも出さない(
+    noticed: IdleScreen, fakes: FakeDeviceSet, notice_path: Path
+) -> None:
+    _put_notice(notice_path, ["v0.2.0", "ふだんのばん"], None)
+    noticed.start(run_thread=False)
+    noticed.set_quiet(True)
+    assert fakes.display.rows == [_row(""), _row("")]
+
+
+def test_形が違う知らせは無視し警告は毎秒くり返さない(
+    noticed: IdleScreen,
+    fakes: FakeDeviceSet,
+    notice_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level("DEBUG", logger="osekkai.core.notice")
+    notice_path.write_text('{"schema": 1, "rows": ["ひみつ"], "until": null}', encoding="utf-8")
+    noticed.start(run_thread=False)
+    for _ in range(5):
+        noticed.tick()
+    assert fakes.display.rows == _IDLE_ROWS
+    warnings = [
+        r for r in caplog.records if r.name == "osekkai.core.notice" and r.levelname == "WARNING"
+    ]
+    assert len(warnings) == 1
+    assert all("ひみつ" not in r.getMessage() for r in caplog.records)

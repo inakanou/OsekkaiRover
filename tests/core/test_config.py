@@ -77,6 +77,25 @@ def test_ファイルがなければ見本から作って場所をログに残�
     assert report.features["greeting"] == GreetingConfig()
 
 
+def test_作らない読み方ではファイルがなくても作らない(xdg_dirs: dict[str, Path]) -> None:
+    """self-check の読み方。確かめるだけで、ファイルを作らない（device-deployment の実機確認）。"""
+    paths = Paths()
+    report = ConfigLoader(paths, MODELS).load(create_missing=False)
+    assert not paths.config_file.exists()
+    assert not paths.config_dir.exists()
+    assert report.missing is True
+    assert report.created_from_example is False
+    assert report.fatal_errors != []
+
+
+def test_作らない読み方でもファイルがあれば読む(xdg_dirs: dict[str, Path]) -> None:
+    paths = Paths()
+    _write(paths, "core:\n  cache_max_mb: 300\n")
+    report = ConfigLoader(paths, MODELS).load(create_missing=False)
+    assert report.missing is False
+    assert report.core.cache_max_mb == 300
+
+
 def test_ファイルがあれば見本から作らない(xdg_dirs: dict[str, Path]) -> None:
     paths = Paths()
     _write(paths, "core:\n  cache_max_mb: 300\n")

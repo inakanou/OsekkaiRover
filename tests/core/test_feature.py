@@ -38,6 +38,7 @@ from osekkai.core.lcd_text import to_lcd_codes
 from osekkai.core.motion import MotionService
 from osekkai.core.paths import Paths
 from osekkai.core.quiet import QuietMode
+from osekkai.core.selfcheck import Check, CheckContext, CheckResult, CheckStatus
 from osekkai.core.storage import StateStore
 
 START = datetime(2026, 3, 7, 8, 5, 30, tzinfo=JST)
@@ -172,6 +173,38 @@ def test_資源でないものを含む申告は誤り() -> None:
 
 def test_設定のモデルが基本の型を継いでいなければ誤り() -> None:
     spec = FeatureSpec("talk", Priority.INTERACTIVE, frozenset({V}), dict)  # type: ignore[arg-type]
+    assert validate_spec(spec) != []
+
+
+def test_申告の確認の項目は既定で空() -> None:
+    assert TALK.checks == ()
+
+
+def _ready(_ctx: CheckContext) -> CheckResult:
+    return CheckResult(CheckStatus.OK)
+
+
+def test_申告に確認の項目を並べられる() -> None:
+    checks = (Check("talk.ready", _ready), Check("talk.voice", _ready))
+    spec = FeatureSpec("talk", Priority.INTERACTIVE, frozenset({V}), checks=checks)
+    assert spec.checks == checks
+    assert validate_spec(spec) == []
+
+
+def test_ほかの名前で始まる確認の項目は誤り() -> None:
+    spec = FeatureSpec(
+        "talk", Priority.INTERACTIVE, frozenset({V}), checks=(Check("core.ready", _ready),)
+    )
+    assert validate_spec(spec) != []
+
+
+def test_確認の項目でないものを含む申告は誤り() -> None:
+    spec = FeatureSpec(
+        "talk",
+        Priority.INTERACTIVE,
+        frozenset({V}),
+        checks=("talk.ready",),  # type: ignore[arg-type]
+    )
     assert validate_spec(spec) != []
 
 

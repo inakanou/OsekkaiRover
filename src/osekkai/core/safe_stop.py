@@ -1,22 +1,31 @@
 """ExecStopPost 用の安全停止のコマンド（`python -m osekkai.core.safe_stop`）。
 
 設定と機能を読まない。モーターの方式によらず止まるよう、次を順に行う（2.1、2.4、8.4）。
-各段階の失敗は型の名前だけを記録して次へ進む。終了コードはいつも 0。
+各段階の失敗は型の名前だけを記録して次へ進む。
 1. モーターに関わりうる PWM（P12〜P15）をすべて 0 にする
 2. 方向ピン（D4、D5）を Low にする
 3. マイコンをリセットする
 実機のアダプタやハードのライブラリがなければ（PC）、何もせずに終える。
 2 つ目の起動の後（`EXIT_STATUS=75`）と、ロックをほかが持っているときは、
 動いている方を止めないように何もしない。
+
+終了コード:
+- 付けずに呼ぶ（ExecStopPost）: systemd の停止を乱さないよう、いつも 0。
+- `--strict`（入れ替えの道具の halt）: モーターを止めたと確かめられたときだけ 0、
+  それ以外は 1。段階の失敗に加えて、ハードに触らずに終えたとき（ロックをほかが
+  持っている・`EXIT_STATUS=75`・実機のアダプタがない）も 1 にする。道具は両方の
+  ユニットを止めてから呼ぶので、ロックが持たれていれば、まだ何かが動いている。
 """
 
 from __future__ import annotations
 
+import argparse
 import contextlib
 import fcntl
 import logging
 import os
-from collections.abc import Callable, Iterator, Mapping
+import sys
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Final, Protocol
 
@@ -65,21 +74,28 @@ def _hold_lock_if_free(path: Path) -> Iterator[bool]:
 
 
 def run_safe_stop(
-    environ: Mapping[str, str], open_hardware: HardwareOpener | None = None
+    environ: Mapping[str, str],
+    open_hardware: HardwareOpener | None = None,
+    *,
+    strict: bool = False,
 ) -> list[str]:
-    """安全停止を行い、失敗した段階の名前を返す。"""
+    """安全停止を行い、失敗した段階の名前を返す。
+
+    strict のときは、ハードに触らずに終えた理由（"exit_status"・"lock"・"adapter"）も
+    失敗として返す。モーターを止めたと確かめられていないため。
+    """
     if environ.get("EXIT_STATUS") == ALREADY_RUNNING_STATUS:
         logger.info("すでに動いている方がいるので、安全停止を省きます")
-        return []
+        return ["exit_status"] if strict else []
     with _hold_lock_if_free(Paths(environ).lock_file) as free:
         if not free:
             logger.info("ほかのプロセスが動いているので、安全停止を省きます")
-            return []
+            return ["lock"] if strict else []
         try:
             hardware = (open_hardware or _open_pi_hardware)()
         except ImportError:
             logger.info("実機のアダプタがないので、安全停止を省きます")
-            return []
+            return ["adapter"] if strict else []
         except Exception as error:
             logger.warning("安全停止のハードを開けませんでした: %s", type(error).__name__)
             return ["open"]
@@ -106,18 +122,37 @@ def run_safe_stop(
         return failed
 
 
+def _parse_args(argv: Sequence[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="python -m osekkai.core.safe_stop", description="モーターを安全に止める"
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="モーターを止めたと確かめられなければ終了コード 1 で終える",
+    )
+    return parser.parse_args(list(argv))
+
+
 def main(
-    environ: Mapping[str, str] | None = None, open_hardware: HardwareOpener | None = None
+    environ: Mapping[str, str] | None = None,
+    open_hardware: HardwareOpener | None = None,
+    argv: Sequence[str] = (),
 ) -> int:
-    """コマンドの入口。systemd の停止を乱さないよう、いつも 0 で終える。"""
+    """コマンドの入口。--strict がなければ、systemd の停止を乱さないよう、いつも 0 で終える。"""
+    strict = _parse_args(argv).strict
     env = os.environ if environ is None else environ
     try:
-        run_safe_stop(env, open_hardware)
+        failed = run_safe_stop(env, open_hardware, strict=strict)
     except Exception as error:
         logger.error("安全停止が途中で止まりました: %s", type(error).__name__)
+        failed = ["unexpected"]
+    if strict and failed:
+        logger.warning("モーターを止めたと確かめられませんでした: %s", ", ".join(failed))
+        return 1
     return 0
 
 
 if __name__ == "__main__":
     configure_logging(env=os.environ)
-    raise SystemExit(main())
+    raise SystemExit(main(argv=sys.argv[1:]))

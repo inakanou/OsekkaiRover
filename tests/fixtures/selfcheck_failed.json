@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "ok": false,
+  "results": [
+    {"name": "core.config", "status": "ok", "reason": ""},
+    {"name": "core.lcd", "status": "failed", "reason": "応答がない"},
+    {"name": "core.servos", "status": "skipped", "reason": "ほかが動いている"}
+  ]
+}

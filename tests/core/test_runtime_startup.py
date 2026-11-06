@@ -23,11 +23,13 @@ from osekkai.core.runtime import (
     ALREADY_RUNNING_MESSAGE,
     CONFIG_ERROR_TEXT,
     STARTUP_VOICE,
+    VERSION_LOG_PREFIX,
     ExitCode,
     Runtime,
     within_hours,
 )
 from osekkai.core.supervisor import FeatureState
+from shared_fixtures import version_log_prefix
 
 WAIT_S = 3.0
 
@@ -234,6 +236,22 @@ def test_版をログに出す(
     with caplog.at_level(logging.INFO, logger="osekkai"):
         runtime.start()
     assert "v9.9.9-test" in caplog.text
+
+
+def test_版のログの文言の頭は共通の見本と同じ(
+    fakes: FakeDeviceSet,
+    clock: FakeClock,
+    make_runtime: Callable[..., Runtime],
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 配置の道具はこの文言でログから版を探す（device-deployment 4.5）
+    assert version_log_prefix() == VERSION_LOG_PREFIX
+    monkeypatch.setattr("osekkai.version.get_version", lambda: "v9.9.9-test")
+    runtime = make_runtime(fakes, clock, [])
+    with caplog.at_level(logging.INFO, logger="osekkai.core.runtime"):
+        runtime.start()
+    assert f"{VERSION_LOG_PREFIX}v9.9.9-test" in caplog.messages
 
 
 def test_LCDが使えなくてもほかの機能は開始し使えないデバイスをログに出す(

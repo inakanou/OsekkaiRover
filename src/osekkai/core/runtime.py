@@ -2,7 +2,11 @@
 
 単一の実行のロック → 版のログ → 設定 → 使えないデバイスのログ → HAT のリセット →
 サービスの組み立て → 中立の姿勢 → 基盤のスレッド（イベント・ボタン・同期の見張り・待機画面）→
-設定の誤りの表示 → 機能の開始 → 起動の声、の順に行う。
+設定の誤りの表示 → 機能の開始 → 状態のファイル → 起動の声、の順に行う。
+
+- 待機画面には、外から置かれた知らせ（`notice.json`）を渡す（device-deployment 7.1）
+- 状態のファイル（`status.json`）は、機能の開始の後に書き始め、停止では最初に止めて消す
+  （device-deployment 2.1、2.2、6.7。止まっている途中を「作業中でない」と見せない）
 
 - 設定の誤りの表示は、優先度 `CONFIG_NOTICE_PRIORITY`（待機画面より 1 つ上で、どの機能より下）の
   内部の持ち主 `core.config` が DISPLAY を借りて出す。待機画面より先に借りるので、
@@ -27,6 +31,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import signal
 import sys
 import threading
@@ -50,9 +55,16 @@ from osekkai.core.feature import CoreFeatureContext, FeatureContext, FeatureSpec
 from osekkai.core.idle import IdleScreen
 from osekkai.core.instance_lock import InstanceLock
 from osekkai.core.motion import MotionService
+from osekkai.core.notice import NOTICE_FILE_NAME, NoticeBoard
 from osekkai.core.ports import Devices, Unavailable
 from osekkai.core.quiet import QuietMode
 from osekkai.core.safety import SafetyStop
+from osekkai.core.status import (
+    STATUS_FILE_NAME,
+    ServiceSnapshot,
+    StatusReporter,
+    build_snapshot,
+)
 from osekkai.core.storage import StateStore
 from osekkai.core.supervisor import THREAD_PREFIX as FEATURE_THREAD_PREFIX
 from osekkai.core.supervisor import FeatureSupervisor
@@ -68,6 +80,8 @@ logger = logging.getLogger(__name__)
 
 ALREADY_RUNNING_MESSAGE: Final = "すでに動いています"
 STARTUP_VOICE: Final = "おせっかいローバー、きどう！"
+# 版のログの文言の頭。配置の道具はログでこの文言を探す（共通の見本 version_log.json と同じ）
+VERSION_LOG_PREFIX: Final = "版: "
 CONFIG_ERROR_TEXT: Final = "ｾｯﾃｲ ｴﾗｰ"
 CONFIG_NOTICE_OWNER: Final = "core.config"
 CONFIG_NOTICE_PRIORITY: Final = Priority.IDLE + 1
@@ -143,6 +157,7 @@ class Runtime:
         self.quiet: QuietMode | None = None
         self.safety: SafetyStop | None = None
         self.supervisor: FeatureSupervisor | None = None
+        self.status: StatusReporter | None = None
         self.started_features: list[str] = []
         self._notice: Lease | None = None
         self._notice_lock = threading.Lock()
@@ -266,7 +281,8 @@ class Runtime:
             # デバイスには触らない（1.7）
             return report_already_running()
         self._started = True
-        logger.info("版: %s", version.get_version())
+        running_version = version.get_version()
+        logger.info(VERSION_LOG_PREFIX + "%s", running_version)
 
         report = self._load_config()
         self.report = report
@@ -285,7 +301,9 @@ class Runtime:
         arbiter = Arbiter(clock, motion, voice=voice, display=display, led=led, buttons=router)
         bus = EventBus()
         monitor = TimeSyncMonitor(clock, bus)
-        idle = IdleScreen(arbiter, clock)
+        # 外から置かれた知らせ（版・戻し忘れ）を待機画面に出す
+        notices = NoticeBoard(self._paths.runtime_dir / NOTICE_FILE_NAME, clock)
+        idle = IdleScreen(arbiter, clock, notices=notices)
         quiet = QuietMode(idle, bus, StateStore.for_feature(self._paths, "core", clock), clock)
         safety = SafetyStop(motion, display, led)
         self.motion, self.voice, self.arbiter, self.router = motion, voice, arbiter, router
@@ -335,11 +353,43 @@ class Runtime:
         if not self.started_features:
             logger.info("開始した機能はありません")
 
+        # 機能の開始の後に、状態のファイルを書き始める
+        self._start_status(arbiter, motion, running_version)
+
         if report.feature_errors and not report.fatal_errors:
             self._schedule_config_error_end()
 
         self._startup_voice(core)
         return None
+
+    def _start_status(self, arbiter: Arbiter, motion: MotionService, running_version: str) -> None:
+        unavailable = tuple(self._unavailable_names())
+        features = tuple(self.started_features)
+        pid = os.getpid()
+        clock = self._clock
+
+        def snapshot() -> ServiceSnapshot:
+            return build_snapshot(
+                arbiter=arbiter,
+                motion=motion,
+                version=running_version,
+                pid=pid,
+                clock=clock,
+                unavailable=unavailable,
+                features=features,
+            )
+
+        reporter = StatusReporter(self._paths.runtime_dir / STATUS_FILE_NAME, snapshot)
+        self.status = reporter
+        reporter.start()
+
+    def _unavailable_names(self) -> list[str]:
+        names: list[str] = []
+        for field in fields(Devices):
+            device = getattr(self._devices, field.name)
+            if isinstance(device, Unavailable):
+                names.append(device.device)
+        return names
 
     def _load_config(self) -> ConfigReport:
         models = feature_models(cls.spec for cls in self._registry.feature_classes())
@@ -431,6 +481,10 @@ class Runtime:
         if not self._started:
             return
         self._started = False
+        if self.status is not None:
+            # 最初に止めて消す。止まっている途中を「作業中でない」と見せない。
+            # Arbiter のロックを持たずに呼ぶ（報告のスレッドが holder() を待つため）
+            self._step("status", self.status.stop)
         if self.supervisor is not None:
             self._step("features", lambda: self._stop_features(budget))
         if self.safety is not None:

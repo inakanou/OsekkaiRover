@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "ok": true,
+  "results": [
+    {"name": "core.config", "status": "ok", "reason": ""},
+    {"name": "core.lcd", "status": "ok", "reason": "サービスの報告"},
+    {"name": "demo.ready", "status": "ok", "reason": ""}
+  ]
+}

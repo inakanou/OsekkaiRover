@@ -373,3 +373,85 @@ def test_首だけを正面に戻してもステアリングは変えない(
     motion.home_neck()
     assert fakes.servos.angles == {"pan": 0.0, "tilt": 0.0, "steering": 20.0}
     assert fakes.motors.speeds == (50, 50)
+
+
+# --- 走行中の判定（device-deployment 2.1） ---
+
+
+def _driving(motion: MotionService) -> bool:
+    # 呼ぶたびに読み直す（型の確認が値を決めつけないように関数を通す）
+    return motion.driving
+
+
+def test_走行中は最後に送った速さが0でないか(fakes: FakeDeviceSet, clock: FakeClock) -> None:
+    motion = _service(fakes, clock)
+    assert _driving(motion) is False
+    motion.drive(0, 40)
+    assert _driving(motion) is True
+    motion.drive(10, -20)
+    assert _driving(motion) is True
+    motion.stop()
+    assert _driving(motion) is False
+    motion.drive(0, 0)
+    assert _driving(motion) is False
+
+
+def test_走行中は範囲に収めた後の速さで決まる(fakes: FakeDeviceSet, clock: FakeClock) -> None:
+    motion = _service(fakes, clock)
+    motion.drive(0, 150)
+    assert _driving(motion) is True
+    assert fakes.motors.speeds == (100, 100)
+
+
+def test_非常停止が成功すると走行中でなくなる(fakes: FakeDeviceSet, clock: FakeClock) -> None:
+    motion = _service(fakes, clock)
+    motion.drive(0, 40)
+    motion.emergency_stop()
+    assert _driving(motion) is False
+
+
+def test_非常停止が失敗すると走行中のまま(fakes: FakeDeviceSet, clock: FakeClock) -> None:
+    motion = _service(fakes, clock)
+    motion.drive(0, 40)
+    fakes.motors.fail_on.add("stop_now")
+    motion.emergency_stop()
+    assert _driving(motion) is True
+
+
+def test_速さを書けなかったときの走行中の判定(fakes: FakeDeviceSet, clock: FakeClock) -> None:
+    motion = _service(fakes, clock)
+    fakes.motors.fail_on.add("set_speeds")
+    # 回り始めたかもしれないので走行中とみなす
+    with pytest.raises(DeviceUnavailable):
+        motion.drive(0, 40)
+    assert _driving(motion) is True
+    # 止められたか分からないので走行中のまま
+    with pytest.raises(DeviceUnavailable):
+        motion.stop()
+    assert _driving(motion) is True
+    fakes.motors.fail_on.clear()
+    motion.stop()
+    assert _driving(motion) is False
+
+
+def test_ダンスでタイヤを回した後は走行中でなくなる(fakes: FakeDeviceSet, clock: FakeClock) -> None:
+    motion = _service(fakes, clock, MotionSettings(allow_drive_in_dance=True))
+    motion.dance(drive=True, should_continue=_always)
+    assert _driving(motion) is False
+
+
+def test_書き込みの途中に非常停止が割り込んでも走行中のまま(
+    fakes: FakeDeviceSet, clock: FakeClock
+) -> None:
+    motion = _service(fakes, clock)
+    original = fakes.motors.set_speeds
+
+    def set_speeds_after_emergency(left: int, right: int) -> None:
+        # 非常停止はロックを取らないので、速さを書く直前に割り込める
+        motion.emergency_stop()
+        original(left, right)
+
+    fakes.motors.set_speeds = set_speeds_after_emergency  # type: ignore[method-assign]
+    motion.drive(0, 40)
+    assert fakes.motors.speeds == (40, 40)
+    assert _driving(motion) is True

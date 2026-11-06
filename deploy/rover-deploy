@@ -1,0 +1,14 @@
+#!/usr/bin/env python3
+"""開発 PC の入口。`rover_deploy.devcli` を呼ぶ。標準ライブラリだけで動く。"""
+
+import sys
+from pathlib import Path
+
+if sys.version_info < (3, 11):  # noqa: UP036
+    sys.exit("rover-deploy: Python 3.11 以上が要ります")
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from rover_deploy.devcli import main  # noqa: E402
+
+sys.exit(main())

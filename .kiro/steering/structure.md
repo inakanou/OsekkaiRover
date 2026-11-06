@@ -42,14 +42,24 @@
 ### テスト
 **Location**: `tests/`（`src/osekkai/` と同じ構成）
 **Purpose**: `tests/core/`、`tests/features/routine/` など。共通の偽物は `osekkai.adapters.fake` を使い、テスト専用の補助は `tests/conftest.py` に置く
+- `tests/deploy/`: 配置の道具のテスト。外のコマンドは偽の Runner（`tests/deploy/fake_runner.py`）と一時ディレクトリで確かめ、実機には触れない
+- `tests/fixtures/`: 基盤と道具が共有するファイル（`status.json`・`notice.json`・self-check の JSON・版のログ）の見本。基盤のテストと道具のテストの両方が読み、形のずれを防ぐ（`tests/shared_fixtures.py` で読む）
+- `tests/` には `__init__.py` がないので、別のディレクトリでも同じ名前のテストのファイルを置かない
 
 ### 設定の見本
 **Location**: `config/`
 **Purpose**: 設定の**見本だけ**を置く（例: `config/osekkai.example.yaml`）。実際の設定はリポジトリの外（XDG のディレクトリ）に置く
 
-### 運用
-**Location**: `deploy/`（デプロイ・初期設定・systemd のユニット）、`scripts/`（開発用のスクリプト）
-**Purpose**: 実機への配置と開発の補助。詳細は `device-deployment` の設計で決める
+### 運用（実機への配置）
+**Location**: `deploy/`（`device-deployment`）、`scripts/`（開発用のスクリプト）、`docs/deploy.md`（手順書）
+**Purpose**: 開発 PC から実機に版を入れ、確かめ、だめなら戻す道具と、systemd のユニット
+- `deploy/rover-deploy`: 開発 PC の入口（python3 の実行ファイル）。`rover_deploy.devcli` を呼ぶ
+- `deploy/rover_deploy/`: 道具のパッケージ。開発 PC の側と実機の側の両方を 1 つにまとめ、開発 PC から実機の `~/osekkai-rover/tool/` に写して `python3 -m rover_deploy.agent <sub>` で動かす
+  - 開発 PC の側: `devcli.py`（サブコマンドの表と流れ）、`devconfig.py`（利用者の設定）、`refs.py`（タグとブランチの解決）、`remote.py`（ssh）
+  - 実機の側: `agent.py`（サブコマンドの入口。標準出力に JSON を 1 つ）、`transaction.py`（入れ替えの流れ）、`releases.py`（版のディレクトリ）、`backups.py`、`verify.py`（入れた後の確認）、`service_status.py`（安全の判断）、`provision.py`（初期設定）、`notices.py`、`calibration.py`、`state.py`（状態・記録・ロック）、`layout.py`（実機の置き場所は全部ここから取る）
+  - 両側: `common.py`（型・終了コード・版の表示）、`system.py`（外のコマンドの口 Runner と、systemctl・journalctl・git の薄い包み）
+  - サブコマンドを足すときは、`devcli._subcommands()` と `agent._handlers()` の表に足す
+- `deploy/systemd/`: `osekkai.service`（新しい基盤。`~/osekkai-rover/current` を動かす。サンプルの `osekkai-rover.service` と `Conflicts=`）、戻し忘れの `osekkai-trial-reminder.service`・`.timer`
 
 ## Naming Conventions
 

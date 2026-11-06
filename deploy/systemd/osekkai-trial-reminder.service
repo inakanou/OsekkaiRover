@@ -1,0 +1,16 @@
+# 試しの版の戻し忘れの確認（systemd のユーザーサービス）
+#
+# osekkai-trial-reminder.timer から起こす。試しの版が決めた時間より長く入っていれば、
+# 待機画面と journal に知らせる（判断は道具の agent remind が行う）。
+# 道具は開発 PC から ~/osekkai-rover/tool/ に写したもので、システムの python3 の
+# 標準ライブラリだけで動く。
+
+[Unit]
+Description=Osekkai Rover trial reminder
+
+[Service]
+Type=oneshot
+# python -m は今のディレクトリから rover_deploy を探す
+WorkingDirectory=%h/osekkai-rover/tool
+ExecStart=/usr/bin/python3 -m rover_deploy.agent remind
+Environment=PYTHONUNBUFFERED=1

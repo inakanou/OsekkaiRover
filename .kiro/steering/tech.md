@@ -49,6 +49,17 @@ features/* ──(Feature の契約・ポート)──> core ──(ポート)�
 
 ハードのライブラリ（`smbus2`、`lgpio`、`numpy`、`picamera2`、`faster_whisper`、`anthropic`、`cv2`）は、**アダプタのモジュールの中だけ**で読み込みます。基盤・機能・テストからは読み込みません（CI で読み込めない、または読み込みに時間がかかるため）。
 
+### 配置の道具（`deploy/rover_deploy/`）の決まり
+
+- **標準ライブラリだけ**で書く。Python 3.11 以上で動くこと（実機ではシステムの `python3` で、仮想環境なしに動く）
+- **`osekkai` のパッケージを読み込まない**（テストで縛っている）。基盤とは次のものだけでつながる
+  - ファイル: 基盤が書く `$XDG_RUNTIME_DIR/osekkai/status.json`（走行中・作業中・心拍）と、道具が書く `notice.json`（LCD の知らせ）。形は `tests/fixtures/` の見本にそろえる
+  - コマンド: 版の中の `.venv/bin/python -m osekkai --self-check --json` と `-m osekkai.core.safe_stop --strict` をサブプロセスで呼ぶ
+- 外のコマンドは `system.Runner` で呼び、テストでは偽の Runner に差し替える
+- 実機の接続先（ホスト名・IP アドレス・ユーザー名）はリポジトリに書かない。開発 PC の `~/.ssh/config` と `~/.config/osekkai-deploy/config.toml` から読む
+- 表示と記録には、決まった文言・手順の名前・例外の型の名前だけを出す。外のコマンドの標準エラー・設定の値・記録の中身は出さない
+- 終了コード: 0 成功、10 中止（実機は変えていない）、11 切り戻し、12 停止（人の手が要る）、13 結果が分からない（接続が切れた）
+
 ## Development Standards
 
 ### Type Safety
@@ -80,6 +91,7 @@ features/* ──(Feature の契約・ポート)──> core ──(ポート)�
 # Lint: ruff check . && ruff format --check .
 # Type: mypy
 # Test: pytest
+# Deploy: deploy/rover-deploy deploy <タグかブランチ>   # 開発 PC から実機へ（docs/deploy.md）
 ```
 （コマンドの最終形は `rover-core` の設計で決める）
 
@@ -100,4 +112,4 @@ features/* ──(Feature の契約・ポート)──> core ──(ポート)�
 
 ---
 _Document standards and patterns, not every dependency_
-_updated_at: 2026-11-03（rover-core の設計: HAT の自前の部品、pydantic v2、ExecStopPost）_
+_updated_at: 2026-11-05（device-deployment: 配置の道具の決まり）_

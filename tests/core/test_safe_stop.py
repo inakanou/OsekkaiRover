@@ -192,3 +192,112 @@ def test_PCではコマンドが何もせずに終了コード0で終わる(tmp_
     )
     assert result.returncode == 0, result.stderr
     assert not (tmp_path / "run").exists()
+
+
+def _hold_lock(env: dict[str, str]) -> int:
+    lock_file = Paths(env).lock_file
+    lock_file.parent.mkdir(parents=True)
+    fd = os.open(lock_file, os.O_RDWR | os.O_CREAT, 0o600)
+    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    return fd
+
+
+def test_strictはすべての段階が済めば終了コード0(tmp_path: Path) -> None:
+    calls: list[str] = []
+    code = safe_stop.main(environ=_env(tmp_path), open_hardware=_opener(calls), argv=["--strict"])
+    assert code == 0
+    assert calls == ["open", "pwm", "pins", "reset", "close"]
+
+
+@pytest.mark.parametrize("stage", ["pwm", "pins", "reset"])
+def test_strictは段階の失敗があれば終了コード1(tmp_path: Path, stage: str) -> None:
+    calls: list[str] = []
+    code = safe_stop.main(
+        environ=_env(tmp_path), open_hardware=_opener(calls, {stage}), argv=["--strict"]
+    )
+    assert code == 1
+    assert calls == ["open", "pwm", "pins", "reset", "close"]  # 失敗しても次の段階へ進む
+
+
+def test_strictなしは段階の失敗があっても終了コード0(tmp_path: Path) -> None:
+    calls: list[str] = []
+    code = safe_stop.main(environ=_env(tmp_path), open_hardware=_opener(calls, {"pwm"}), argv=[])
+    assert code == 0
+
+
+def test_strictはハードを開けなければ終了コード1(tmp_path: Path) -> None:
+    def broken() -> FakeHardware:
+        raise OSError("boom")
+
+    assert safe_stop.main(environ=_env(tmp_path), open_hardware=broken, argv=["--strict"]) == 1
+    assert safe_stop.main(environ=_env(tmp_path), open_hardware=broken, argv=[]) == 0
+
+
+def test_strictはロックをほかが持っていれば触らずに終了コード1(tmp_path: Path) -> None:
+    # 両方のユニットを止めた後にロックが持たれているなら、まだ何かが動いている
+    env = _env(tmp_path)
+    fd = _hold_lock(env)
+    try:
+        calls: list[str] = []
+        assert safe_stop.main(environ=env, open_hardware=_opener(calls), argv=["--strict"]) == 1
+        assert safe_stop.main(environ=env, open_hardware=_opener(calls), argv=[]) == 0
+        assert calls == []
+    finally:
+        os.close(fd)
+
+
+def test_strictは実機のアダプタがなければ終了コード1(tmp_path: Path) -> None:
+    def missing() -> FakeHardware:
+        raise ImportError("No module named 'lgpio'")
+
+    assert safe_stop.main(environ=_env(tmp_path), open_hardware=missing, argv=["--strict"]) == 1
+    assert safe_stop.main(environ=_env(tmp_path), open_hardware=missing, argv=[]) == 0
+
+
+def test_strictは終了コード75の後で省いても終了コード1(tmp_path: Path) -> None:
+    calls: list[str] = []
+    env = _env(tmp_path, EXIT_STATUS="75")
+    assert safe_stop.main(environ=env, open_hardware=_opener(calls), argv=["--strict"]) == 1
+    assert safe_stop.main(environ=env, open_hardware=_opener(calls), argv=[]) == 0
+    assert calls == []
+
+
+def test_strictのログは段階の名前と型の名前だけ(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    calls: list[str] = []
+    with caplog.at_level(logging.INFO, logger="osekkai"):
+        safe_stop.main(
+            environ=_env(tmp_path), open_hardware=_opener(calls, {"reset"}), argv=["--strict"]
+        )
+    assert "reset" in caplog.text
+    assert "OSError" in caplog.text
+    assert "secret detail" not in caplog.text
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("lgpio") is not None or importlib.util.find_spec("smbus2") is not None,
+    reason="ハードのライブラリが入っている環境では PC の振る舞いを確かめられない",
+)
+def test_PCではstrictのコマンドが確かめられずに終了コード1で終わる(tmp_path: Path) -> None:
+    env = {**os.environ, "XDG_RUNTIME_DIR": str(tmp_path / "run")}
+    env.pop("EXIT_STATUS", None)
+    result = subprocess.run(
+        [sys.executable, "-m", "osekkai.core.safe_stop", "--strict"],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 1, result.stderr
+    assert not (tmp_path / "run").exists()
+
+
+def test_strictは途中で止まれば終了コード1(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def crash(*_args: object, **_kwargs: object) -> list[str]:
+        raise RuntimeError("secret detail")
+
+    monkeypatch.setattr(safe_stop, "run_safe_stop", crash)
+    assert safe_stop.main(environ=_env(tmp_path), argv=["--strict"]) == 1
+    assert safe_stop.main(environ=_env(tmp_path), argv=[]) == 0

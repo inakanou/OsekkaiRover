@@ -44,7 +44,7 @@ where = ["src"]
 [tool.ruff]
 target-version = "py311"
 line-length = 100
-src = ["src", "tests"]
+src = ["src", "deploy", "tests"]
 # 仕様書と skill の Markdown にある下書きのコードは整えない
 extend-exclude = [".kiro", ".claude"]
 
@@ -52,12 +52,15 @@ extend-exclude = [".kiro", ".claude"]
 select = ["E", "W", "F", "I", "B", "UP", "SIM"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["osekkai"]
+known-first-party = ["osekkai", "rover_deploy"]
 
 [tool.mypy]
 python_version = "3.11"
-files = ["src/osekkai", "tests"]
-mypy_path = "src"
+files = ["src/osekkai", "deploy", "tests"]
+mypy_path = ["src", "deploy"]
+# tests に __init__.py がないので、2 つ目の conftest は同じ名前のモジュールとして断られる。
+# 偽の Runner の本体（tests/deploy/fake_runner.py）は型を見る
+exclude = ["^tests/deploy/conftest\\.py$"]
 strict = true
 warn_unreachable = true
 
@@ -68,4 +71,6 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# 配置の道具（deploy/rover_deploy）は osekkai のパッケージの外にある
+pythonpath = ["deploy"]
 addopts = "-ra"
