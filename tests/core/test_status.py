@@ -190,6 +190,25 @@ def test_見守りの帯の機能が借りているだけなら作業中に数�
     assert snapshot.busy == {"voice": "routine"}
 
 
+def test_見守りの帯でも走行の資源を借りていれば作業中に数える(
+    fakes: FakeDeviceSet, clock: FakeClock
+) -> None:
+    motion = MotionService(fakes.servos, fakes.motors, MotionSettings(), clock)
+    arbiter = Arbiter(clock, motion)
+    arbiter.acquire("patrol", Priority.BACKGROUND, [Resource.DRIVE, Resource.NECK])
+
+    snapshot = build_snapshot(
+        arbiter=arbiter,
+        motion=motion,
+        version="v0.2.0",
+        pid=1,
+        clock=clock,
+        unavailable=[],
+        features=[],
+    )
+    assert snapshot.busy == {"drive": "patrol"}
+
+
 # --- StatusReporter ---
 
 
