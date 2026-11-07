@@ -60,6 +60,7 @@ def test_節がなければ既定値で読める(xdg_dirs: dict[str, Path]) -> N
     assert config.wake.weekday is None
     assert config.wake.holiday is None
     assert config.keep_days == 90
+    assert config.sleep_wait_min == 30
     assert config.tasks == []
 
 
@@ -74,6 +75,7 @@ def test_正しい設定は既定値つきで読める(xdg_dirs: dict[str, Path]
         extra_holidays=["2026-05-01"],
         wake={"weekday": "06:30", "holiday": "07:30"},
         keep_days=30,
+        sleep_wait_min=0,
     )
     report = _load(xdg_dirs, section)
     assert _errors(report) == []
@@ -85,6 +87,7 @@ def test_正しい設定は既定値つきで読める(xdg_dirs: dict[str, Path]
     assert config.wake.weekday == time(6, 30)
     assert config.wake.holiday == time(7, 30)
     assert config.keep_days == 30
+    assert config.sleep_wait_min == 0
     wash, teeth, sleep = config.tasks
     assert (wash.id, wash.at, wash.after, wash.days) == ("wash", time(7, 0), None, "weekday")
     assert wash.notice == "もうすぐ かおを あらうよ"
@@ -517,3 +520,10 @@ def test_秒が0の時刻は読める() -> None:
     config = build_config([task_dict("a", at="07:00:00")], wake={"weekday": "06:30:00"})
     assert config.tasks[0].at == time(7, 0)
     assert config.wake.weekday == time(6, 30)
+
+
+@pytest.mark.parametrize("minutes", [-1, 56])
+def test_寝るタスクの待つ長さは0から55分まで(minutes: int) -> None:
+    # 寝るタスクを始められる窓（60 分）より短くする（6.11）
+    with pytest.raises(ValidationError):
+        build_config([], sleep_wait_min=minutes)

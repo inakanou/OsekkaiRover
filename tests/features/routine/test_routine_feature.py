@@ -460,7 +460,7 @@ def _asleep_status() -> bool:
     return status.asleep
 
 
-def test_夜のタスクが長引いても寝るタスクの時刻に割り込んでおやすみに入り画面が消える(
+def test_夜のタスクが長引いたら寝るタスクは30分待ってから割り込んでおやすみに入り画面が消える(
     kit: Kit, clock: FakeClock
 ) -> None:
     config = _night()
@@ -480,7 +480,9 @@ def test_夜のタスクが長引いても寝るタスクの時刻に割り込�
     assert book.outcome(TODAY, "toys") is TaskResult.INTERRUPTED
     assert book.outcome(TODAY, "sleep") is TaskResult.DONE
     ended = book.ended_at(TODAY, "toys")
-    assert ended is not None and AT_20 <= ended < AT_20 + timedelta(minutes=1)
+    # 6.1、6.11: 20:00 の寝るタスクは、長引くタスクを 30 分待ってから割り込む
+    wait = timedelta(minutes=30)
+    assert ended is not None and AT_20 + wait <= ended < AT_20 + wait + timedelta(minutes=1)
     io = kit.ios[-1]
     assert SLEEP_SPEECH in io.spoken()
     # 首を下に向け、「ｵﾔｽﾐ」と眠った顔を 3 秒見せる（6.3）

@@ -1,4 +1,4 @@
-"""タスクと予告を始める判定（3.1〜3.6、3.10、5.1〜5.4、6.1、6.4〜6.10、7.1〜7.4、9.4）。
+"""タスクと予告を始める判定（3.1〜3.6、3.10、5.1〜5.4、6.1、6.4〜6.11、7.1〜7.4、9.4）。
 
 今の時刻（タイムゾーン付き）と記録の読み取りだけから、何をするかを決める。
 資源・時計・保存には触れない。日の区切りは、今の時刻のタイムゾーンの日付で決める。
@@ -90,6 +90,8 @@ class Scheduler:
         if self.in_sleep_period(now, records):
             return None
         due = self._due_tasks(now, records)
+        # 寝るタスクは、待つ間はほかのタスクの後に回す（6.1）
+        due.sort(key=lambda d: d.task.sleep and self._sleep_waiting(d, now))
         return due[0] if due else None
 
     def cut_in(
@@ -98,7 +100,8 @@ class Scheduler:
         """今のタスクに割り込むタスク（5.1〜5.4、6.1）。設定の順で最初のもの。
 
         候補は、今のタスクのほかの、今始められる時刻のタスク。続きのタスクは割り込まない。
-        ほめる間は割り込まない。寝るタスクはどの段階にも割り込む。準備の待ちには時刻のタスク、
+        ほめる間は割り込まない。寝るタスクは、時刻から待つ長さ（`sleep_wait_min`）の間は
+        割り込まず（6.1）、過ぎたらどの段階にも割り込む（6.11）。準備の待ちには時刻のタスク、
         声かけ・催促・あとでには割り込めるタスクだけが割り込む。割り込めないタスクは、
         今のタスクが終わった後に、窓の中なら `due_task` で始まる（5.4）。
         おやすみの時間なら None。ふつうは寝るタスクの後にタスクは動かないが、
@@ -110,7 +113,11 @@ class Scheduler:
             task = due.task
             if task.id == running.task.id or task.at is None:
                 continue
-            if task.sleep or phase is Phase.READY or task.firm:
+            if task.sleep:
+                if not self._sleep_waiting(due, now):
+                    return due
+                continue
+            if phase is Phase.READY or task.firm:
                 return due
         return None
 
@@ -135,6 +142,14 @@ class Scheduler:
         if now < start:
             return False
         return records.outcome(today, sleep.id) is not None or now >= start + START_WINDOW
+
+    def _sleep_waiting(self, due: DueTask, now: datetime) -> bool:
+        """寝るタスクが、ほかのタスクの流れを待つ間か（6.1、6.11）。"""
+        at = due.task.at
+        if at is None:
+            return False
+        start = _moment(due.day, at, _zone(now))
+        return now < start + timedelta(minutes=self._config.sleep_wait_min)
 
     def due_notice(self, now: datetime, records: DayRecordView) -> DueNotice | None:
         """今言う予告。今日と明日の、予告を持つ時刻のタスクから選ぶ（3.5、3.6）。

@@ -509,9 +509,10 @@ def _cut_in_scheduler(kind: str) -> Scheduler:
         ("firm", Phase.CALLING, "new"),
         ("firm", Phase.LATER, "new"),
         ("firm", Phase.PRAISING, None),
-        ("sleep", Phase.READY, "new"),
-        ("sleep", Phase.CALLING, "new"),
-        ("sleep", Phase.LATER, "new"),
+        # 寝るタスクは、時刻から待つ長さ（既定 30 分）の間は割り込まない（6.1）
+        ("sleep", Phase.READY, None),
+        ("sleep", Phase.CALLING, None),
+        ("sleep", Phase.LATER, None),
         ("sleep", Phase.PRAISING, None),
     ],
 )
@@ -749,5 +750,62 @@ def test_寝るタスクは割り込んだ後におやすみになる() -> None:
     s = _sleepy()
     records = FakeRecords()
     wash = running(SLEEPY_TASKS, "wash", MONDAY, wake=SLEEPY_WAKE)
-    cut = s.cut_in(at(MONDAY, 21, 0), records, wash, Phase.CALLING)
+    cut = s.cut_in(at(MONDAY, 21, 30), records, wash, Phase.CALLING)
     assert cut is not None and cut.task.id == "bed"
+
+
+@pytest.mark.parametrize("phase", [Phase.READY, Phase.CALLING, Phase.LATER])
+def test_寝るタスクは待つ長さの間はほかのタスクを待ち_過ぎたらどの段階にも割り込む(
+    phase: Phase,
+) -> None:
+    # 6.1、6.11: 21:00 の寝るタスクは 21:30 まで待ち、21:30 からは割り込む
+    s = _sleepy()
+    records = FakeRecords()
+    wash = running(SLEEPY_TASKS, "wash", MONDAY, wake=SLEEPY_WAKE)
+    assert s.cut_in(at(MONDAY, 21, 0), records, wash, phase) is None
+    assert s.cut_in(at(MONDAY, 21, 29) + timedelta(seconds=59), records, wash, phase) is None
+    cut = s.cut_in(at(MONDAY, 21, 30), records, wash, phase)
+    assert cut is not None and cut.task.id == "bed"
+
+
+def test_待つ長さが0なら寝るタスクは時刻にすぐ割り込む() -> None:
+    s = scheduler(SLEEPY_TASKS, wake=SLEEPY_WAKE, sleep_wait_min=0)
+    records = FakeRecords()
+    wash = running(SLEEPY_TASKS, "wash", MONDAY, wake=SLEEPY_WAKE)
+    cut = s.cut_in(at(MONDAY, 21, 0), records, wash, Phase.READY)
+    assert cut is not None and cut.task.id == "bed"
+
+
+NIGHT_CHAIN = [
+    task_dict("bed", at="21:00", sleep=True),  # 設定の順で前にあっても、待つ間は後に回す
+    task_dict("bath", at="20:00"),
+    task_dict("pajamas", at=None, after="bath"),
+    task_dict("teeth", at=None, after="pajamas"),
+]
+
+
+def test_寝るタスクを待つ間は続きのタスクを先に始め_流れが終わったら寝るタスクを始める() -> None:
+    # 6.1: パジャマが 21:05 に終わったら、寝るタスクより先に続きの歯みがきを始める
+    s = scheduler(NIGHT_CHAIN, wake=SLEEPY_WAKE)
+    records = FakeRecords()
+    records.put(MONDAY, "bath", TaskResult.DONE, at(MONDAY, 20, 30))
+    records.put(MONDAY, "pajamas", TaskResult.DONE, at(MONDAY, 21, 5))
+    assert due_id(s, at(MONDAY, 21, 5), records) == "teeth"
+    records.put(MONDAY, "teeth", TaskResult.DONE, at(MONDAY, 21, 15))
+    assert due_id(s, at(MONDAY, 21, 15), records) == "bed"
+
+
+def test_寝るタスクの時刻にほかのタスクがなければすぐ始める() -> None:
+    s = scheduler(NIGHT_CHAIN, wake=SLEEPY_WAKE)
+    records = FakeRecords()
+    for task_id in ("bath", "pajamas", "teeth"):
+        records.put(MONDAY, task_id, TaskResult.DONE, at(MONDAY, 20, 40))
+    assert due_id(s, at(MONDAY, 21, 0), records) == "bed"
+
+
+def test_待つ長さを過ぎたら続きのタスクより寝るタスクを先に始める() -> None:
+    s = scheduler(NIGHT_CHAIN, wake=SLEEPY_WAKE)
+    records = FakeRecords()
+    records.put(MONDAY, "bath", TaskResult.DONE, at(MONDAY, 20, 30))
+    records.put(MONDAY, "pajamas", TaskResult.DONE, at(MONDAY, 21, 31))
+    assert due_id(s, at(MONDAY, 21, 31), records) == "bed"

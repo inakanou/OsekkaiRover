@@ -97,6 +97,9 @@ class RoutineConfig(FeatureConfig):
     extra_holidays: list[date] = Field(default_factory=list)
     wake: WakeTimes = Field(default_factory=WakeTimes)
     keep_days: int = Field(default=90, ge=7, le=3650)  # 8.6
+    # 寝るタスクが、ほかのタスクの流れを待つ長さ（分）。過ぎたら割り込む。
+    # 0 なら待たない（6.1、6.11）。寝るタスクを始められる窓（60 分）より短くする
+    sleep_wait_min: int = Field(default=30, ge=0, le=55)
     tasks: list[TaskConfig] = Field(default_factory=list)
 
     def wake_time(self, kind: WakeKind) -> time | None:
