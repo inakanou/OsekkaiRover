@@ -7,5 +7,113 @@
 
 `rover-core` の機能として conversation（おしゃべり）を作る。`voice-gateway` で他の機能に当てはまらなかった言葉を受け、子どもから見た振る舞い（聞いて、短く、やさしく返す。続けて話せる）はサンプルと同じにする。名前を外部に送らず、会話の記録と返事の音声を残さず、時間帯と 1 日の上限は再起動しても守る。API の失敗や拒否のときもロボット全体は止まらず、やさしく返す。会話の流れと制限は偽の LLM で PC でテストできるようにする。詳しくは `.kiro/specs/conversation/brief.md` を参照。
 
+## Introduction
+おしゃべり（conversation）は、`voice-gateway` がどの機能の語句にも当てはまらなかった言葉を受け取り、外部の会話の AI に子ども向けの決まり（短く、やさしく、安全に）で返事を作らせて、声で話す機能です。返事の後に子どもがすぐボタンを押せば、話の流れを覚えたまま続けて話せます。
+
+相手は 4 歳前後の子どもです。子どもの呼び名は外部に送らず、ロボットの中で差し込みます。会話の中身と返事の音声は残しません。おしゃべりできる時間帯と 1 日の回数は保護者が設定でき、ロボットを起動し直しても守ります。通信の失敗や返事の拒否のときも、ロボットは止まらず、やさしく言い直します。
+
+## Boundary Context
+- **In scope**: どの機能にも当てはまらなかった言葉への返事、続けて話すときの話の流れ、子ども向けの話し方の決まり、呼び名の差し込みと外部に送らないこと、時間帯と 1 日の回数の上限（再起動しても守る）、失敗と拒否の扱い、外部の会話の AI を使うための鍵の置き場所と読み込み、会話の中身と返事の音声を残さないこと、self-check の項目、開発 PC で偽の会話の AI を使って確かめられること
+- **Out of scope**: ボタンを押してからの聞き取り（「なあに？」・録音・文字にする）と言葉の振り分け、続けて聞くときのボタンの待ち（`voice-gateway` が行う）、声の合成と LCD の表示の仕組み（`rover-core`）、会話からほかの機能（あそびなど）を呼ぶこと、おしゃべりの中身の保存や保護者への報告
+- **Adjacent expectations**:
+  - `voice-gateway` は、どの機能の語句にも当てはまらなかった言葉を、受け手として登録した機能に渡す。続けて聞くよう頼まれたら、決めた時間の間ボタンを待ち、押されたら聞いて、振り分けずに頼んだ機能に渡す。聞ける時間帯の外とおやすみの間は、言葉を渡さない
+  - `rover-core` は、声・LCD などの資源の調停、静かな状態（おやすみ）、時刻が確かかどうか、機能ごとの保存先、self-check の口を提供する
+  - 外部の会話の AI は、ネットワークの先にある。ロボットは家の Wi-Fi でインターネットにつながっていることを前提にし、つながらないときもロボット全体は動き続ける
+
 ## Requirements
-<!-- Will be generated in /kiro-spec-requirements phase -->
+
+### Requirement 1: 言葉を受けて返事を話す
+**Objective:** As a 子ども, I want ロボットに話しかけると短くやさしい返事が声で返ってくること, so that ロボットと楽しくおしゃべりできる
+
+#### Acceptance Criteria
+1. When `voice-gateway` からどの機能の語句にも当てはまらなかった言葉を受け取ったとき, the Conversation shall 外部の会話の AI に返事を求め、待っている間は LCD に考えている表示（「ｶﾝｶﾞｴﾁｭｳ」）を出す
+2. When 返事を受け取ったとき, the Conversation shall LCD にロボットの名前（「ﾛｰﾊﾞｰ」）と喜んだ顔を出し、返事を声で話す
+3. The Conversation shall 返事を 1〜2 文の、4 歳でも分かるやさしい言葉で、絵文字・記号・箇条書きを使わない形で求める
+4. If 返事が長すぎるとき, the Conversation shall 先頭から 2 文まで（多くても 120 文字まで）にして話す
+5. If 返事が空のとき, the Conversation shall 決まった言葉（「うーん、なんて いおうかな」）を話す
+6. When 返事を話し終えたとき, the Conversation shall `voice-gateway` に続けて聞くよう頼む
+
+### Requirement 2: 続けて話す
+**Objective:** As a 子ども, I want 返事の後にすぐボタンを押せば話の続きができること, so that 1 回で終わらずにおしゃべりを続けられる
+
+#### Acceptance Criteria
+1. When 続けて聞いた言葉を受け取ったとき, the Conversation shall その会話のそれまでのやりとりを踏まえた返事を求める
+2. When 続けて聞く待ちの間にボタンが押されなかったとき, the Conversation shall その会話を終え、それまでのやりとりを捨てる
+3. When 続けて聞いた言葉ではない言葉を受け取ったとき, the Conversation shall 新しい会話として始め、前の会話のやりとりを使わない
+4. The Conversation shall 1 つの会話で覚えるやりとりを、決めた回数（既定は 10 往復）までにし、それを超えたら古いものから使わない
+5. The Conversation shall 会話のやりとりを、ロボットの中の一時的な記憶にだけ置き、ファイルや外部に保存しない
+
+### Requirement 3: 子ども向けの安全な話し方
+**Objective:** As a 保護者, I want ロボットが子どもに安全でやさしい話し方をすること, so that 安心して子どもとおしゃべりさせられる
+
+#### Acceptance Criteria
+1. The Conversation shall 外部の会話の AI に、次の決まりを守って返事するよう求める: 明るくやさしく少しおせっかいな性格でよくほめる、分からないことは分からないと言いうそをつかない、住所・幼稚園の名前・電話番号・パスワードなどの個人のことを聞かず教えられても覚えない、怖い話・暴力・大人向けの話をせずやさしく別の話に変える、けが・病気・危ないこと（火・薬・電気・高い所など）は「ママか パパに すぐ いってね」と伝える、悲しい・痛い・いやなことをされたと聞いたら気持ちを受け止めて家の大人に話すよう勧める、家の人に秘密にしようとは決して言わない、自分はロボットだと正直に言い人間のふりをしない、歯みがき・お片づけ・早寝などのいい習慣を楽しく応援する
+2. If 外部の会話の AI が返事を拒んだとき, the Conversation shall 決まった言葉（「そのはなしは ちょっと むずかしいな。べつの おはなし しよう」）を話す
+3. The Conversation shall 話す言葉を、ロボットの中で決めた言葉か、外部の会話の AI の返事だけにする（子どもの言葉をそのまま読み上げない）
+
+### Requirement 4: 呼び名を外部に送らない
+**Objective:** As a 保護者, I want 子どもの呼び名が外部に送られないこと, so that 子どもの個人情報を守れる
+
+#### Acceptance Criteria
+1. The Conversation shall 呼び名を、設定ファイル（なければ「きみ」）から読み、外部の会話の AI に送らない
+2. When 外部の会話の AI に送る子どもの言葉に呼び名が含まれるとき, the Conversation shall その部分を呼び名の目印（`{name}`）に置き換えてから送る（ひらがなとカタカナの違いは同じとみなす）
+3. When 返事に呼び名の目印が含まれるとき, the Conversation shall 話す前にロボットの中で呼び名に置き換える
+4. The Conversation shall 外部の会話の AI に、子どもを呼ぶときは呼び名の目印を書くよう求める
+
+### Requirement 5: 時間帯と 1 日の回数の上限
+**Objective:** As a 保護者, I want おしゃべりできる時間帯と 1 日の回数を決められること, so that 子どもが使いすぎない
+
+#### Acceptance Criteria
+1. While おしゃべりの時間帯（既定は 07:00〜21:30）の外のとき, the Conversation shall 外部の会話の AI に送らず、決まった言葉（「いまは ねる じかんだよ。また あした おはなし しようね」）を話して会話を終える
+2. While 時刻が確かでないとき, the Conversation shall 外部の会話の AI に送らず、決まった言葉（「いまは おはなし できないんだ。また あとで ね」）を話して会話を終える
+3. When その日の返事の回数が上限（既定は 60 回）に達した後に言葉を受け取ったとき, the Conversation shall 外部の会話の AI に送らず、決まった言葉（「きょうは いっぱい おはなし したね。また あした ね」）を話して会話を終える
+4. The Conversation shall 外部の会話の AI の返事（拒否のときの決まった言葉を含む）を話した回だけを 1 回と数え、送らなかった回・通信に失敗した回・話せなかった回は数えない
+5. The Conversation shall その日の回数を、ロボットを起動し直しても引き継ぎ、日付が変わったら 0 から数える
+6. If その日の回数の記録を読めないとき, the Conversation shall 上限に達したとみなして外部の会話の AI に送らず（使いすぎの側に倒さない）、記録の名前と理由だけをログに残す
+
+### Requirement 6: 失敗のときもやさしく返し、止まらない
+**Objective:** As a 子ども, I want 通信がうまくいかないときもロボットがやさしく答えること, so that 怖がったり困ったりしない
+
+#### Acceptance Criteria
+1. If 外部の会話の AI につながらないとき, the Conversation shall 決まった言葉（「ごめんね、いま インターネットに つながらないみたい」）を話す
+2. If 外部の会話の AI が混み合っていて断られたとき, the Conversation shall 決まった言葉（「ちょっと つかれちゃった。すこし まってから また はなそうね」）を話す
+3. If 外部の会話の AI がそのほかの誤りを返したとき, the Conversation shall 決まった言葉（「ごめんね、いま うまく かんがえられないみたい」）を話す
+4. If 決めた時間（既定は 20 秒）の間に返事が来ないとき, the Conversation shall 待つのをやめ、3 と同じ決まった言葉を話す
+5. If 返事を求める間か話す間に思いがけない誤りが起きたとき, the Conversation shall その会話だけを終え、ロボットのほかの機能と次の会話は動き続ける
+6. When 失敗の言葉を話したとき, the Conversation shall 失敗した問いをその会話のやりとりに残さず、続けて聞くよう頼む（もう一度話せるようにする）
+
+### Requirement 7: ほかの機能とおやすみに譲る
+**Objective:** As a 保護者, I want おしゃべりが日課やおやすみの邪魔をしないこと, so that 生活の流れが守られる
+
+#### Acceptance Criteria
+1. If おしゃべりの途中で、より優先度の高い機能（日課など）が声か画面を求めたとき, the Conversation shall 話すのを止めて資源を返し、その会話を終える
+2. While 静かな状態（おやすみ）のとき, the Conversation shall 返事を求めず、声も画面も使わない
+3. If 返事を待つ間に静かな状態になったとき, the Conversation shall 届いた返事を話さずに会話を終える
+4. If 声か画面を借りられないとき, the Conversation shall 返事を話さずに会話を終え、その回を数えない
+
+### Requirement 8: 個人のデータと鍵の扱い
+**Objective:** As a 保護者, I want 会話の中身や鍵が残ったり漏れたりしないこと, so that 安心して使える
+
+#### Acceptance Criteria
+1. The Conversation shall 子どもの言葉・返事・呼び名・外部の会話の AI を使う鍵を、ログ・self-check の結果・状態のファイルに出さない
+2. The Conversation shall 返事の音声を、話し終えた後に残さない
+3. The Conversation shall 外部の会話の AI を使う鍵を、リポジトリの外の、本人だけが読める場所から読む
+4. The Conversation shall ログには、決まった文言・回数・かかった時間・誤りの種類の名前だけを出す
+5. The Conversation shall 外部の会話の AI に送るものを、子ども向けの決まり・その会話のやりとり（呼び名を目印に置き換えたもの）だけにする
+
+### Requirement 9: 設定と使えないときの振る舞い
+**Objective:** As a 保護者, I want おしゃべりを設定で切り替え、使えないときも分かること, so that 家の方針に合わせられる
+
+#### Acceptance Criteria
+1. Where おしゃべりが設定で無効のとき, the Conversation shall 言葉の受け手にならない（当てはまらなかった言葉には `voice-gateway` が「わからない」と答える）
+2. If 外部の会話の AI を使う鍵がないとき, the Conversation shall 言葉を受け取ったら決まった言葉（「いまは おはなし できないんだ。また あとで ね」）を話して会話を終え、ロボットのほかの機能は動き続ける
+3. If 設定の値が誤っているとき, the Conversation shall 開始せず、誤りの場所と理由をログに出す（値そのものは出さない）
+4. The Conversation shall self-check で、鍵があるかを確かめた結果を出す。鍵がないときは、版を戻しても直らないので、だめにせず理由を添えて知らせる
+5. The Conversation shall 設定で、時間帯・1 日の上限・続けて覚える往復の数・返事を待つ時間・呼び名を変えられるようにする
+
+### Requirement 10: 開発 PC で確かめられること
+**Objective:** As a 開発者, I want 会話の流れと制限を実機と外部の会話の AI なしで確かめられること, so that 子どもが使う実機で試す前に大半を確かめられる
+
+#### Acceptance Criteria
+1. The Conversation shall 外部の会話の AI を偽物に替えて、返事・続けて話す・拒否・失敗・時間切れ・回数の上限・時間帯・呼び名の置き換えを、開発 PC で確かめられるようにする
+2. When ハードなしで動かしたとき, the Conversation shall 外部の会話の AI の鍵がなければ偽の返事で動き、端末に返事を出す
