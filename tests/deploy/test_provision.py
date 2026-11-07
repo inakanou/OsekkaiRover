@@ -17,6 +17,7 @@ from rover_deploy.provision import (
     APT_PACKAGES,
     ASSETS,
     BOOT_LINES,
+    MIC_RULE_TEXT,
     PROVISION_STEPS,
     REMINDER_TIMER,
     REMINDER_UNITS,
@@ -128,6 +129,7 @@ class Env:
             tmp_path / "boot/config.txt",
             "# 元の設定\ndtparam=i2c_arm=on\ndtoverlay=hifiberry-dac\n",
         )
+        self.mic_rule = tmp_path / "etc/udev/rules.d/90-osekkai-mic-power.rules"
         self.data_dir = self.home / ".local/share/osekkai"
         self.releases = FakeReleases(self.layout, fake)
         self.said: list[tuple[str, str]] = []
@@ -152,6 +154,7 @@ class Env:
             assets=TEST_ASSETS,
             os_release=self.os_release,
             boot_config=self.boot_config,
+            mic_rule=self.mic_rule,
             now=lambda: NOW,
         )
 
@@ -229,6 +232,7 @@ class Env:
         self.script_apt_installed()
         self.script_groups()
         self.script_linger()
+        write(self.mic_rule, MIC_RULE_TEXT)
         self.make_layout_dirs()
         self.make_assets()
         current = self.make_current()
@@ -629,6 +633,41 @@ def test_groups_adds_missing_and_journal_group(env: Env) -> None:
     s.apply()
     assert env.fake.argvs[-1] == ("sudo", "usermod", "-aG", "i2c,systemd-journal", USER)
     assert s.needs_reboot
+
+
+# --- mic_power ---
+
+
+def test_mic_power_done_when_rule_present(env: Env) -> None:
+    write(env.mic_rule, MIC_RULE_TEXT)
+    assert env.steps()["mic_power"].is_done()
+
+
+def test_mic_power_not_done_when_rule_missing_or_different(env: Env) -> None:
+    assert not env.steps()["mic_power"].is_done()
+    write(env.mic_rule, "# 古い決まり\n")
+    assert not env.steps()["mic_power"].is_done()
+
+
+def test_mic_power_writes_rule_and_applies_it_now(env: Env) -> None:
+    env.fake.script(["sudo"])
+    s = env.steps()["mic_power"]
+    s.apply()
+    assert not s.needs_reboot
+    tee = [c for c in env.fake.calls if c.argv == ("sudo", "tee", str(env.mic_rule))]
+    assert len(tee) == 1
+    assert tee[0].input == MIC_RULE_TEXT.encode("utf-8")
+    assert ("sudo", "udevadm", "control", "--reload") in env.fake.argvs
+    trigger = [a for a in env.fake.argvs if a[:3] == ("sudo", "udevadm", "trigger")]
+    assert trigger and "--attr-match=idProduct=0825" in trigger[0]
+
+
+def test_mic_power_rule_keeps_only_the_c270_awake() -> None:
+    # 子どもが話し始めてすぐ録音できるよう、C270 の USB だけを眠らせない（2 秒の省電力で
+    # 起きるのに約 1.8 秒かかっていた）
+    assert 'ATTR{idVendor}=="046d"' in MIC_RULE_TEXT
+    assert 'ATTR{idProduct}=="0825"' in MIC_RULE_TEXT
+    assert 'ATTR{power/control}="on"' in MIC_RULE_TEXT
 
 
 # --- linger ---

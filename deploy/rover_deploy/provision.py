@@ -55,6 +55,7 @@ PROVISION_STEPS = (
     "boot_config",
     "groups",
     "linger",
+    "mic_power",
     "layout",
     "voices",
     "models",
@@ -71,6 +72,15 @@ SUPPORTED_OS_TEXT = "対応している OS: Debian 13（trixie）か 12（bookwo
 
 DEFAULT_OS_RELEASE = Path("/etc/os-release")
 DEFAULT_BOOT_CONFIG = Path("/boot/firmware/config.txt")
+DEFAULT_MIC_RULE = Path("/etc/udev/rules.d/90-osekkai-mic-power.rules")
+
+# マイク（Logicool C270、USB の 046d:0825）を USB の省電力で眠らせない。眠ると起きるのに
+# 約 1.8 秒かかり、ボタンを押してから話してよい合図までが長くなる（音声の入口の実機確認）
+MIC_RULE_TEXT = (
+    "# おせっかいローバー: マイク（C270）を USB の省電力で眠らせない（rover-deploy provision）\n"
+    'ACTION=="add|change", SUBSYSTEM=="usb", ATTR{idVendor}=="046d", ATTR{idProduct}=="0825", '
+    'TEST=="power/control", ATTR{power/control}="on"\n'
+)
 
 APT_PACKAGES = (
     "git",
@@ -346,6 +356,7 @@ class ProvisionContext:
     say: Callable[[str, str], None]  # 手順の中の案内を出す口（手順の名前, 文）
     os_release: Path = DEFAULT_OS_RELEASE
     boot_config: Path = DEFAULT_BOOT_CONFIG
+    mic_rule: Path = DEFAULT_MIC_RULE
     now: Callable[[], float] = field(default=time.time)
     fetch: Fetch = field(default=urllib_fetch)
     assets: tuple[Asset, ...] = ASSETS
@@ -550,6 +561,50 @@ def _linger_step(ctx: ProvisionContext) -> Step:
     return Step(
         "linger",
         lambda: _linger_on(ctx),
+        apply,
+        retry_hint="sudo のパスワードを確かめてから、もう一度 provision を実行します",
+    )
+
+
+# --- mic_power ---
+
+
+def _mic_rule_present(path: Path) -> bool:
+    try:
+        return path.read_text(encoding="utf-8") == MIC_RULE_TEXT
+    except (OSError, UnicodeDecodeError):
+        return False
+
+
+def _mic_power_step(ctx: ProvisionContext) -> Step:
+    path = ctx.mic_rule
+
+    def apply() -> None:
+        ctx.run(
+            ["sudo", "tee", str(path)],
+            input=MIC_RULE_TEXT.encode("utf-8"),
+            timeout=CHANGE_TIMEOUT_S,
+            check=True,
+        )
+        # 再起動なしで、今つながっているマイクにも当てる
+        ctx.run(["sudo", "udevadm", "control", "--reload"], timeout=CHANGE_TIMEOUT_S, check=True)
+        ctx.run(
+            [
+                "sudo",
+                "udevadm",
+                "trigger",
+                "--action=change",
+                "--subsystem-match=usb",
+                "--attr-match=idVendor=046d",
+                "--attr-match=idProduct=0825",
+            ],
+            timeout=CHANGE_TIMEOUT_S,
+            check=True,
+        )
+
+    return Step(
+        "mic_power",
+        lambda: _mic_rule_present(path),
         apply,
         retry_hint="sudo のパスワードを確かめてから、もう一度 provision を実行します",
     )
@@ -884,6 +939,7 @@ def provision_steps(ctx: ProvisionContext) -> list[Step]:
         _boot_step(ctx),
         _groups_step(ctx),
         _linger_step(ctx),
+        _mic_power_step(ctx),
         _layout_step(ctx),
         _assets_step(ctx, VOICES_DIR_NAME),
         _assets_step(ctx, MODELS_DIR_NAME),

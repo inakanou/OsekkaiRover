@@ -118,6 +118,7 @@ rover-deploy provision --ref v0.2.0
 | `boot_config` | `/boot/firmware/config.txt` に I2C と音声の行がなければ足します（足す前に写しを取ります）。再起動が要ります |
 | `groups` | `gpio`・`i2c`・`audio` と、journal を読めるグループ（`systemd-journal` か `adm`）に入れます。再起動（ログインし直し）が要ります |
 | `linger` | ログインしていなくてもユーザーサービスが動くようにします（`loginctl enable-linger`） |
+| `mic_power` | マイク（Logicool C270）を USB の省電力で眠らせない udev の決まり（`/etc/udev/rules.d/90-osekkai-mic-power.rules`）を置き、すぐに当てます。眠ると起きるのに約 2 秒かかり、話してよい合図（「ﾊﾅｼﾃﾈ!」）が遅れるためです。ほかのマイクに替えたときは、この決まりの USB の ID を直します |
 | `layout` | `~/osekkai-rover/` と道具の状態のディレクトリを作ります |
 | `voices`・`models` | 声のファイル・顔のモデル・聞き取りのモデル（`models/faster-whisper-base/` の 4 つのファイル、約 148 MB）のうち、ないものを取ります。取得元（聞き取りのモデルはコミットで固定）と sha256 は道具に決めてあります。同じ名前で中身の違うファイルがあれば、上書きせずに警告します |
 | `release` | 今の版がなければ（またはユニットのない版なら）、最初の版を用意し、`current` とユニットを置きます。起動も、自動の起動の設定もしません |
