@@ -30,7 +30,9 @@ FETCH_REFSPEC = "+refs/heads/*:refs/remotes/origin/*"
 READY_MARKER = ".osekkai-ready"
 UNIT_SOURCE = Path("deploy/systemd") / CORE_UNIT_NAME
 VENV_PYTHON = "python3"
-PIP_EXTRAS = "pi,voice"  # voice は音声の入口の聞き取りの依存（faster-whisper など）
+# voice は音声の入口の聞き取りの依存（faster-whisper など）
+# conversation はおしゃべりの依存（anthropic）
+PIP_EXTRAS = "pi,voice,conversation"
 
 # 時間切れ（秒）。pip は Pi で依存をビルドすることがあるので長くとる
 GIT_TIMEOUT_S = 60.0

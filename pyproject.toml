@@ -29,6 +29,10 @@ voice = [
     "faster-whisper>=1.1,<2",
     "ctranslate2>=4.4,<5",
 ]
+# 実機のおしゃべり（Claude API）だけ。開発 PC と CI には入れない
+conversation = [
+    "anthropic>=2.6,<3",
+]
 dev = [
     "pytest>=8",
     "ruff>=0.6",
@@ -93,6 +97,11 @@ ignore_missing_imports = true
 # 音声の入口の聞き取りの依存（extras の voice）は開発 PC と CI に入れないので、型を見ない
 [[tool.mypy.overrides]]
 module = ["faster_whisper", "faster_whisper.*", "ctranslate2", "ctranslate2.*"]
+ignore_missing_imports = true
+
+# おしゃべりの依存（extras の conversation）は開発 PC と CI に入れないので、型を見ない
+[[tool.mypy.overrides]]
+module = ["anthropic", "anthropic.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
