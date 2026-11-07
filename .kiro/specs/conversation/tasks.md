@@ -58,7 +58,7 @@
   - _Requirements: 8.1, 8.3, 9.2_
 
 - [ ] 3. アダプタと self-check
-- [ ] 3.1 (P) Claude API のアダプタを作る
+- [x] 3.1 (P) Claude API のアダプタを作る
   - 会話のライブラリを関数の中で読み込み、あるかを確かめる口を作る。鍵を明示し、待つ時間を返事を待つ時間に、自動のやり直しを 0 にしたクライアントで、beta の messages を 1 回呼ぶ（モデル `claude-opus-5-5`、effort low、決まりの文をキャッシュ、beta `server-side-fallback-2026-07-01` と fallbacks default、思考と temperature は渡さない）
   - stop_reason が refusal なら拒否、そうでなければ text のブロックをつないだ返事。時間切れ → つながらない → 混み合う（429・529）→ そのほかの状態 → そのほか、の順に例外を失敗の種類にする。ログには拒否の種類と例外の型の名前だけを出す
   - テストは、SDK と同じ親子関係の例外の型を持つ偽の anthropic のモジュールを差し込んで行う（本物の SDK を読み込まない）。偽の anthropic のモジュールは、このタスクのテストのファイルの中に置く（共有の偽物のファイルには書かない）
@@ -129,3 +129,4 @@
 - `Session.touch(now)` を足した（確認で見つかった穴）。4.1 では拒否・空・失敗を話し終えたら `touch` を呼ぶ。呼ばないと、前の返事から 130 秒で、続けて聞いている間でもやりとりが消える
 - `DailyUsage.load` はファイルを読まない。初めての `reached(today)`・`add_one(today)` で読む。この 2 つには門が確かめた（時刻が確かな）日付だけを渡す。同期の前に読むと、古い日付を読めなかった日にしてしまうため（確認で 2 回差し戻された）
 - `check_gate` の `usage_reached` は真偽の値なので、4.1 では `synchronized and usage.reached(today, limit)` のように、時刻が確かなときだけ `reached` を呼ぶ。時刻が確かでない間に `usage.json` を読まないテストを足す。`now` は地方時の datetime を渡す
+- `ClaudeChatModel(credential)` の引数の名前は credential（名前に key を入れない決まり）。4.3 の手順書に「`ANTHROPIC_LOG=debug` にすると SDK が送る中身をログに出すので使わない」と書く
