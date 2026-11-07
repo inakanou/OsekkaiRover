@@ -43,6 +43,7 @@ dev = [
 # 機能を発見するエントリーポイントの群。機能を足したら、ここに 1 行足して入れ直す
 # （.venv/bin/pip install -e '.[dev]'）
 [project.entry-points."osekkai.features"]
+conversation = "osekkai.features.conversation:ConversationFeature"
 routine = "osekkai.features.routine:RoutineFeature"
 presence = "osekkai.features.presence:PresenceFeature"
 voice = "osekkai.voice:VoiceGatewayFeature"

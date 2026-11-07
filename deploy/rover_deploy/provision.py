@@ -851,6 +851,7 @@ def secrets_guidance(layout: Layout) -> list[str]:
     parent = shown_path(secrets_file(layout).parent, layout.home)
     return [
         f"API キーなどは {path} に、1 行に 1 つ「名前=値」で書きます",
+        "おしゃべりの鍵は ANTHROPIC_API_KEY の名前で書きます（docs/conversation.md）",
         f"本人だけが読めるようにします: mkdir -p -m 700 {parent} && "
         f"touch {path} && chmod 0600 {path}",
         "このファイルはリポジトリに入れません。道具は作らず、中も読みません",

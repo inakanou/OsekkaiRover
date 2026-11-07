@@ -1044,6 +1044,8 @@ def test_secrets_never_created_and_place_shown(env: Env) -> None:
     assert "0600" in text
     assert str(env.home) not in text
     assert any("~/.config/osekkai/env" in line for line in secrets_guidance(env.layout))
+    # おしゃべりの鍵の名前を案内する（値の例は出さない）
+    assert any("ANTHROPIC_API_KEY" in line for line in secrets_guidance(env.layout))
 
 
 def test_existing_secrets_untouched(env: Env) -> None:
