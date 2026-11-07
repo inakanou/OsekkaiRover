@@ -85,6 +85,7 @@ presence:
 #     weekday: null          # 平日（例: "06:30"）
 #     holiday: null          # 休日（例: "07:30"）
 #   keep_days: 90            # 記録を残す日数（7〜3650）
+#   sleep_wait_min: 30       # 寝るタスクが、続いている声かけを待つ長さ（分、0〜55。0 なら待たない）
 #   tasks:
 #     - id: hamigaki_morning         # 名前（小文字の英字で始まり、英小文字・数字・_ だけ）
 #       at: "07:00"                  # 始める時刻。at と after のどちらか 1 つを書く

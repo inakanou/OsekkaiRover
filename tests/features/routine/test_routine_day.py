@@ -291,9 +291,10 @@ def test_平日の朝から休日の朝までの1日の流れ(
         assert book.outcome(FRI, "toys") is TaskResult.INTERRUPTED
         assert book.outcome(FRI, "sleep") is TaskResult.DONE
         assert len(script.said_at(TOYS_CALL)) > 1
-        assert _within(script.said_at(_filled(SLEEP_CALL)), _at(FRI, 21, 0), timedelta(minutes=1))
+        # 寝るタスクは、長引くおもちゃの片付けを 30 分待ってから割り込む（6.1、6.11）
+        assert _within(script.said_at(_filled(SLEEP_CALL)), _at(FRI, 21, 30), timedelta(minutes=1))
         ended = book.ended_at(FRI, "toys")
-        assert ended is not None and _at(FRI, 21, 0) <= ended < _at(FRI, 21, 1)
+        assert ended is not None and _at(FRI, 21, 30) <= ended < _at(FRI, 21, 31)
         assert kit.ios[-1].calls[-1] == ("show", LCD_SLEEP, Face.SLEEP.text())
         assert is_quiet(kit)
         assert screen_blank(kit)
