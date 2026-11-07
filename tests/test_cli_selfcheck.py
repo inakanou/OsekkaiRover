@@ -29,6 +29,7 @@ from osekkai.core.selfcheck import (
     CheckStatus,
 )
 from osekkai.core.status import STATUS_FILE_NAME, ServiceSnapshot, write_snapshot
+from osekkai.voice.checks import REASON_TYPED
 from shared_fixtures import load_fixture
 
 WAIT_S = 30.0
@@ -43,6 +44,12 @@ BASE_NAMES = [
     "core.buttons",
     "core.servos",
 ]
+# 登録された音声の入口の項目は、基盤の項目の後に並ぶ。開発 PC と CI には faster-whisper が
+# ないので、見本の設定（recognizer: auto）では打った文字の聞き取りになり、どちらも飛ばす
+# 登録した機能の項目（本物の機能の発見を使うサブプロセスのテストで、基盤の項目の後に並ぶ）
+ROUTINE_NAMES = ["routine.holidays", "routine.quiet_hours", "routine.records"]
+VOICE_NAMES = ["voice.mic", "voice.model"]
+ALL_NAMES = [*BASE_NAMES, *ROUTINE_NAMES, *VOICE_NAMES]
 HARDWARE_NAMES = ["core.lcd", "core.hat", "core.buttons", "core.servos"]
 
 
@@ -322,6 +329,7 @@ def test_実機の確かめを読み込めなくてもハードでない項目�
 
 
 def test_サブプロセスで_JSON_を見本の形で出す(xdg_dirs: dict[str, Path]) -> None:
+    _place_config()
     env = dict(os.environ)
     env.pop("JOURNAL_STREAM", None)
     result = subprocess.run(
@@ -337,5 +345,10 @@ def test_サブプロセスで_JSON_を見本の形で出す(xdg_dirs: dict[str,
     assert set(data) == set(sample)
     assert all(set(row) == set(sample["results"][0]) for row in data["results"])
     assert result.returncode == (0 if data["ok"] else 1)
-    # 登録された機能の項目は、基盤の項目の後に並ぶ
-    assert [row["name"] for row in data["results"]][: len(BASE_NAMES)] == BASE_NAMES
+    assert [row["name"] for row in data["results"]] == ALL_NAMES
+    rows = _by_name(data)
+    for name in VOICE_NAMES:
+        assert rows[name] == {"name": name, "status": "skipped", "reason": REASON_TYPED}
+    # 入口の項目を飛ばしても、終了コードは 0 のまま
+    assert result.returncode == 0
+    assert data["ok"] is True

@@ -676,13 +676,32 @@ def test_real_assets_are_pinned() -> None:
     assert ("voices", "tohoku-f01-happy.htsvoice") in names  # 基盤の既定の声
     assert ("models", "face_detection_yunet_2023mar.onnx") in names
     assert ("models", "face_recognition_sface_2021dec.onnx") in names
-    assert len(names) == len(ASSETS) == 7
+    assert len(names) == len(ASSETS) == 11
     for asset in ASSETS:
         assert asset.dir_name in ("voices", "models")
         assert asset.url.startswith("https://")
         assert asset.url.endswith("/" + asset.file_name)
         assert len(asset.sha256) == 64
         assert all(c in "0123456789abcdef" for c in asset.sha256)
+
+
+def test_real_whisper_model_is_pinned_to_a_commit_in_its_subdir() -> None:
+    whisper = [a for a in ASSETS if a.subdir == "faster-whisper-base"]
+    assert sorted(a.file_name for a in whisper) == [
+        "config.json",
+        "model.bin",
+        "tokenizer.json",
+        "vocabulary.txt",
+    ]
+    for asset in whisper:
+        assert asset.dir_name == "models"
+        prefix = "https://huggingface.co/Systran/faster-whisper-base/resolve/"
+        assert asset.url.startswith(prefix)
+        commit = asset.url[len(prefix) :].split("/")[0]
+        assert len(commit) == 40  # main ではなく、コミットで固定する
+        assert all(c in "0123456789abcdef" for c in commit)
+    # ほかの資産はサブディレクトリを持たない（今までの置き場所のまま）
+    assert all(a.subdir == "" for a in ASSETS if a not in whisper)
 
 
 def test_assets_done_when_present_and_fetch_nothing(env: Env) -> None:
@@ -763,6 +782,84 @@ def test_only_missing_files_are_fetched(env: Env) -> None:
     s2 = {x.name: x for x in provision_steps(ctx)}["voices"]
     assert s2.is_done()  # 2 回目は取らない
     assert env.fetch.urls == []
+
+
+SUB_DATA = b"sub-model-data"
+SUB_ASSET = Asset(
+    "models", "w.bin", "https://example.invalid/w.bin", sha(SUB_DATA), subdir="fw-test"
+)
+
+
+def sub_steps(env: Env) -> dict[str, Step]:
+    env.fetch.contents[SUB_ASSET.url] = SUB_DATA
+    ctx = ProvisionContext(**{**env.context().__dict__, "assets": (*TEST_ASSETS, SUB_ASSET)})
+    return {x.name: x for x in provision_steps(ctx)}
+
+
+def test_subdir_asset_is_placed_in_private_subdir_with_sha_check(env: Env) -> None:
+    s = sub_steps(env)["models"]
+    assert not s.is_done()
+    s.apply()
+    sub = env.data_dir / "models/fw-test"
+    path = sub / "w.bin"
+    assert sha(path.read_bytes()) == SUB_ASSET.sha256
+    assert stat.S_IMODE(sub.stat().st_mode) == 0o700
+    assert os.listdir(sub) == ["w.bin"]  # 一時のファイルは残さない
+    assert not (env.data_dir / "models/w.bin").exists()  # models の直下には置かない
+    assert SUB_ASSET.url in env.fetch.urls
+    assert s.is_done()
+    env.fetch.urls.clear()
+    assert sub_steps(env)["models"].is_done()  # 2 回目は取らない
+    assert env.fetch.urls == []
+
+
+def test_subdir_asset_alone_makes_models_dir_private_too(env: Env) -> None:
+    env.fetch.contents[SUB_ASSET.url] = SUB_DATA
+    ctx = ProvisionContext(**{**env.context().__dict__, "assets": (SUB_ASSET,)})
+    {x.name: x for x in provision_steps(ctx)}["models"].apply()
+    models = env.data_dir / "models"
+    assert stat.S_IMODE(models.stat().st_mode) == 0o700  # 今回作った models も本人だけ
+    assert stat.S_IMODE((models / "fw-test").stat().st_mode) == 0o700
+    assert os.listdir(models) == ["fw-test"]
+
+
+def test_subdir_asset_missing_means_not_done(env: Env) -> None:
+    env.make_assets()  # models の直下のものだけある
+    write(env.data_dir / "models/w.bin", SUB_DATA.decode())  # 直下にあっても数えない
+    s = sub_steps(env)["models"]
+    assert not s.is_done()
+    s.apply()
+    assert env.fetch.urls == [SUB_ASSET.url]
+    assert s.is_done()
+
+
+def test_subdir_asset_with_wrong_sha_is_rejected_and_temp_removed(env: Env) -> None:
+    env.make_assets()
+    steps = sub_steps(env)
+    env.fetch.contents[SUB_ASSET.url] = b"tampered"
+    s = steps["models"]
+    with pytest.raises(StepFailed) as info:
+        s.apply()
+    assert "w.bin" in str(info.value)
+    assert "example.invalid" not in str(info.value)
+    assert str(env.home) not in str(info.value)
+    sub = env.data_dir / "models/fw-test"
+    assert not sub.exists() or os.listdir(sub) == []
+    assert not s.is_done()
+
+
+def test_subdir_existing_file_with_other_sha_is_kept_with_warning(env: Env) -> None:
+    env.make_assets()
+    path = write(env.data_dir / "models/fw-test/w.bin", "personal")
+    s = sub_steps(env)["models"]
+    assert s.is_done()  # あるので済み。上書きしない
+    assert path.read_text(encoding="utf-8") == "personal"
+    assert env.fetch.urls == []
+    warnings = [t for n, t in env.said if n == "models"]
+    assert len(warnings) == 1
+    assert "w.bin" in warnings[0]
+    assert str(env.home) not in warnings[0]
+    assert "example.invalid" not in warnings[0]
 
 
 # --- release ---

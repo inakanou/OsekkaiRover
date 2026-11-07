@@ -8,7 +8,7 @@
 - サンプルの場所（作業コピー・仮想環境・ユニット）
 - 基盤の設定のディレクトリ（`~/.config/osekkai/`）のすでにあるファイル。
   設定ファイル（config.yaml）がなければ見本から置くだけ。秘密のファイルは作らず、中も読まない
-- 声のファイルと顔のモデルのうち、すでにあるもの（sha256 が違っても上書きしない）
+- 声のファイル・顔のモデル・聞き取りのモデルのうち、すでにあるもの（sha256 が違っても上書きしない）
 
 `sudo` のパスワードは、端末を割り当てた ssh で利用者が入力する。道具はパスワードを扱わない。
 表示には、固定の文言と、例外の型の名前だけを出す（外のコマンドの出力は写さない）。
@@ -123,7 +123,7 @@ GROUPS = ("gpio", "i2c", "audio")
 # journal を読めるグループ。どちらかに入っていればよい。なければ前のものに入れる
 JOURNAL_GROUPS = ("systemd-journal", "adm")
 
-# 声のファイルと顔のモデル（データのディレクトリの下）
+# 声のファイルと顔・聞き取りのモデル（データのディレクトリの下）
 VOICES_DIR_NAME = "voices"
 MODELS_DIR_NAME = "models"
 FETCH_TIMEOUT_S = 60.0  # 取得の 1 回の読み書きを待つ時間（全体ではない）
@@ -138,10 +138,43 @@ class Asset:
     file_name: str
     url: str
     sha256: str
+    subdir: str = ""  # 置き場所の下の 1 つのディレクトリに置くとき、その名前
+
+    @property
+    def shown_name(self) -> str:
+        """表示に使う名前（置き場所からの相対）。"""
+        return f"{self.subdir}/{self.file_name}" if self.subdir else self.file_name
 
 
 _VOICE_BASE = "https://raw.githubusercontent.com/icn-lab/htsvoice-tohoku-f01/master"
 _ZOO_BASE = "https://github.com/opencv/opencv_zoo/raw/main/models"
+
+# 音声の入口の聞き取りのモデル（Systran/faster-whisper-base、MIT）。コミットで固定する。
+# sha256 は 2026-11-07 に確かめた。model.bin は Hub の木の一覧（api/models/.../tree/<コミット>）
+# の LFS の sha256、ほかの 3 つは取ったファイルの sha256（git の blob の id も一覧と合った）
+_WHISPER_DIR = "faster-whisper-base"
+_WHISPER_COMMIT = "ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66"
+_WHISPER_BASE = f"https://huggingface.co/Systran/faster-whisper-base/resolve/{_WHISPER_COMMIT}"
+# ファイル名と sha256 は別の行に書く（同じ行だと、秘密情報のチェックが tokenizer の名前と
+# 長い値を API キーと見まちがえる）
+_WHISPER_FILES = (
+    (
+        "config.json",
+        "56a6d8110d311f19c8f0471e562832c7527f146b567275bfca59fcf7c184da9a",
+    ),
+    (
+        "model.bin",
+        "d01c3014881c9c6f3133c182f3d2887eb6ca1c789a7538c5c007196857a0a6a9",
+    ),
+    (
+        "tokenizer.json",
+        "fb7b63191e9bb045082c79fd742a3106a12c99513ab30df4a0d47fa6cb6fd0ab",
+    ),
+    (
+        "vocabulary.txt",
+        "34ce3fe1c5041027b3f8d42912270993f986dbc4bb34cf27f951e34a1e453913",
+    ),
+)
 
 # 実機にあるファイルと同じ sha256（2026-11-05 に確かめた）
 ASSETS = (
@@ -186,6 +219,10 @@ ASSETS = (
         "face_recognition_sface_2021dec.onnx",
         f"{_ZOO_BASE}/face_recognition_sface/face_recognition_sface_2021dec.onnx",
         "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79",
+    ),
+    *(
+        Asset(MODELS_DIR_NAME, file_name, f"{_WHISPER_BASE}/{file_name}", digest, _WHISPER_DIR)
+        for file_name, digest in _WHISPER_FILES
     ),
 )
 
@@ -558,7 +595,11 @@ def _file_sha256(path: Path) -> str:
 
 
 def _download(ctx: ProvisionContext, asset: Asset, directory: Path) -> None:
-    """一時のファイルに取り、sha256 が合えば置き換える。合わなければ一時のファイルを消す。"""
+    """一時のファイルに取り、sha256 が合えば置き換える。合わなければ一時のファイルを消す。
+
+    directory はファイルを置くディレクトリ（サブディレクトリのときはその中）。
+    一時のファイルも同じディレクトリに作るので、置き換えは同じファイルシステムの中で済む。
+    """
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     fd, tmp_name = tempfile.mkstemp(dir=directory, prefix=f".{asset.file_name}.", suffix=".part")
     tmp = Path(tmp_name)
@@ -568,10 +609,10 @@ def _download(ctx: ProvisionContext, asset: Asset, directory: Path) -> None:
                 ctx.fetch(asset.url, out, FETCH_TIMEOUT_S)
         except (OSError, http.client.HTTPException, ValueError) as error:
             raise StepFailed(
-                exception_reason(f"{asset.file_name} を取得できませんでした", error)
+                exception_reason(f"{asset.shown_name} を取得できませんでした", error)
             ) from None
         if _file_sha256(tmp) != asset.sha256:
-            raise StepFailed(f"取得した {asset.file_name} の sha256 が違うので、置きません")
+            raise StepFailed(f"取得した {asset.shown_name} の sha256 が違うので、置きません")
         os.replace(tmp, directory / asset.file_name)
     finally:
         with contextlib.suppress(OSError):
@@ -583,13 +624,17 @@ def _assets_step(ctx: ProvisionContext, name: str) -> Step:
     assets = [asset for asset in ctx.assets if asset.dir_name == name]
     warned: set[str] = set()
 
+    def place(asset: Asset) -> Path:
+        return directory / asset.subdir if asset.subdir else directory
+
     def present(asset: Asset) -> bool:
-        path = directory / asset.file_name
+        path = place(asset) / asset.file_name
         if not path.is_file():
             return False
-        if asset.file_name not in warned and _file_sha256(path) != asset.sha256:
-            warned.add(asset.file_name)
-            ctx.say(name, f"{asset.file_name} は sha256 が違いますが、上書きせずにそのまま使います")
+        shown = asset.shown_name
+        if shown not in warned and _file_sha256(path) != asset.sha256:
+            warned.add(shown)
+            ctx.say(name, f"{shown} は sha256 が違いますが、上書きせずにそのまま使います")
         return True
 
     def is_done() -> bool:
@@ -598,7 +643,9 @@ def _assets_step(ctx: ProvisionContext, name: str) -> Step:
     def apply() -> None:
         for asset in assets:
             if not present(asset):
-                _download(ctx, asset, directory)
+                if asset.subdir:  # 置き場所も今回作るなら、サブディレクトリと同じく本人だけにする
+                    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+                _download(ctx, asset, place(asset))
 
     return Step(
         name,

@@ -4,6 +4,7 @@ import ast
 import io
 import os
 import threading
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -11,14 +12,24 @@ import pytest
 from osekkai.adapters.fake.clock import FakeClock
 from osekkai.adapters.fake.console import (
     ConsoleButtons,
+    _reset_typed_input_for_tests,
     build_console_devices,
     build_console_set,
     codes_to_text,
+    take_typed_line,
+    typed_input_active,
 )
 from osekkai.core.config import VoiceSettings
 from osekkai.core.lcd_text import to_lcd_codes
 from osekkai.core.ports import Devices, Unavailable
 from osekkai.core.types import Glyph
+
+
+@pytest.fixture(autouse=True)
+def _reset_typed_input() -> Iterator[None]:
+    _reset_typed_input_for_tests()
+    yield
+    _reset_typed_input_for_tests()
 
 
 def _lines(out: io.StringIO) -> list[str]:
@@ -120,6 +131,57 @@ def test_入力の終わりでも落ちない(clock: FakeClock) -> None:
     assert buttons.join_reader(2.0)
     buttons.close()
     assert got == []
+
+
+def test_押下の前に打った行を取っておき_取り出すと消える(clock: FakeClock) -> None:
+    buttons = ConsoleButtons(clock, inp=io.StringIO("だるまさん しよう\n\n"))
+    got: list[tuple[str | None, str | None, bool]] = []
+
+    def on_falling(source: str, at: float) -> None:
+        # 押下と一緒に、その行の文字が取り出せる。取ったら消える
+        got.append((take_typed_line(), take_typed_line(), typed_input_active()))
+
+    assert not typed_input_active()
+    buttons.start(on_falling)
+    assert buttons.join_reader(2.0)
+    assert got == [("だるまさん しよう", None, True), ("", None, True)]
+    assert not typed_input_active()  # EOF で消える
+    buttons.close()
+
+
+def test_行の改行だけを除き_ほかの空白は残す(clock: FakeClock) -> None:
+    buttons = ConsoleButtons(clock, inp=io.StringIO("  あそぼ \r\n"))
+    got: list[str | None] = []
+    buttons.start(lambda source, at: got.append(take_typed_line()))
+    assert buttons.join_reader(2.0)
+    buttons.close()
+    assert got == ["  あそぼ "]
+
+
+def test_端末の偽物が動いているかは_start_で立ち_close_で消える(clock: FakeClock) -> None:
+    read_fd, write_fd = os.pipe()
+    with os.fdopen(read_fd, "r") as inp, os.fdopen(write_fd, "w") as feed:
+        buttons = ConsoleButtons(clock, inp=inp)
+        assert not typed_input_active()
+        buttons.start(lambda source, at: None)
+        assert typed_input_active()
+        buttons.close()
+        assert not typed_input_active()
+        feed.write("あとの行\n")  # close の後の行は取っておかない
+        feed.close()
+        assert buttons.join_reader(2.0)
+    assert take_typed_line() is None
+    assert not typed_input_active()
+
+
+def test_テスト用に打った行の口を戻せる(clock: FakeClock) -> None:
+    buttons = ConsoleButtons(clock, inp=io.StringIO("のこり\n"))
+    buttons.start(lambda source, at: None)
+    assert buttons.join_reader(2.0)
+    _reset_typed_input_for_tests()
+    assert take_typed_line() is None
+    assert not typed_input_active()
+    buttons.close()
 
 
 def test_組み立てた一式は端末の版でできている(clock: FakeClock) -> None:

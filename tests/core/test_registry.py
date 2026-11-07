@@ -260,9 +260,10 @@ def test_エントリーポイントの機能にも名前と重複の決まり�
 def test_エントリーポイントが宣言されていなければ機能はない(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # 本物のエントリーポイントには日課が登録されているので、空の群に差し替える
-    patch_entry_points(monkeypatch, [])
+    # 本物のエントリーポイントには日課と音声の入口が登録されているので、空の群に差し替える
+    groups = patch_entry_points(monkeypatch, [])
     registry = FeatureRegistry()
 
     assert list(registry.feature_classes()) == []
     assert list(registry.plan(report({}))) == []
+    assert groups == [ENTRY_POINT_GROUP]

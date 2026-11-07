@@ -2,7 +2,8 @@
 
 1.4 の偽物を受け継ぎ、状態が変わるたびに端末へ 1 行ずつ出す。話す文章は `[声] ...` と
 して出す（開発者の画面への出力で、ログではない）。標準入力の Enter キーは USR ボタンの
-押下として知らせる。
+押下として知らせる。押下を知らせる前に、その行の文字を取っておく（打った文字の聞き取りが
+`take_typed_line()` で取り出す）。
 """
 
 from __future__ import annotations
@@ -45,6 +46,8 @@ __all__ = [
     "build_console_devices",
     "build_console_set",
     "codes_to_text",
+    "take_typed_line",
+    "typed_input_active",
 ]
 
 logger = logging.getLogger(__name__)
@@ -196,11 +199,68 @@ class ConsoleSynth(FakeSynth):
         self._out.line(f"[声] {line}")
 
 
+class _TypedInput:
+    """打った最後の行と、行を読む端末の偽物を持つ。どのスレッドから触ってもよい。"""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._line: str | None = None
+        self._owner: object | None = None  # 行を読んでいる ConsoleButtons
+
+    def begin(self, owner: object) -> None:
+        with self._lock:
+            self._owner = owner
+
+    def end(self, owner: object) -> None:
+        with self._lock:
+            if self._owner is owner:
+                self._owner = None
+                self._line = None
+
+    def put(self, owner: object, line: str) -> None:
+        """読んでいる偽物からの行なら取っておく。"""
+        with self._lock:
+            if self._owner is owner:
+                self._line = line
+
+    def take(self) -> str | None:
+        with self._lock:
+            line, self._line = self._line, None
+            return line
+
+    def active(self) -> bool:
+        with self._lock:
+            return self._owner is not None
+
+    def reset(self) -> None:
+        with self._lock:
+            self._line = None
+            self._owner = None
+
+
+_typed = _TypedInput()
+
+
+def take_typed_line() -> str | None:
+    """最後に打った行（改行を除く）を返して消す。なければ None。"""
+    return _typed.take()
+
+
+def typed_input_active() -> bool:
+    """端末の偽物が行を読んでいれば True（`start` で立ち、EOF と `close` で消える）。"""
+    return _typed.active()
+
+
+def _reset_typed_input_for_tests() -> None:
+    """打った行の口を初めの形に戻す（テスト用）。"""
+    _typed.reset()
+
+
 class ConsoleButtons(FakeButtons):
     """入力の 1 行（Enter キー）を USR ボタンの押下として知らせる。
 
     読み手は daemon のスレッドで、`start()` で始まる。入力の終わり（EOF）で静かに終わる。
-    `close()` の後に読んだ行は知らせない。
+    `close()` の後に読んだ行は知らせず、取っておかない。行の文字はログに出さない。
     """
 
     def __init__(self, clock: MonotonicSource | None = None, *, inp: TextIO | None = None) -> None:
@@ -211,10 +271,15 @@ class ConsoleButtons(FakeButtons):
     def start(self, on_falling: Callable[[str, float], None]) -> None:
         super().start(on_falling)
         if self._reader is None:
+            _typed.begin(self)
             self._reader = threading.Thread(
                 target=self._read_loop, name="console-buttons", daemon=True
             )
             self._reader.start()
+
+    def close(self) -> None:
+        _typed.end(self)
+        super().close()
 
     def join_reader(self, timeout: float | None = None) -> bool:
         """読み手が終わるのを待つ。終わっていれば True（テスト用）。"""
@@ -229,9 +294,13 @@ class ConsoleButtons(FakeButtons):
             try:
                 line = self._inp.readline()
             except (OSError, ValueError):
+                _typed.end(self)
                 return  # 入力が閉じられた
             if not line:
+                _typed.end(self)
                 return  # EOF
+            # 読んでいる偽物の行だけを取っておく（close の後の行は取っておかない）
+            _typed.put(self, line.rstrip("\r\n"))
             try:
                 self.press("usr")
             except Exception as error:
