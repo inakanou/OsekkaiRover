@@ -287,7 +287,9 @@ class ReplyFlow:
             shaped = shape_reply(result.text)
             if not _has_letters(shaped):  # 1.5
                 return _Speech(texts.SAY_EMPTY, Face.HAPPY, keep=True), None
-            return _Speech(self._names.fill(shaped), Face.HAPPY, keep=False), shaped
+            # 呼び名は目印より長いことがあるので、戻した後にもう一度 120 文字までにする（1.4）
+            spoken = shape_reply(self._names.fill(shaped))
+            return _Speech(spoken, Face.HAPPY, keep=False), shaped
         if isinstance(result, Refused):  # 3.2
             return _Speech(texts.SAY_REFUSED, Face.HAPPY, keep=True), None
         return _Speech(_FAILURE_SAYS[result.kind], Face.NORMAL, keep=True), None

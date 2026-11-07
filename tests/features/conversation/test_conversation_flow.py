@@ -353,6 +353,20 @@ def test_長い返事は整えてから話す(kit: FlowKit) -> None:
     assert _spoken_texts(kit) == ["ひとつめ。ふたつめ。"]
 
 
+def test_呼び名に戻した後も話す文は120文字まで(kit: FlowKit) -> None:
+    # 目印（6 文字）より長い呼び名でも、話す文は 120 文字を超えない（1.4）
+    long_name = "ながいながいなまえのこ"
+    config = ConversationConfig(call_name=long_name)
+    h = Harness(kit, [Replied(NAME_MARK + "あ" * 120)], config=config)
+
+    h.handle()
+
+    spoken = _spoken_texts(kit)
+    assert len(spoken) == 1
+    assert len(spoken[0]) == 120
+    assert spoken[0].startswith(long_name)
+
+
 def test_話した返事だけを1回ずつ数える(kit: FlowKit) -> None:
     h = Harness(kit, [Replied("いいね。"), Replied("うん。"), Failed(FailureKind.CONNECTION)])
 

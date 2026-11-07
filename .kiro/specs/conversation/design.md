@@ -80,7 +80,7 @@ graph TB
     Flow --> Lease[rover core lease voice display button]
     Usage --> Store[StateStore]
     Loop --> ListenAgain[voice api listen again]
-    Gate --> SetupFile[envfile]
+    Loop --> SetupFile[envfile]
 ```
 
 - **Pattern**: ポートとアダプタ。判定（門・整え・置き換え・数え）は純粋な関数と小さな型にし、声と画面は借りた資源越しに行う
