@@ -223,7 +223,7 @@ def test_待ち手の例外で配達が止まらない(
 
     def bad(press: ButtonPress) -> None:
         calls.append(press)
-        raise RuntimeError("secret input")
+        raise RuntimeError("hidden input")
 
     router.add_waiter("bad", 50, bad)
     with caplog.at_level(logging.WARNING):
@@ -231,7 +231,7 @@ def test_待ち手の例外で配達が止まらない(
         _press(fakes, clock)
     assert len(calls) == 2
     assert "RuntimeError" in caplog.text
-    assert "secret input" not in caplog.text
+    assert "hidden input" not in caplog.text
 
 
 # --- 5.3 誰もいなければ捨て、持ち越さない ---

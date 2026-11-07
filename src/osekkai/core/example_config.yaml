@@ -43,3 +43,41 @@ core:
 # 項目は機能ごとに決まっている。enabled: false にすると、その機能は開始しない。
 # greeting:
 #   enabled: true
+
+# 日課（決まった時刻の声かけ）。書き方は docs/routine.md を見る。
+# 使うときは、行の頭の「# 」を消す。時刻はすべて引用符で囲む（例: "07:00"）。
+# 下の時刻と言葉は見本の値。家の暮らしに合わせて直す。
+# routine:
+#   enabled: true
+#   call_name: ""            # 子どもの呼び名。言葉の {name} に入る。空なら「きみ」
+#   extra_holidays: []       # 追加の休日（例: ["2026-08-13", "2026-08-14"]）
+#   wake:                    # 起床時刻。書かなければ、その日の最初の時刻のタスクの時刻
+#     weekday: null          # 平日（例: "06:30"）
+#     holiday: null          # 休日（例: "07:30"）
+#   keep_days: 90            # 記録を残す日数（7〜3650）
+#   tasks:
+#     - id: hamigaki_morning         # 名前（小文字の英字で始まり、英小文字・数字・_ だけ）
+#       at: "07:00"                  # 始める時刻。at と after のどちらか 1 つを書く
+#       days: everyday               # everyday（毎日）、weekday（平日）、holiday（休日）
+#       call: "{name}、はみがきの じかんだよ"   # 声かけ
+#       praise: "はみがき できたね"            # ほめる言葉
+#       lcd: "ﾊﾐｶﾞｷ"                 # LCD の 1 行目（16 文字まで）
+#       notice: "もうすぐ はみがきだよ"  # 予告（at のタスクだけ）。なければ書かない
+#       notice_min: 10               # 予告を何分前に言うか（1〜120）
+#       ready: null                  # 準備の声かけ。書くと、ボタンが押されてから声かけする
+#       remind_min: 5                # 催促の間隔（分、1〜60）
+#       max_reminders: 2             # 催促の回数の上限（0〜10）
+#       firm: false                  # true なら、ほかのタスクの途中でも割り込む
+#       sleep: false                 # true なら寝るタスク。終わるとおやすみモードに入る
+#     - id: kigae
+#       after: hamigaki_morning      # 前のタスクが終わったら始める
+#       call: "つぎは きがえよう"
+#       praise: "きがえ できたね"
+#       lcd: "ｷｶﾞｴ"
+#     - id: oyasumi
+#       at: "21:00"
+#       days: everyday               # 寝るタスクは毎日にする（docs/routine.md）
+#       call: "{name}、ねる じかんだよ"
+#       praise: "おやすみなさい"
+#       lcd: "ﾈﾙ ｼﾞｶﾝ"
+#       sleep: true

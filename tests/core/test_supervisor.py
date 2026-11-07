@@ -18,7 +18,7 @@ from osekkai.core.motion import MotionService
 from osekkai.core.registry import FeaturePlan
 from osekkai.core.supervisor import FeatureState, FeatureSupervisor
 
-SECRET = "たろうくんの ひみつ"
+HIDDEN = "たろうくんの ひみつ"
 
 
 class _Ctx:
@@ -168,7 +168,7 @@ def test_生成で例外が出た機能だけが失敗になる(
     supervisor: FeatureSupervisor, probe: _Probe, caplog: pytest.LogCaptureFixture
 ) -> None:
     caplog.set_level(logging.INFO, logger="osekkai")
-    broken = make_feature("broken", probe, init_error=ValueError(SECRET))
+    broken = make_feature("broken", probe, init_error=ValueError(HIDDEN))
     supervisor.start([plan(broken), plan(make_feature("ok", probe))])
     wait_until(lambda: supervisor.states().get("broken") is FeatureState.FAILED)
     wait_until(lambda: supervisor.states().get("ok") is FeatureState.RUNNING)
@@ -176,13 +176,13 @@ def test_生成で例外が出た機能だけが失敗になる(
     text = caplog.text
     assert "broken" in text
     assert "ValueError" in text
-    assert SECRET not in text
+    assert HIDDEN not in text
 
 
 def test_道具の生成で例外が出た機能も失敗になる(arbiter: Arbiter, probe: _Probe) -> None:
     def factory(spec: FeatureSpec) -> FeatureContext:
         if spec.name == "broken":
-            raise OSError(SECRET)
+            raise OSError(HIDDEN)
         return cast(FeatureContext, _Ctx(spec, arbiter))
 
     sup = FeatureSupervisor(arbiter, factory)
@@ -213,7 +213,7 @@ def test_動作中の例外で資源が戻りモーターが止まりほかの�
         lease.drive.drive(0.0, 50)
         probe.running.set()
         crash.wait()
-        raise RuntimeError(SECRET)
+        raise RuntimeError(HIDDEN)
 
     crasher = make_feature(
         "crasher", probe, behavior=driver, resources=frozenset({Resource.DRIVE, Resource.VOICE})
@@ -233,7 +233,7 @@ def test_動作中の例外で資源が戻りモーターが止まりほかの�
     text = caplog.text
     assert "crasher" in text
     assert "RuntimeError" in text
-    assert SECRET not in text
+    assert HIDDEN not in text
 
 
 def test_失敗した機能は再起動しない(supervisor: FeatureSupervisor, probe: _Probe) -> None:
@@ -253,13 +253,13 @@ def test_例外の詳細はDEBUGのときだけ残す(
     caplog.set_level(logging.DEBUG, logger="osekkai")
 
     def boom(ctx: FeatureContext, stop: threading.Event) -> None:
-        raise RuntimeError(SECRET)
+        raise RuntimeError(HIDDEN)
 
     supervisor.start([plan(make_feature("a", probe, behavior=boom))])
     wait_until(lambda: supervisor.states().get("a") is FeatureState.FAILED)
     above_debug = [r for r in caplog.records if r.levelno > logging.DEBUG]
     assert all(r.exc_info is None for r in above_debug)
-    assert all(SECRET not in r.getMessage() for r in above_debug)
+    assert all(HIDDEN not in r.getMessage() for r in above_debug)
     assert any(r.levelno == logging.DEBUG and r.exc_info for r in caplog.records)
 
 
@@ -337,9 +337,9 @@ def test_失敗した機能は終わりの片付けに名前が渡る(
     tidy_supervisor: FeatureSupervisor, probe: _Probe, ended: list[str]
 ) -> None:
     def boom(ctx: FeatureContext, stop: threading.Event) -> None:
-        raise RuntimeError(SECRET)
+        raise RuntimeError(HIDDEN)
 
-    broken = make_feature("broken", probe, init_error=ValueError(SECRET))
+    broken = make_feature("broken", probe, init_error=ValueError(HIDDEN))
     tidy_supervisor.start(
         [
             plan(make_feature("a", probe, behavior=boom)),
@@ -384,7 +384,7 @@ def test_片付けの失敗は型だけを残して終わりを妨げない(
     caplog.set_level(logging.INFO, logger="osekkai")
 
     def broken_cleanup(name: str) -> None:
-        raise RuntimeError(SECRET)
+        raise RuntimeError(HIDDEN)
 
     def factory(spec: FeatureSpec) -> FeatureContext:
         return cast(FeatureContext, _Ctx(spec, arbiter))
@@ -394,7 +394,7 @@ def test_片付けの失敗は型だけを残して終わりを妨げない(
     wait_until(lambda: sup.states().get("a") is FeatureState.STOPPED)
     assert sup.stop_all(1.0) == []
     assert "RuntimeError" in caplog.text
-    assert SECRET not in caplog.text
+    assert HIDDEN not in caplog.text
 
 
 def test_機能がなければ停止はすぐ終わる(supervisor: FeatureSupervisor) -> None:

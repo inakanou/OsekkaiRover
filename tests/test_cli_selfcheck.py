@@ -58,6 +58,8 @@ def probes(xdg_dirs: dict[str, Path], monkeypatch: pytest.MonkeyPatch) -> FakePr
     _place_config()
     fake = FakeProbes()
     monkeypatch.setattr(cli, "_build_probes", lambda fake_hardware: fake)
+    # 基盤の項目だけを見るため、登録された機能（日課など）は読み込まない
+    monkeypatch.setattr(cli, "FeatureRegistry", lambda: FeatureRegistry([]))
     return fake
 
 
@@ -279,14 +281,14 @@ def test_設定を読めなくても止まらず_設定の項目をだめにす�
     def _broken(
         self: ConfigLoader, override: Path | None = None, *, create_missing: bool = True
     ) -> None:
-        raise PermissionError("secret-path")
+        raise PermissionError("hidden-path")
 
     monkeypatch.setattr(ConfigLoader, "load", _broken)
     assert cli.main(["--self-check", "--fake-hardware", "--json"]) == 1
     out, err = capsys.readouterr()
     rows = _by_name(json.loads(out))
     assert rows["core.config"]["status"] == "failed"
-    assert "secret-path" not in out + err
+    assert "hidden-path" not in out + err
 
 
 def test_表示とログに設定の値を出さない(
@@ -335,4 +337,5 @@ def test_サブプロセスで_JSON_を見本の形で出す(xdg_dirs: dict[str,
     assert set(data) == set(sample)
     assert all(set(row) == set(sample["results"][0]) for row in data["results"])
     assert result.returncode == (0 if data["ok"] else 1)
-    assert [row["name"] for row in data["results"]] == BASE_NAMES
+    # 登録された機能の項目は、基盤の項目の後に並ぶ
+    assert [row["name"] for row in data["results"]][: len(BASE_NAMES)] == BASE_NAMES

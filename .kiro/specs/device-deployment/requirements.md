@@ -43,7 +43,7 @@ Device Deployment は、開発 PC から実機（Raspberry Pi 5、1 台）に Os
   - CI からの自動の入れ替え、複数台への配置、OS のイメージの作成
   - 個々の機能の確認の中身（各機能が self-check の口に足す）
   - サービスの停止の時の安全な処理（`rover-core`）
-  - サンプルの星の記録と顔の特徴を新しい保存先に移すこと（それぞれ `daily-routine` と `presence`）
+  - サンプルの顔の特徴を新しい保存先に移すこと（`presence`）。サンプルの星の記録は移さない（`daily-routine` で 0 から始めると決めた。2026-11-07）
   - 子どもが使う時間帯かどうかの判断（人が判断する）
 - **Adjacent expectations**:
   - `rover-core` は、版の情報、起動と停止の振る舞い、停止の後の安全停止、単一の実行を提供する。Device Deployment は、走行中か・作業中かを外から確かめられることも期待する

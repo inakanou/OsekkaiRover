@@ -176,17 +176,17 @@ def test_ls_remote_errors_are_unreachable(fake_runner: FakeRunner, error: Except
 
 
 def test_ls_remote_failure_hides_stderr(fake_runner: FakeRunner) -> None:
-    fake_runner.script(ls_remote("v1"), returncode=128, stderr="fatal: secret-host denied")
+    fake_runner.script(ls_remote("v1"), returncode=128, stderr="fatal: hidden-host denied")
     with pytest.raises(RemoteUnreachable) as caught:
         resolve_ref("v1", ROOT, fake_runner)
-    assert "secret-host" not in str(caught.value)
+    assert "hidden-host" not in str(caught.value)
     assert caught.value.exit_code == ExitCode.ABORTED
 
 
 def test_fetch_failure_is_unreachable(fake_runner: FakeRunner) -> None:
     fake_runner.script(ls_remote("feat/x"), stdout=lines((SHA_BRANCH, "refs/heads/feat/x")))
     fake_runner.script(local_ref("refs/heads/feat/x"), stdout="d" * 40 + "\n")
-    fake_runner.script(fetch("feat/x"), returncode=128, stderr="fatal: secret")
+    fake_runner.script(fetch("feat/x"), returncode=128, stderr="fatal: hidden")
     with pytest.raises(RemoteUnreachable):
         resolve_ref("feat/x", ROOT, fake_runner)
 

@@ -442,9 +442,9 @@ def test_スピーカーの有効化はlgpioを使わない() -> None:
     ("run", "message"),
     [
         (FakeRun(returncode=1), "pinctrl failed with return code 1"),
-        (FakeRun(error=FileNotFoundError(2, "No such file", "/secret/pinctrl")), "pinctrl"),
+        (FakeRun(error=FileNotFoundError(2, "No such file", "/hidden/pinctrl")), "pinctrl"),
         (FakeRun(error=subprocess.TimeoutExpired(["pinctrl"], 2.0, output=b"x")), "pinctrl"),
-        (FakeRun(error=PermissionError(13, "denied", "/secret")), "pinctrl"),
+        (FakeRun(error=PermissionError(13, "denied", "/hidden")), "pinctrl"),
     ],
 )
 def test_スピーカーの有効化の失敗はOSError(run: FakeRun, message: str) -> None:
@@ -452,5 +452,5 @@ def test_スピーカーの有効化の失敗はOSError(run: FakeRun, message: s
         enable_speaker("v4", "auto", run=run)
     text = str(info.value)
     assert text.startswith(message)
-    assert "/secret" not in text
+    assert "/hidden" not in text
     assert info.value.__cause__ is None

@@ -152,10 +152,10 @@ def test_LCD_がなくてもほかのデバイスで続ける() -> None:
 
 
 def test_理由に設定の値やパスを入れない() -> None:
-    secret = "/home/someone/.config/osekkai/config.yaml 0x3f D99"
+    hidden = "/home/someone/.config/osekkai/config.yaml 0x3f D99"
     factories = _factories()
     for name in ("display", "buttons", "led", "servos", "motors", "synth", "player"):
-        factories = replace(factories, **{name: _raises(OSError(2, secret, secret))})
+        factories = replace(factories, **{name: _raises(OSError(2, hidden, hidden))})
     devices = _build(factories)
     reasons = _unavailable(devices)
     assert set(reasons) == {"display", "buttons", "led", "servos", "motors", "synth", "player"}
@@ -245,12 +245,12 @@ def test_スピーカーを有効にできなくても声のデバイスは残�
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     caplog.set_level(logging.WARNING, logger="osekkai")
-    secret = "pinctrl failed /usr/bin/pinctrl 20"
-    devices = _build(replace(_factories(), enable_speaker=_raises(OSError(secret))))
+    hidden = "pinctrl failed /usr/bin/pinctrl 20"
+    devices = _build(replace(_factories(), enable_speaker=_raises(OSError(hidden))))
     assert isinstance(devices.synth, Part)
     assert isinstance(devices.player, Part)
     assert "OSError" in caplog.text
-    assert secret not in caplog.text
+    assert hidden not in caplog.text
 
 
 # ---- 時刻の同期 ----

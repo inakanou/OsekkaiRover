@@ -199,8 +199,8 @@ def test_空なら既定の再生先が一覧にあるかを見る() -> None:
 def test_pactlが失敗したら値を含まない例外() -> None:
     probes = _probes(run=FakeRun({SINKS: (1, "")}))
     with pytest.raises(RuntimeError) as info:
-        probes.audio_sink_exists("secret-sink")
-    assert "secret-sink" not in str(info.value)
+        probes.audio_sink_exists("hidden-sink")
+    assert "hidden-sink" not in str(info.value)
 
     def missing(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[Any]:
         raise FileNotFoundError("pactl")

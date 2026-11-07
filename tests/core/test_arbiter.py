@@ -333,7 +333,7 @@ def test_合図の受け手の例外で調停は止まらない(
     called: list[str] = []
 
     def broken() -> None:
-        raise RuntimeError("secret message")
+        raise RuntimeError("hidden message")
 
     arbiter.on_resource_freed(D, broken)
     arbiter.on_resource_freed(D, lambda: called.append("second"))
@@ -342,7 +342,7 @@ def test_合図の受け手の例外で調停は止まらない(
         lease.release()
     assert called == ["second"]
     assert "RuntimeError" in caplog.text
-    assert "secret message" not in caplog.text
+    assert "hidden message" not in caplog.text
     assert arbiter.acquire("b", Priority.INTERACTIVE, [D]).active
 
 
@@ -588,7 +588,7 @@ def test_知らせの受け手の例外は型だけ残して調停は続く(
     arbiter: Arbiter, caplog: pytest.LogCaptureFixture
 ) -> None:
     def broken() -> None:
-        raise RuntimeError("secret message")
+        raise RuntimeError("hidden message")
 
     with caplog.at_level(logging.WARNING, logger="osekkai"):
         low = arbiter.acquire("low", Priority.BACKGROUND, [V], on_preempt=broken)
@@ -597,7 +597,7 @@ def test_知らせの受け手の例外は型だけ残して調停は続く(
         low.release()
         high.join()
     assert high.result[0].active
-    assert "secret message" not in caplog.text
+    assert "hidden message" not in caplog.text
 
 
 def test_同じ優先度の持ち主には中断を知らせない(arbiter: Arbiter) -> None:

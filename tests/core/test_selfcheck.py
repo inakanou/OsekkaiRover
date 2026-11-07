@@ -149,7 +149,7 @@ def test_時間切れの項目はだめにして次へ進む(tmp_path: Path, rel
 
 def test_例外の項目はだめにして理由は型の名前だけ(tmp_path: Path) -> None:
     def broken(_ctx: CheckContext) -> CheckResult:
-        raise FileNotFoundError("/home/someone/secret.yaml たろう")
+        raise FileNotFoundError("/home/someone/hidden.yaml たろう")
 
     results = SelfCheckRunner().run(
         [Check("core.storage", broken), Check("core.config", _ok)], _ctx(tmp_path)
@@ -162,11 +162,11 @@ def test_例外の項目はだめにして理由は型の名前だけ(tmp_path: 
 
 def test_例外の中身はログにも出さない(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     def broken(_ctx: CheckContext) -> CheckResult:
-        raise RuntimeError("たろう sk-secret")
+        raise RuntimeError("たろう sk-hidden")
 
     SelfCheckRunner().run([Check("core.storage", broken)], _ctx(tmp_path))
     assert "たろう" not in caplog.text
-    assert "sk-secret" not in caplog.text
+    assert "sk-hidden" not in caplog.text
 
 
 def test_結果の形が違う項目はだめ(tmp_path: Path) -> None:

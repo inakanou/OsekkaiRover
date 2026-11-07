@@ -24,7 +24,7 @@ from rover_deploy.system import CommandTimedOut, RunResult, SubprocessRunner
 SHA_A = "a" * 40
 SHA_B = "b" * 40
 URL = "https://example.invalid/owner/repo.git"
-SECRET = "ひみつの出力"  # 外のコマンドの出力。例外の文言に出てはいけない
+HIDDEN = "ひみつの出力"  # 外のコマンドの出力。例外の文言に出てはいけない
 
 
 def tag(sha: str) -> Target:
@@ -268,13 +268,13 @@ def test_途中で失敗すれば作りかけだけを消す(
         prefix = (str(directory / ".venv/bin/pip"),)
     elif prefix == ("WORKTREE_ADD",):
         prefix = git(layout, "worktree", "add")
-    fake.script(prefix, returncode=1, stderr=SECRET)
+    fake.script(prefix, returncode=1, stderr=HIDDEN)
 
     with pytest.raises(PrepareFailed) as info:
         rel.prepare(tag(SHA_A), URL)
 
     assert info.value.step == step
-    assert SECRET not in str(info.value)
+    assert HIDDEN not in str(info.value)
     assert not directory.exists()
     assert git(layout, "worktree", "prune") in fake.argvs[-1:]
     # 今の版とほかの版には触れない
@@ -299,13 +299,13 @@ def test_取得に失敗すれば版のディレクトリを作らない(
     layout: Layout, rel: Releases, fake: FakeRunner
 ) -> None:
     other = make_release(layout, SHA_B)
-    fake.script(git(layout, "fetch"), returncode=128, stderr=SECRET)
+    fake.script(git(layout, "fetch"), returncode=128, stderr=HIDDEN)
 
     with pytest.raises(PrepareFailed) as info:
         rel.prepare(tag(SHA_A), URL)
 
     assert info.value.step == "fetch"
-    assert SECRET not in str(info.value)
+    assert HIDDEN not in str(info.value)
     assert not layout.release_dir(SHA_A).exists()
     assert other.exists()
 
@@ -448,7 +448,7 @@ def test_手の変更は件数だけを数える(layout: Layout, fake: FakeRunne
     directory = make_release(layout, SHA_A)
     fake.script(
         ("git", "-C", str(directory), "status", "--porcelain"),
-        stdout=" M src/a.py\n?? secret-name.txt\n",
+        stdout=" M src/a.py\n?? hidden-name.txt\n",
     )
 
     count = Releases(layout, fake).dirty_count(directory)

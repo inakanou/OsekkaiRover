@@ -28,7 +28,7 @@ from rover_deploy.system import CommandFailed
 
 ID_A = "20261104T210000Z"
 ID_B = "20261105T090000Z"
-SECRET = "ひみつのキー"  # ファイルの中身。例外の文言に出てはいけない
+HIDDEN = "ひみつのキー"  # ファイルの中身。例外の文言に出てはいけない
 FREEZE = b"osekkai==0.1.0\nnumpy==1.26.4\n"
 
 
@@ -46,7 +46,7 @@ def write(path: Path, text: str, mode: int = 0o644) -> Path:
 def populate(home: Path) -> Layout:
     """実機に近い置き場所を作る（research.md の調べ）。"""
     layout = make_layout(home)
-    write(layout.core_config_dir / "env", f"API_KEY={SECRET}\n", 0o600)
+    write(layout.core_config_dir / "env", f"API_KEY={HIDDEN}\n", 0o600)
     write(layout.core_config_dir / "config.yaml", "neck: {}\n")
     write(layout.core_state_dir / "kids/records.jsonl", "{}\n")
     data = core_data_dir(layout, {})
@@ -148,7 +148,7 @@ def test_XDG_DATA_HOME_を使う(tmp_path: Path) -> None:
 
 def test_記号のリンクは入れない(tmp_path: Path) -> None:
     layout = populate(tmp_path)
-    outside = write(tmp_path / "outside/secret.txt", SECRET)
+    outside = write(tmp_path / "outside/hidden.txt", HIDDEN)
     (layout.core_config_dir / "link").symlink_to(outside)
     members = names(create_backup(layout, ID_A).path)
     assert "config/link" not in members
@@ -160,14 +160,14 @@ def test_作れなければ専用の例外で中身を出さない(tmp_path: Pat
     write(layout.backups_dir, "ディレクトリでなくファイル")  # 置き場所を作れない
     with pytest.raises(BackupFailed) as caught:
         create_backup(layout, ID_A)
-    assert SECRET not in str(caught.value)
+    assert HIDDEN not in str(caught.value)
 
 
 def test_読めないファイルがあれば失敗して一時ファイルを残さない(tmp_path: Path) -> None:
     if os.geteuid() == 0:
         pytest.skip("root では読めないファイルを作れない")
     layout = populate(tmp_path)
-    unreadable = write(layout.core_state_dir / "locked.jsonl", SECRET, 0o000)
+    unreadable = write(layout.core_state_dir / "locked.jsonl", HIDDEN, 0o000)
     try:
         with pytest.raises(BackupFailed):
             create_backup(layout, ID_A)
@@ -430,7 +430,7 @@ def test_見積もりはバックアップに入るファイルの大きさの�
     expected = sum(
         len(text)
         for text in (
-            f"API_KEY={SECRET}\n".encode(),
+            f"API_KEY={HIDDEN}\n".encode(),
             b"neck: {}\n",
             b"{}\n",
             b"face",
