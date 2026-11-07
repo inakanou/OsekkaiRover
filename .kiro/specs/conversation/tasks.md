@@ -57,7 +57,7 @@
   - _Boundary: envfile_
   - _Requirements: 8.1, 8.3, 9.2_
 
-- [ ] 3. アダプタと self-check
+- [x] 3. アダプタと self-check
 - [x] 3.1 (P) Claude API のアダプタを作る
   - 会話のライブラリを関数の中で読み込み、あるかを確かめる口を作る。鍵を明示し、待つ時間を返事を待つ時間に、自動のやり直しを 0 にしたクライアントで、beta の messages を 1 回呼ぶ（モデル `claude-opus-5-5`、effort low、決まりの文をキャッシュ、beta `server-side-fallback-2026-07-01` と fallbacks default、思考と temperature は渡さない）
   - stop_reason が refusal なら拒否、そうでなければ text のブロックをつないだ返事。時間切れ → つながらない → 混み合う（429・529）→ そのほかの状態 → そのほか、の順に例外を失敗の種類にする。ログには拒否の種類と例外の型の名前だけを出す
@@ -74,7 +74,7 @@
   - _Depends: 1.3_
   - _Requirements: 10.2_
 
-- [ ] 3.3 self-check の項目を作る
+- [x] 3.3 self-check の項目を作る
   - 項目 `conversation.setup` を作る。設定が使えない・無効 → SKIPPED、会話のライブラリがない → SKIPPED、鍵の問題 → OK と理由、鍵がある → OK。理由は決まった文言だけで、値を出さない
   - ライブラリがあるかは 3.1 の確かめる口を使い、テストではその口を差し替える（偽の anthropic のモジュールは使わない）
   - 完了の状態: 各場合の結果と理由のテストが通り、結果に偽の値が出ない
