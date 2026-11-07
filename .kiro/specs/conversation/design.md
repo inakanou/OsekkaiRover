@@ -308,9 +308,10 @@ class Session:
     def __init__(self, max_turns: int, now: float) -> None: ...
     def turns_with(self, user_text: str) -> list[Turn]: ...  # 今までの往復 + 新しい問い
     def add(self, user_text: str, reply_text: str, now: float) -> None: ...  # 1 往復を足す。上限を超えたら古いものから捨てる
+    def touch(self, now: float) -> None: ...  # 往復は足さずに、最後に使った時刻だけを進める
     def expired(self, now: float) -> bool: ...  # 最後に使ってから FORGET_AFTER_S（130 秒）たったか
 ```
-- 足すのは返事を話せたときだけ（拒否・空・失敗の問いは足さない。6.6）
+- 足すのは返事を話せたときだけ（拒否・空・失敗の問いは足さない。6.6）。拒否・空・失敗を話し終えたときは `touch` で時刻だけを進める（続けて聞く間に前のやりとりを捨てないため）
 - 返事は整えた後、呼び名に戻す前の文（目印のまま）を残す
 - ファイルにも外部にも出さない。捨てるときは参照を外すだけ（2.5）
 - 思考のブロックは残さず、文字だけを残す（research.md の決定。先頭を捨てても API に断られない）
@@ -400,7 +401,7 @@ class ReplyFlow:
      - 話している途中に中断が来たときは、基盤の決まりどおり今の発話を言い終えてから資源を返し、数えず、続けて聞くも頼まない（7.1）
   6. 結果から言葉を決める: `Replied` は整えて（空なら `SAY_EMPTY`）呼び名に戻す、`Refused` は `SAY_REFUSED`、`Failed` は種類ごとの言葉（CONNECTION → 6.1、BUSY → 6.2、OTHER と TIMEOUT → 6.3）
   7. 「ﾛｰﾊﾞｰ」と喜んだ顔（失敗のときは普通の顔）を出して話す。AI の返事は `keep=False`（8.2）、決まった言葉は `keep=True`
-  8. 話し終えたら、`Replied`・`Refused` は 1 回数える（5.4）。`Replied` で中身があれば、やりとりに 1 往復を足す
+  8. 話し終えたら、`Replied`・`Refused` は 1 回数える（5.4）。`Replied` で中身があれば、やりとりに 1 往復を足す。そうでなく話し終えたときは `Session.touch` で時刻だけを進める
 - ログ: 「返事を話しました（今日 N 回目、M ms）」「失敗の言葉を話しました: <種類>」「門で止めました: <理由>」など、決まった文言と数・種類の名前だけ（8.4）
 
 #### ConversationFeature（`feature.py`）
