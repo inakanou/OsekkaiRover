@@ -25,7 +25,7 @@ from osekkai.adapters.pi.pipewire import PLAY_TIMEOUT, PaplayPlayer
 from osekkai.adapters.pi.timesync import QUERY_TIMEOUT, TimedatectlTimeSync
 from osekkai.core.config import VoiceSettings
 
-SECRET = "たろうくん、おはよう"
+HIDDEN = "たろうくん、おはよう"
 
 
 class FakeRun:
@@ -77,7 +77,7 @@ def test_合成はopen_jtalkの引数を組み立て1行を標準入力で渡す
     seen: list[Path] = []
     synth = OpenJTalkSynth(run=run, normalize=seen.append)
     out = tmp_path / "x.wav"
-    synth.synthesize(SECRET, _settings(), out)
+    synth.synthesize(HIDDEN, _settings(), out)
 
     assert len(run.calls) == 1
     args, kwargs = run.calls[0]
@@ -94,7 +94,7 @@ def test_合成はopen_jtalkの引数を組み立て1行を標準入力で渡す
         "-ow",
         str(out),
     ]
-    assert kwargs["input"] == (SECRET + "\n").encode("utf-8")
+    assert kwargs["input"] == (HIDDEN + "\n").encode("utf-8")
     assert kwargs["timeout"] == SYNTH_TIMEOUT
     assert kwargs.get("shell", False) is False
     assert seen == [out]
@@ -119,23 +119,23 @@ def test_合成の行に改行があっても1行だけを渡す(tmp_path: Path)
 
 
 def test_合成の失敗は文章とstderrを含まない例外になる(tmp_path: Path) -> None:
-    run = FakeRun(returncode=1, stderr=SECRET.encode("utf-8"))
+    run = FakeRun(returncode=1, stderr=HIDDEN.encode("utf-8"))
     synth = OpenJTalkSynth(run=run, normalize=_no_normalize)
     with pytest.raises(RuntimeError) as info:
-        synth.synthesize(SECRET, _settings(), tmp_path / "x.wav")
+        synth.synthesize(HIDDEN, _settings(), tmp_path / "x.wav")
     msg = str(info.value)
     assert "open_jtalk" in msg and "1" in msg
-    assert SECRET not in msg and "たろう" not in msg
+    assert HIDDEN not in msg and "たろう" not in msg
     assert "たろう" not in repr(info.value.args)
 
 
 def test_合成の時間切れは文章を含まない例外になる(tmp_path: Path) -> None:
-    run = FakeRun(raises=subprocess.TimeoutExpired(["open_jtalk"], 30, output=SECRET.encode()))
+    run = FakeRun(raises=subprocess.TimeoutExpired(["open_jtalk"], 30, output=HIDDEN.encode()))
     synth = OpenJTalkSynth(run=run, normalize=_no_normalize)
     with pytest.raises(RuntimeError) as info:
-        synth.synthesize(SECRET, _settings(), tmp_path / "x.wav")
+        synth.synthesize(HIDDEN, _settings(), tmp_path / "x.wav")
     assert "timed out" in str(info.value)
-    assert SECRET not in str(info.value)
+    assert HIDDEN not in str(info.value)
     # 元の例外（出力に文章を持ちうる）はつながない
     assert info.value.__cause__ is None
     assert info.value.__suppress_context__
@@ -145,7 +145,7 @@ def test_合成のコマンドがないときはOSErrorになる(tmp_path: Path)
     run = FakeRun(raises=FileNotFoundError(2, "No such file", "open_jtalk"))
     synth = OpenJTalkSynth(run=run, normalize=_no_normalize)
     with pytest.raises(OSError):
-        synth.synthesize(SECRET, _settings(), tmp_path / "x.wav")
+        synth.synthesize(HIDDEN, _settings(), tmp_path / "x.wav")
 
 
 def test_合成の後に正規化が失敗しても文章を含まない(tmp_path: Path) -> None:
@@ -154,8 +154,8 @@ def test_合成の後に正規化が失敗しても文章を含まない(tmp_pat
 
     synth = OpenJTalkSynth(run=FakeRun(), normalize=broken)
     with pytest.raises(ValueError) as info:
-        synth.synthesize(SECRET, _settings(), tmp_path / "x.wav")
-    assert SECRET not in str(info.value)
+        synth.synthesize(HIDDEN, _settings(), tmp_path / "x.wav")
+    assert HIDDEN not in str(info.value)
 
 
 # ---- 正規化 ----
@@ -253,11 +253,11 @@ def test_再生先を指定して再生する(tmp_path: Path) -> None:
 
 
 def test_再生の失敗は終了コードだけの例外になる(tmp_path: Path) -> None:
-    run = FakeRun(returncode=2, stderr=b"secret stuff")
+    run = FakeRun(returncode=2, stderr=b"hidden stuff")
     with pytest.raises(RuntimeError) as info:
         PaplayPlayer(run=run).play(tmp_path / "x.wav", "")
     assert "paplay" in str(info.value) and "2" in str(info.value)
-    assert "secret" not in str(info.value)
+    assert "hidden" not in str(info.value)
 
 
 def test_再生の時間切れは例外になる(tmp_path: Path) -> None:

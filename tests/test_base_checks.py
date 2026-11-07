@@ -50,7 +50,7 @@ BASE_NAMES = [
     "core.buttons",
     "core.servos",
 ]
-SECRET_SINK = "secret-sink-name"
+HIDDEN_SINK = "hidden-sink-name"
 
 
 def _paths(tmp_path: Path) -> Paths:
@@ -125,11 +125,11 @@ def test_設定の致命の誤りはだめで件数だけを出す(tmp_path: Pat
     report = ConfigReport(
         core=CoreConfig(),
         features={},
-        fatal_errors=["core.voice.sink: secret-value は違います", "core.cache_max_mb: 1"],
+        fatal_errors=["core.voice.sink: hidden-value は違います", "core.cache_max_mb: 1"],
     )
     result = _one(FakeProbes(), _ctx(tmp_path, report=report), "core.config")
     assert result == CheckResult(CheckStatus.FAILED, "設定の誤りがある（2 件）")
-    assert "secret" not in result.reason
+    assert "hidden" not in result.reason
 
 
 def test_設定ファイルがなければだめ(tmp_path: Path) -> None:
@@ -233,10 +233,10 @@ def test_合成は時間に余裕を持たせる() -> None:
 
 
 def test_設定の再生先があればよい(tmp_path: Path) -> None:
-    probes = FakeProbes(sinks={SECRET_SINK}, default_sink=False)
-    ctx = _ctx(tmp_path, core=CoreConfig(voice=VoiceSettings(sink=SECRET_SINK)))
+    probes = FakeProbes(sinks={HIDDEN_SINK}, default_sink=False)
+    ctx = _ctx(tmp_path, core=CoreConfig(voice=VoiceSettings(sink=HIDDEN_SINK)))
     assert _one(probes, ctx, "core.audio_sink").status is CheckStatus.OK
-    assert probes.sink_queries == [SECRET_SINK]
+    assert probes.sink_queries == [HIDDEN_SINK]
 
 
 def test_空の再生先は既定の再生先を見る(tmp_path: Path) -> None:
@@ -248,7 +248,7 @@ def test_空の再生先は既定の再生先を見る(tmp_path: Path) -> None:
 
 
 def test_再生先がなければだめで名前を出さない(tmp_path: Path) -> None:
-    ctx = _ctx(tmp_path, core=CoreConfig(voice=VoiceSettings(sink=SECRET_SINK)))
+    ctx = _ctx(tmp_path, core=CoreConfig(voice=VoiceSettings(sink=HIDDEN_SINK)))
     result = _one(FakeProbes(sinks=set()), ctx, "core.audio_sink")
     assert result == CheckResult(CheckStatus.FAILED, REASON_NO_SINK)
 
@@ -367,10 +367,10 @@ def test_だめの理由に設定の値が出ない(tmp_path: Path) -> None:
         synth_ok=False,
     )
     core = CoreConfig(
-        voice=VoiceSettings(sink=SECRET_SINK, open_jtalk="/opt/secret/open_jtalk"),
+        voice=VoiceSettings(sink=HIDDEN_SINK, open_jtalk="/opt/hidden/open_jtalk"),
         hardware=HardwareSettings(lcd_address=0x3F, extra_button_pin="D0"),
     )
-    report = ConfigReport(core=core, features={}, fatal_errors=[f"core.voice.sink: {SECRET_SINK}"])
+    report = ConfigReport(core=core, features={}, fatal_errors=[f"core.voice.sink: {HIDDEN_SINK}"])
     ctx = _ctx(tmp_path, report=report)
     ctx.paths.cache_dir.parent.mkdir(parents=True, exist_ok=True)
     ctx.paths.cache_dir.write_text("x")
@@ -387,5 +387,5 @@ def test_だめの理由に設定の値が出ない(tmp_path: Path) -> None:
     }
     for result in results.values():
         assert result.reason in fixed
-        for value in (SECRET_SINK, "secret", "0x3f", "63", "D0", str(tmp_path)):
+        for value in (HIDDEN_SINK, "hidden", "0x3f", "63", "D0", str(tmp_path)):
             assert value not in result.reason

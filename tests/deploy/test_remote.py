@@ -142,7 +142,7 @@ def test_agent_returns_json_and_exit_code(fake_runner: FakeRunner, code: int) ->
 
 
 def test_usage_error_without_json(fake_runner: FakeRunner) -> None:
-    fake_runner.script(SSH, returncode=2, stdout="", stderr="usage: secret-host\n")
+    fake_runner.script(SSH, returncode=2, stdout="", stderr="usage: hidden-host\n")
     remote, _, _ = make_remote(fake_runner)
     assert remote.agent("nope") == AgentReply(2, None)
 
@@ -442,12 +442,12 @@ def test_fetch_tightens_existing_dir(tmp_path: Path) -> None:
 @pytest.mark.parametrize(("code", "error"), [(255, DeviceUnreachable), (1, TransferFailed)])
 def test_fetch_failure_leaves_nothing(tmp_path: Path, code: int, error: type[Exception]) -> None:
     run = ScpRunner()
-    run.script(SCP, returncode=code, stderr="scp: /home/secret: No such file")
+    run.script(SCP, returncode=code, stderr="scp: /home/hidden: No such file")
     remote, _, _ = make_remote(run)
     local = tmp_path / "id" / "b.tar.gz"
     with pytest.raises(error) as info:
         remote.fetch("/home/u/b.tar.gz", local)
-    assert "secret" not in str(info.value)
+    assert "hidden" not in str(info.value)
     assert list(local.parent.iterdir()) == []
 
 

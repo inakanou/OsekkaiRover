@@ -16,7 +16,7 @@ from osekkai.core.config import (
 from osekkai.core.paths import Paths
 
 REPO_EXAMPLE = Path(__file__).resolve().parents[2] / "config" / "osekkai.example.yaml"
-SECRET = "9876"
+HIDDEN = "9876"
 
 
 class Inner(BaseModel):
@@ -156,13 +156,13 @@ def test_YAMLの書き方の誤りは致命の誤りで基盤は既定値にな�
     xdg_dirs: dict[str, Path], caplog: pytest.LogCaptureFixture
 ) -> None:
     paths = Paths()
-    _write(paths, f"core:\n  cache_max_mb: 300\ngreeting:\n  pin: [{SECRET}\n")
+    _write(paths, f"core:\n  cache_max_mb: 300\ngreeting:\n  pin: [{HIDDEN}\n")
     report = ConfigLoader(paths, MODELS).load()
     assert report.fatal_errors
     assert report.core == CoreConfig()
     assert report.features == {}
-    assert SECRET not in _logged(caplog)
-    assert all(SECRET not in e for e in report.fatal_errors)
+    assert HIDDEN not in _logged(caplog)
+    assert all(HIDDEN not in e for e in report.fatal_errors)
 
 
 def test_トップレベルが対応表でなければ致命の誤り(xdg_dirs: dict[str, Path]) -> None:
@@ -247,17 +247,17 @@ def test_知らない項目は警告にして続ける(
     _write(
         paths,
         "core:\n"
-        f"  colour: {SECRET}\n"
+        f"  colour: {HIDDEN}\n"
         "  voice:\n"
-        f"    tone: {SECRET}\n"
+        f"    tone: {HIDDEN}\n"
         "  motion:\n"
         "    calibration:\n"
-        f"      roll: {SECRET}\n"
+        f"      roll: {HIDDEN}\n"
         "greeting:\n"
-        f"  nickname: {SECRET}\n"
+        f"  nickname: {HIDDEN}\n"
         "  inner:\n"
-        f"    depth: {SECRET}\n"
-        f"unknown_feature:\n  pin: {SECRET}\n",
+        f"    depth: {HIDDEN}\n"
+        f"unknown_feature:\n  pin: {HIDDEN}\n",
     )
     report = ConfigLoader(paths, MODELS).load()
     assert report.fatal_errors == []
@@ -273,8 +273,8 @@ def test_知らない項目は警告にして続ける(
     ):
         assert key in joined
         assert key in _logged(caplog)
-    assert SECRET not in joined
-    assert SECRET not in _logged(caplog)
+    assert HIDDEN not in joined
+    assert HIDDEN not in _logged(caplog)
 
 
 def test_誤りのログと報告に設定の値を出さない(
@@ -285,10 +285,10 @@ def test_誤りのログと報告に設定の値を出さない(
     _write(
         paths,
         "core:\n"
-        f'  startup_voice_hours: ["{SECRET}", "20:00"]\n'
-        f"  hardware:\n    motor_driver: x{SECRET}\n    lcd_address: {SECRET}\n"
-        f"    speaker_enable_pin: p{SECRET}\n"
-        f"greeting:\n  volume: {SECRET}\n  pin: [{SECRET}]\n  enabled: e{SECRET}\n",
+        f'  startup_voice_hours: ["{HIDDEN}", "20:00"]\n'
+        f"  hardware:\n    motor_driver: x{HIDDEN}\n    lcd_address: {HIDDEN}\n"
+        f"    speaker_enable_pin: p{HIDDEN}\n"
+        f"greeting:\n  volume: {HIDDEN}\n  pin: [{HIDDEN}]\n  enabled: e{HIDDEN}\n",
     )
     report = ConfigLoader(paths, MODELS).load()
     assert report.fatal_errors
@@ -296,8 +296,8 @@ def test_誤りのログと報告に設定の値を出さない(
     everything = "\n".join(
         [*report.fatal_errors, *report.warnings, *report.feature_errors["greeting"]]
     )
-    assert SECRET not in everything
-    assert SECRET not in _logged(caplog)
+    assert HIDDEN not in everything
+    assert HIDDEN not in _logged(caplog)
 
 
 def test_指定したファイルを読み既定の場所は使わない(

@@ -24,7 +24,7 @@ class FakeHardware:
     def _step(self, name: str) -> None:
         self.calls.append(name)
         if name in self.fail:
-            raise OSError("secret detail /dev/i2c-1")
+            raise OSError("hidden detail /dev/i2c-1")
 
     def zero_motor_pwm(self) -> None:
         self._step("pwm")
@@ -67,7 +67,7 @@ def test_段階の失敗は型の名前だけ記録して次へ進む(
     assert calls == ["open", "pwm", "pins", "reset", "close"]
     assert failed == ["pwm", "pins"]
     assert "OSError" in caplog.text
-    assert "secret detail" not in caplog.text
+    assert "hidden detail" not in caplog.text
 
 
 def test_終了コード75の後は何もしない(tmp_path: Path) -> None:
@@ -272,7 +272,7 @@ def test_strictのログは段階の名前と型の名前だけ(
         )
     assert "reset" in caplog.text
     assert "OSError" in caplog.text
-    assert "secret detail" not in caplog.text
+    assert "hidden detail" not in caplog.text
 
 
 @pytest.mark.skipif(
@@ -296,7 +296,7 @@ def test_PCではstrictのコマンドが確かめられずに終了コード1�
 
 def test_strictは途中で止まれば終了コード1(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def crash(*_args: object, **_kwargs: object) -> list[str]:
-        raise RuntimeError("secret detail")
+        raise RuntimeError("hidden detail")
 
     monkeypatch.setattr(safe_stop, "run_safe_stop", crash)
     assert safe_stop.main(environ=_env(tmp_path), argv=["--strict"]) == 1

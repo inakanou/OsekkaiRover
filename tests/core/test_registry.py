@@ -257,7 +257,11 @@ def test_エントリーポイントの機能にも名前と重複の決まり�
     assert [label for label, _ in skipped if label == "c_bad"] == ["c_bad"]
 
 
-def test_エントリーポイントが宣言されていなければ機能はない() -> None:
+def test_エントリーポイントが宣言されていなければ機能はない(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 本物のエントリーポイントには日課が登録されているので、空の群に差し替える
+    patch_entry_points(monkeypatch, [])
     registry = FeatureRegistry()
 
     assert list(registry.feature_classes()) == []

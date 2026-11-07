@@ -13,6 +13,8 @@ license-files = ["LICENSE"]
 dependencies = [
     "PyYAML>=6",
     "pydantic>=2,<3",
+    # 日課の祝日の判定（features/routine/calendar.py の中だけで、遅れて読み込む）
+    "jpholiday>=1.0.2,<2",
 ]
 
 [project.optional-dependencies]
@@ -29,10 +31,9 @@ dev = [
     "types-PyYAML",
 ]
 
-# 機能を発見するエントリーポイントの群。setuptools では空の群を書けないため、
-# 最初の機能を足すときに次の形で加える:
-# [project.entry-points."osekkai.features"]
-# greeting = "osekkai.features.greeting:GreetingFeature"
+# 機能を発見するエントリーポイントの群。機能を足したら、ここに 1 行足して入れ直す
+[project.entry-points."osekkai.features"]
+routine = "osekkai.features.routine:RoutineFeature"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -59,8 +60,9 @@ python_version = "3.11"
 files = ["src/osekkai", "deploy", "tests"]
 mypy_path = ["src", "deploy"]
 # tests に __init__.py がないので、2 つ目の conftest は同じ名前のモジュールとして断られる。
-# 偽の Runner の本体（tests/deploy/fake_runner.py）は型を見る
-exclude = ["^tests/deploy/conftest\\.py$"]
+# 偽の Runner の本体（tests/deploy/fake_runner.py）と日課の部品の本体
+# （tests/features/routine/routine_fixtures.py）は型を見る
+exclude = ["^tests/deploy/conftest\\.py$", "^tests/features/routine/conftest\\.py$"]
 strict = true
 warn_unreachable = true
 

@@ -19,8 +19,8 @@ from rover_deploy.refs import Resolution
 from rover_deploy.remote import AgentReply
 from rover_deploy.system import Runner
 
-HOST = "secret-host-name"
-REPO_URL = "https://example.invalid/owner/secret-repo.git"
+HOST = "hidden-host-name"
+REPO_URL = "https://example.invalid/owner/hidden-repo.git"
 SHA = "a" * 40
 NOW = 1_793_000_000.0  # 2026-10-26T07:33:20Z
 DEPLOY_ID = "20261026T073320Z"

@@ -1,7 +1,7 @@
 # OsekkaiRover（おせっかいローバー）
 
-子どもの生活習慣づくりを手伝う、相棒ロボットのソフトウェアです。
-決まった時刻に声をかけ、できたらボタンを押してもらい、ほめて星をためます。
+家庭で暮らしに寄り添う、補佐役のロボットのソフトウェアです。SunFounder PiCar-X（Raspberry Pi 5）の上で動きます。
+最初の領域は、子ども（4 歳前後）の生活習慣づくりと遊びのサポートです。決まった時刻に声をかけ、できたらボタンを押してもらい、ほめて星をためます。
 
 **ゴール**: このリポジトリの成果物を実機の Raspberry Pi 5 に入れて、正しく動かすこと。
 
@@ -24,32 +24,55 @@ Claude Code のスキル（`/kiro-*` コマンド）を使い、要件 → 設�
 | 項目 | 状態 |
 | --- | --- |
 | 開発ワークフロー（ブランチ・PR・CI） | 整備済み（[`git-workflow.md`](.kiro/steering/git-workflow.md)） |
-| ソースコード | 基盤（`src/osekkai/core`）とハードなしの実行（`src/osekkai/adapters/fake`）を実装中。実機のアダプタはこれから |
-| ステアリング（product / tech / structure） | 作成済み（`.kiro/steering/`） |
-| スペック | `rover-core`（基盤）を実装中（`.kiro/specs/rover-core/`） |
-| 実機へのデプロイの仕組み | `device-deployment` で実装中（`deploy/`、手順書は [`docs/deploy.md`](docs/deploy.md)） |
+| ステアリング（product / tech / structure / roadmap） | 作成済み（`.kiro/steering/`） |
+| 基盤 `rover-core` | 完了。起動と安全な停止、設定と保存、LCD・声・ボタン・首・走行、資源の調停、機能を足す口、待機画面（`src/osekkai/core`、実機のアダプタ `src/osekkai/adapters/pi`、ハードなしの偽物 `src/osekkai/adapters/fake`） |
+| 実機への配置 `device-deployment` | 完了。版を入れる・確かめる・だめなら戻す・初期設定（`deploy/`、手順書は [`docs/deploy.md`](docs/deploy.md)） |
+| 日課 `daily-routine` | 実装中（`src/osekkai/features/routine`、手順書は [`docs/routine.md`](docs/routine.md)） |
+| ほかのスペック | brief だけ（`voice-gateway`・`presence`・`conversation`・`daruma-game`・`remote-control`） |
+
+## 機能
+
+基盤（`src/osekkai/core`）に、機能を足していきます。機能は `src/osekkai/features/` にあり、`pyproject.toml` のエントリーポイントで登録します。
+
+| 機能 | 名前 | 内容 | 手順書 |
+| --- | --- | --- | --- |
+| 日課 | `routine` | 決まった時刻に声をかけ、できたらほめて星をためる。寝る時刻におやすみモードに入る | [`docs/routine.md`](docs/routine.md) |
+
+日課の設定は、設定ファイルの `routine:` の節に書きます。見本では全部コメントなので、書くまではタスクは 0 個です。
 
 ## 今後の予定
 
-1. **サンプルの取り込み**: スペックを起票して取り込みます。あわせて、停止時にモーターを必ず止める対策と、CI の lint・テストも入れます
-2. **ステアリング**: コードが入ったら `/kiro-steering` で product / tech / structure を作ります
-3. **デプロイの仕組み**: 実機に版を入れる、動作確認する、失敗したら前の版に戻す。`device-deployment` で作っています（[実機への配置](#実機への配置)）
+スペックを 1 つずつ、要件 → 設計 → タスク → 実装 → PR の順に進めます（[`roadmap.md`](.kiro/steering/roadmap.md)）。
+
+1. **日課**（`daily-routine`）: 試しのコマンドと通しの確かめを終えて、実機で確かめる。ここまでで、実機で日課が動きます
+2. **音声の入口**（`voice-gateway`）: ボタンを押して話すと、言葉に合う機能へ渡す
+3. **見つけてあいさつ**（`presence`）: 顔を見つけて首を向け、覚えた顔ならあいさつする
+4. **おしゃべり**（`conversation`）: ほかの機能に当てはまらない言葉に、Claude との会話で応える
+5. **あそび**（`daruma-game`）: だるまさんがころんだ
+6. **スマホのラジコン**（`remote-control`）: 家の Wi-Fi から操作する
 
 ## ディレクトリ構成
 
 ```
 .
 ├── CLAUDE.md                 # Claude Code 向けのプロジェクト指示（開発ルール・ワークフロー）
-├── .github/                  # CI（GitHub Actions）と PR テンプレート
-├── scripts/                  # 開発用スクリプト
+├── src/osekkai/              # ロボットのプログラム（python -m osekkai）
+│   ├── core/                 # 基盤（ポート・資源の調停・機能を足す口・設定・保存・待機画面）
+│   ├── adapters/pi/          # 実機用のアダプタ（ハードのライブラリはここだけで読む）
+│   ├── adapters/fake/        # テストと PC で使う偽物
+│   └── features/routine/     # 日課
+├── tests/                    # テスト（src/osekkai と同じ構成。配置の道具は tests/deploy）
+├── config/                   # 設定の見本（osekkai.example.yaml）。実際の設定はリポジトリの外
 ├── deploy/                   # 実機への配置の道具（rover-deploy）と systemd のユニット
-├── docs/                     # 手順書（deploy.md など）
+├── docs/                     # 手順書（deploy.md、routine.md）
+├── scripts/                  # 開発用スクリプト
+├── .github/                  # CI（GitHub Actions）と PR テンプレート
 ├── .claude/
 │   └── skills/kiro-*/        # /kiro-* コマンドの本体（SKILL.md）
 └── .kiro/
     ├── settings/templates/   # ステアリング・スペックのテンプレート
-    ├── steering/             # プロジェクト全体の方針（git-workflow。product / tech / structure は未作成）
-    └── specs/                # 機能ごとのスペック（requirements / design / tasks）※未作成
+    ├── steering/             # プロジェクト全体の方針（product / tech / structure / roadmap / git-workflow）
+    └── specs/                # 機能ごとのスペック（brief / requirements / design / tasks）
 ```
 
 - **ステアリング**（`.kiro/steering/`）: プロダクトの目的、技術スタック、構成など、プロジェクト全体で守るルールと前提。
@@ -59,7 +82,7 @@ Claude Code のスキル（`/kiro-*` コマンド）を使い、要件 → 設�
 
 前提: [Claude Code](https://claude.com/claude-code) が使えること。
 
-1. **ステアリングを作る**（推奨）
+1. **ステアリングを作る・直す**（このリポジトリでは作成済み。方針が変わったら直す）
    ```
    /kiro-steering
    ```

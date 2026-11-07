@@ -77,6 +77,7 @@ features/* ──(Feature の契約・ポート)──> core ──(ポート)�
 - `pytest`。判定ロジック（時刻の判定、状態遷移、安全判定、振り分け）は、偽のアダプタと偽の時計で PC だけでテストする
 - ハードに触れる部分は、self-check と実機確認で確かめる（`git-workflow.md` の「実機確認」）
 - テストの名前は、振る舞いを日本語で書いてよい（例: `test_寝る時刻には催促中でもおやすみモードに入る`）
+- 「ログに出ない」ことを確かめる偽の値の名前は `HIDDEN_NAME`・`hidden` のようにし、`secret`・`token`・`key`・`password` などの言葉を入れない。CI の秘密情報のチェック（gitleaks）が API キーと見まちがえ、PR のコミットの履歴に残ると直せないため
 
 ## Development Environment
 

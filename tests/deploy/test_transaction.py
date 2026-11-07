@@ -33,7 +33,7 @@ SHA_B = "b" * 40
 DEPLOY_ID = "20261104T210000Z"
 NOW = 1_793_833_200.0
 URL = "https://example.invalid/owner/repo.git"
-SECRET = "ひみつの出力"  # 外のコマンドの出力。記録に出てはいけない
+HIDDEN = "ひみつの出力"  # 外のコマンドの出力。記録に出てはいけない
 
 SAMPLE = Target(kind="sample", ref=None, ref_kind=None, sha=None)
 TAG_A = Target(kind="release", ref="v0.1.0", ref_kind="tag", sha=SHA_A)
@@ -70,19 +70,19 @@ class Units:
             return self.fake(args, input=input, timeout=timeout, check=check, cwd=cwd, env=env)
         self.calls.append(args)
         verb, unit = args[2], args[-1]
-        result = RunResult(0, b"", SECRET.encode())
+        result = RunResult(0, b"", HIDDEN.encode())
         if verb == "is-active":
             on = unit in self.active
             result = RunResult(0 if on else 3, b"active\n" if on else b"inactive\n", b"")
         elif verb == "start":
             if self.fail_start.get(unit, 0) > 0:
                 self.fail_start[unit] -= 1
-                result = RunResult(1, b"", SECRET.encode())
+                result = RunResult(1, b"", HIDDEN.encode())
             else:
                 self.active.add(unit)
         elif verb == "stop":
             if unit in self.fail_stop:
-                result = RunResult(1, b"", SECRET.encode())
+                result = RunResult(1, b"", HIDDEN.encode())
             elif unit not in self.stuck:
                 self.active.discard(unit)
         elif verb == "enable":
@@ -256,7 +256,7 @@ class Ctx:
         self.fake.script(
             [str(link / ".venv/bin/python"), "-m", "osekkai.core.safe_stop", "--strict"],
             returncode=returncode,
-            stderr=SECRET,
+            stderr=HIDDEN,
         )
 
     def notice_rows(self) -> list[object] | None:
@@ -483,7 +483,7 @@ def test_switch_error_rolls_back(ctx: Ctx) -> None:
 
 def test_verify_exception_rolls_back(ctx: Ctx) -> None:
     ctx.running_release(TAG_A)
-    ctx.verify.release_reports = [RuntimeError(SECRET), OK]
+    ctx.verify.release_reports = [RuntimeError(HIDDEN), OK]
 
     result = ctx.transaction().run(BRANCH_B, DEPLOY_ID, everyday=False)
 
@@ -493,7 +493,7 @@ def test_verify_exception_rolls_back(ctx: Ctx) -> None:
     assert ctx.releases.link == ctx.layout.release_dir(SHA_A)
     assert ("verify", "failed") in ctx.events()
     raw = (ctx.layout.log_dir / f"{DEPLOY_ID}.jsonl").read_text(encoding="utf-8")
-    assert SECRET not in raw
+    assert HIDDEN not in raw
     assert "RuntimeError" in raw
 
 
@@ -654,5 +654,5 @@ def test_log_has_steps_and_result_line_without_command_output(ctx: Ctx) -> None:
     assert ("verify", "failed") in events
     assert read_log_result(ctx.layout.log_dir, DEPLOY_ID) == result
     raw = (ctx.layout.log_dir / f"{DEPLOY_ID}.jsonl").read_text(encoding="utf-8")
-    assert SECRET not in raw
+    assert HIDDEN not in raw
     assert URL not in raw

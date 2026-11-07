@@ -18,7 +18,7 @@ from rover_deploy.system import (
     UnitInfo,
 )
 
-SECRET = "ひみつのなまえ"
+HIDDEN = "ひみつのなまえ"
 PY = sys.executable
 
 
@@ -53,13 +53,13 @@ def test_本物の_Runner_は場所と環境変数を渡す(tmp_path: Path) -> N
 
 
 def test_本物の_Runner_は_check_で失敗を例外にし標準エラーを写さない() -> None:
-    code = f"import sys; sys.stderr.write({SECRET!r}); sys.exit(4)"
+    code = f"import sys; sys.stderr.write({HIDDEN!r}); sys.exit(4)"
     with pytest.raises(CommandFailed) as info:
-        SubprocessRunner()([PY, "-c", code, SECRET], check=True)
+        SubprocessRunner()([PY, "-c", code, HIDDEN], check=True)
     assert info.value.returncode == 4
     assert info.value.program == Path(PY).name
-    assert SECRET not in str(info.value)
-    assert SECRET not in repr(info.value)
+    assert HIDDEN not in str(info.value)
+    assert HIDDEN not in repr(info.value)
 
 
 def test_本物の_Runner_は時間切れを例外にする() -> None:
@@ -75,9 +75,9 @@ def test_本物の_Runner_はないコマンドを例外にする() -> None:
 
 
 def test_結果の表示に出力を出さない() -> None:
-    result = RunResult(0, SECRET.encode(), SECRET.encode())
-    assert SECRET.encode() not in repr(result).encode()
-    assert SECRET not in repr(result)
+    result = RunResult(0, HIDDEN.encode(), HIDDEN.encode())
+    assert HIDDEN.encode() not in repr(result).encode()
+    assert HIDDEN not in repr(result)
 
 
 def test_出力の文字は壊れていても読める() -> None:
@@ -154,10 +154,10 @@ def test_動いているかを読む(
 
 def test_動いているかが分からなければ例外にする(fake_runner: FakeRunner) -> None:
     # ユーザーのバスにつながらないとき、標準出力は空になる
-    fake_runner.script([*SYSTEMCTL, "is-active"], returncode=1, stderr=SECRET)
+    fake_runner.script([*SYSTEMCTL, "is-active"], returncode=1, stderr=HIDDEN)
     with pytest.raises(UnexpectedOutput) as info:
         system.is_active(fake_runner, "osekkai.service")
-    assert SECRET not in str(info.value)
+    assert HIDDEN not in str(info.value)
 
 
 def test_ユニットの状態を読む(fake_runner: FakeRunner) -> None:
@@ -214,11 +214,11 @@ def test_ユニットを操作する(fake_runner: FakeRunner, func: object, verb
 
 
 def test_ユニットの操作の失敗は例外にする(fake_runner: FakeRunner) -> None:
-    fake_runner.script([*SYSTEMCTL, "start"], returncode=1, stderr=SECRET)
+    fake_runner.script([*SYSTEMCTL, "start"], returncode=1, stderr=HIDDEN)
     with pytest.raises(CommandFailed) as info:
         system.start_unit(fake_runner, "osekkai.service")
     assert info.value.program == "systemctl"
-    assert SECRET not in str(info.value)
+    assert HIDDEN not in str(info.value)
 
 
 def test_ユニットを読み直す(fake_runner: FakeRunner) -> None:
@@ -285,7 +285,7 @@ def test_手の変更がなければ_0(fake_runner: FakeRunner, tmp_path: Path) 
 
 
 def test_git_の失敗は例外にする(fake_runner: FakeRunner, tmp_path: Path) -> None:
-    fake_runner.script(["git"], returncode=128, stderr=SECRET)
+    fake_runner.script(["git"], returncode=128, stderr=HIDDEN)
     with pytest.raises(CommandFailed) as info:
         system.git_dirty_count(fake_runner, tmp_path)
-    assert SECRET not in str(info.value)
+    assert HIDDEN not in str(info.value)

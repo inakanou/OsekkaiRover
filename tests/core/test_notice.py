@@ -159,13 +159,13 @@ def test_形の誤りの警告は続く間は1回だけで中身を出さない(
     board: NoticeBoard, path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     caplog.set_level("DEBUG", logger="osekkai.core.notice")
-    secret = "ひみつのなかみ"
-    _write(path, {"schema": 1, "rows": [secret], "until": None})
+    hidden = "ひみつのなかみ"
+    _write(path, {"schema": 1, "rows": [hidden], "until": None})
     for _ in range(5):
         assert board.current() is None
     warnings = _warnings(caplog)
     assert len(warnings) == 1
-    assert all(secret not in r.getMessage() for r in caplog.records)
+    assert all(hidden not in r.getMessage() for r in caplog.records)
 
 
 def test_正しく読めた後にまた形が違えば警告し直す(

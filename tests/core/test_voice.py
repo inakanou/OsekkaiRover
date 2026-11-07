@@ -16,7 +16,7 @@ from osekkai.core.ports import Unavailable
 from osekkai.core.types import DeviceUnavailable, SpeechFailed
 from osekkai.core.voice import MAX_LINE_CHARS, VoiceService
 
-SECRET = "ひみつのことばポンポコリン"
+HIDDEN = "ひみつのことばポンポコリン"
 
 
 @pytest.fixture
@@ -104,18 +104,18 @@ def test_ログに文章を出さない(
     caplog.set_level(logging.DEBUG)
     synth = FakeSynth()
     voice = VoiceService(synth, FakePlayer(), cache, settings)
-    voice.speak(f"{SECRET}。")
-    voice.speak(f"{SECRET}。")
-    voice.speak(f"{SECRET}だよ。", keep=False)
+    voice.speak(f"{HIDDEN}。")
+    voice.speak(f"{HIDDEN}。")
+    voice.speak(f"{HIDDEN}だよ。", keep=False)
     synth.fail_on.add("synthesize")
     with pytest.raises(SpeechFailed):
-        voice.speak(f"{SECRET}かな。")
+        voice.speak(f"{HIDDEN}かな。")
     assert caplog.records
-    assert all(SECRET not in r.getMessage() for r in caplog.records)
-    assert SECRET not in caplog.text
+    assert all(HIDDEN not in r.getMessage() for r in caplog.records)
+    assert HIDDEN not in caplog.text
     messages = [r.getMessage() for r in caplog.records]
-    assert f"話した（{len(SECRET) + 1} 文字、キャッシュなし）" in messages
-    assert f"話した（{len(SECRET) + 1} 文字、キャッシュあり）" in messages
+    assert f"話した（{len(HIDDEN) + 1} 文字、キャッシュなし）" in messages
+    assert f"話した（{len(HIDDEN) + 1} 文字、キャッシュあり）" in messages
 
 
 def test_合成に失敗したら話せないと知らせて次は話せる(

@@ -37,7 +37,7 @@ from rover_deploy.system import CommandFailed
 USER = "pi-user"
 SHA = "c" * 40
 URL = "https://example.invalid/owner/repo.git"
-SECRET = "ひみつの値"
+HIDDEN = "ひみつの値"
 NOW = 1_800_000_000.0
 
 TRIXIE = 'PRETTY_NAME="Debian GNU/Linux 13 (trixie)"\nVERSION_CODENAME=trixie\nID=debian\n'
@@ -234,7 +234,7 @@ class Env:
         current = self.make_current()
         self.install_reminder(current)
         self.script_reminder_enabled()
-        write(self.layout.core_config_dir / "env", f"KEY={SECRET}\n")
+        write(self.layout.core_config_dir / "env", f"KEY={HIDDEN}\n")
         write(self.layout.core_config_dir / "config.yaml", "core: {}\n")
         return current
 
@@ -332,12 +332,12 @@ def test_run_provision_shows_only_exception_type_for_other_errors() -> None:
     class Leaky(Exception):
         pass
 
-    steps = [step("a", calls, error=Leaky(SECRET), hint="もう一度")]
+    steps = [step("a", calls, error=Leaky(HIDDEN), hint="もう一度")]
     report = run_provision(steps, log)
     assert report.failed_step == "a"
     text = joined(lines)
     assert "Leaky" in text
-    assert SECRET not in text
+    assert HIDDEN not in text
 
 
 def test_run_provision_failure_in_is_done_stops_too() -> None:
@@ -722,11 +722,11 @@ def test_wrong_download_is_rejected_and_leaves_no_file(env: Env) -> None:
 
 
 def test_network_error_fails_and_leaves_no_file(env: Env) -> None:
-    env.fetch.errors[TEST_ASSETS[1].url] = TimeoutError(SECRET)
+    env.fetch.errors[TEST_ASSETS[1].url] = TimeoutError(HIDDEN)
     s = env.steps()["models"]
     with pytest.raises(StepFailed) as info:
         s.apply()
-    assert SECRET not in str(info.value)
+    assert HIDDEN not in str(info.value)
     assert "TimeoutError" in str(info.value)
     directory = env.data_dir / "models"
     assert not directory.exists() or os.listdir(directory) == []
@@ -911,15 +911,15 @@ def test_secrets_never_created_and_place_shown(env: Env) -> None:
 
 
 def test_existing_secrets_untouched(env: Env) -> None:
-    secrets = write(env.layout.core_config_dir / "env", f"KEY={SECRET}\n")
+    secrets = write(env.layout.core_config_dir / "env", f"KEY={HIDDEN}\n")
     os.chmod(secrets, 0o600)
     before = secrets.stat()
     s = env.steps()["secrets"]
     assert s.is_done()
     after = secrets.stat()
-    assert secrets.read_text(encoding="utf-8") == f"KEY={SECRET}\n"
+    assert secrets.read_text(encoding="utf-8") == f"KEY={HIDDEN}\n"
     assert (before.st_mtime_ns, before.st_mode) == (after.st_mtime_ns, after.st_mode)
-    assert all(SECRET not in t for _, t in env.said)
+    assert all(HIDDEN not in t for _, t in env.said)
 
 
 # --- self_check（8.8） ---
@@ -997,11 +997,11 @@ def test_self_check_unreadable_output_fails(env: Env) -> None:
     current = env.make_current()
     env.script_running()
     env.fake.script(
-        [str(current / ".venv/bin/python"), "-m", "osekkai", "--self-check"], stdout=SECRET
+        [str(current / ".venv/bin/python"), "-m", "osekkai", "--self-check"], stdout=HIDDEN
     )
     with pytest.raises(StepFailed) as info:
         env.steps()["self_check"].apply()
-    assert SECRET not in str(info.value)
+    assert HIDDEN not in str(info.value)
 
 
 # --- 通しの流れ ---
@@ -1022,9 +1022,9 @@ def test_second_run_skips_everything_already_done(env: Env) -> None:
     assert "rover-deploy self-check" not in joined(lines)
     no_change_commands(env.fake)
     assert env.boot_config.read_text(encoding="utf-8") == boot_before
-    assert (env.layout.core_config_dir / "env").read_text(encoding="utf-8") == f"KEY={SECRET}\n"
-    assert SECRET not in joined(lines)
-    assert SECRET not in "\n".join(t for _, t in env.said)
+    assert (env.layout.core_config_dir / "env").read_text(encoding="utf-8") == f"KEY={HIDDEN}\n"
+    assert HIDDEN not in joined(lines)
+    assert HIDDEN not in "\n".join(t for _, t in env.said)
 
 
 def test_first_run_on_fresh_os_needs_reboot_and_never_reboots(env: Env) -> None:

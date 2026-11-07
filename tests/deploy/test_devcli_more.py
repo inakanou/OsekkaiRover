@@ -505,7 +505,7 @@ def test_記録は手順と結果だけを出し理由は出さない(tmp_path: 
     events = [
         {"t": NOW, "step": "prepare", "status": "start", "reason": None},
         {"t": NOW, "step": "prepare", "status": "ok", "reason": None},
-        {"t": NOW, "step": "verify", "status": "failed", "reason": "secret-reason"},
+        {"t": NOW, "step": "verify", "status": "failed", "reason": "hidden-reason"},
     ]
     result = {
         "deploy_id": DEPLOY_ID,
@@ -520,7 +520,7 @@ def test_記録は手順と結果だけを出し理由は出さない(tmp_path: 
     assert "  準備: よい" in s.text
     assert "  確認: 失敗" in s.text
     assert "結果: 切り戻した" in s.text
-    assert "secret-reason" not in s.text
+    assert "hidden-reason" not in s.text
 
 
 def test_記録の識別子を渡す(tmp_path: Path) -> None:

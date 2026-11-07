@@ -17,7 +17,7 @@
 ### Non-Goals
 - CI からの自動の入れ替え、複数台への配置、OS のイメージ
 - 個々の機能の self-check の中身（各機能が `FeatureSpec.checks` に足す）
-- サンプルの星の記録と顔の特徴の移し替え（`daily-routine`、`presence`）
+- サンプルの顔の特徴の移し替え（`presence`）。サンプルの星の記録は移さない（`daily-routine` で 0 から始めると決めた）
 - 時間帯による入れ替えの制限（人が判断する）
 
 ## Boundary Commitments
