@@ -26,10 +26,23 @@ HARDWARE_LIBS = (
 )
 
 # 組み立ての口として osekkai.__main__（build_devices）を読み込んでよい試しの入口
-ENTRY_ALLOWLIST = frozenset({"osekkai.features.routine.trial", "osekkai.features.routine.__main__"})
+ENTRY_ALLOWLIST = frozenset(
+    {
+        "osekkai.features.routine.trial",
+        "osekkai.features.routine.__main__",
+        "osekkai.features.presence.cli",
+    }
+)
 
 # 関数の中で遅れて読み込むことを条件に、外の依存を読み込んでよいモジュール
 LAZY_ONLY_LIBS = {"jpholiday": frozenset({"osekkai.features.routine.calendar"})}
+
+# 機能の中のアダプタ（見つけてあいさつのカメラと映像の処理）だけは、関数の中で遅れて
+# 読み込むことを条件に、ハードのライブラリを読み込んでよい（presence の設計）
+FEATURE_ADAPTER_LIBS = {
+    "osekkai.features.presence.adapters.opencv": frozenset({"cv2", "numpy"}),
+    "osekkai.features.presence.adapters.picamera": frozenset({"picamera2"}),
+}
 
 
 class ImportRef(NamedTuple):
@@ -97,6 +110,12 @@ def _is_hardware(name: str) -> bool:
     return any(_matches(name, lib) for lib in HARDWARE_LIBS)
 
 
+def _feature_adapter_ok(module: str, ref: ImportRef) -> bool:
+    """機能の中のアダプタが、許されたハードのライブラリを関数の中で読み込むか。"""
+    allowed = FEATURE_ADAPTER_LIBS.get(module, frozenset())
+    return ref.in_function and any(_matches(ref.name, lib) for lib in allowed)
+
+
 def _lazy_ok(module: str, ref: ImportRef) -> bool:
     """遅れて読み込むことを条件にした外の依存なら、許されたモジュールの関数の中だけで認める。"""
     for lib, allowed in LAZY_ONLY_LIBS.items():
@@ -111,8 +130,10 @@ def _is_forbidden(module: str, ref: ImportRef) -> bool:
         return True
     if _matches(name, ENTRY_MODULE):
         return module not in ENTRY_ALLOWLIST
-    if _is_other_feature(name, _own_feature(module)) or _is_hardware(name):
+    if _is_other_feature(name, _own_feature(module)):
         return True
+    if _is_hardware(name):
+        return not _feature_adapter_ok(module, ref)
     return not _lazy_ok(module, ref)
 
 
@@ -205,3 +226,18 @@ def test_jpholiday_は暦のモジュールの関数の中だけで認める() -
     assert _check(lazy, "osekkai.features.routine.calendar") == []
     assert _check(top, "osekkai.features.routine.calendar") == ["jpholiday"]
     assert _check(lazy, "osekkai.features.routine.schedule") == ["jpholiday"]
+
+
+def test_機能の中のアダプタだけは関数の中でハードのライブラリを読み込める() -> None:
+    lazy = "def f():\n    import cv2\n    import numpy as np\n"
+    assert _check(lazy, "osekkai.features.presence.adapters.opencv") == []
+    # 一番上での読み込み・許されていないライブラリ・ほかのモジュールは断る
+    assert _check("import cv2\n", "osekkai.features.presence.adapters.opencv") == ["cv2"]
+    assert _check(lazy, "osekkai.features.presence.adapters.picamera") == ["cv2", "numpy"]
+    assert _check(lazy, "osekkai.features.presence.watcher") == ["cv2", "numpy"]
+
+
+def test_見つけてあいさつのコマンドは_osekkai___main___を読み込める() -> None:
+    source = "from osekkai.__main__ import build_devices\n"
+    assert _check(source, "osekkai.features.presence.cli") == []
+    assert _check(source, "osekkai.features.presence.feature") != []

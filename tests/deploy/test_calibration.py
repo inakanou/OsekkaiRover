@@ -40,11 +40,14 @@ def calibration_of(path: Path) -> dict[str, object]:
 
 
 def core_accepts(path: Path, tmp_path: Path) -> tuple[float, float, float, tuple[int, int]]:
-    """基盤の読み込みで検証し、調整値を返す。"""
+    """基盤の読み込みで検証し、調整値を返す。
+
+    見本には登録した機能の節もあるので、起動の口と同じく発見した機能の設定のモデルを渡す。
+    """
     paths = Paths({}, home=tmp_path / "loader-home", uid=1000)
-    # 見本には登録された機能（音声の入口）の節があるので、登録された機能の設定のモデルを渡す
     models = feature_models(cls.spec for cls in FeatureRegistry().feature_classes())
     report = ConfigLoader(paths, models).load(override=path)
+    assert report.feature_errors == {}
     assert report.fatal_errors == []
     assert report.feature_errors == {}
     assert report.warnings == []
