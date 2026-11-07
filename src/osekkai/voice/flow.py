@@ -27,6 +27,7 @@ from osekkai.voice.intents import Fallback, Handler, Heard, IntentRegistry, Word
 from osekkai.voice.recognizer import ListenCancelled, RecognitionFailed, Recognizer
 from osekkai.voice.texts import (
     LCD_LISTENING,
+    LCD_SPEAK,
     LCD_THINKING,
     SAY_CALL,
     SAY_FOLLOW_UP,
@@ -194,7 +195,12 @@ class ListenFlow:
         def on_recording(recording: bool) -> None:
             marks["start" if recording else "end"] = self._clock.monotonic()
             session.do(lambda: io.led(recording))
-            if not recording and not session.stopped():
+            if session.stopped():
+                return
+            if recording:
+                # 話してよい合図は LCD に出す（LED は小さくて子どもから見えない）
+                session.do(lambda: io.show(LCD_SPEAK, Face.CALL.text()))
+            else:
                 session.do(lambda: io.show(LCD_THINKING, Face.NORMAL.text()))
 
         try:

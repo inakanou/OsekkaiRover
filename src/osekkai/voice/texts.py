@@ -18,6 +18,7 @@ SAY_UNAVAILABLE: Final = "いまは おはなし できないんだ"  # 使え�
 
 # LCD の文字（16 セルに収まる半角カタカナ）
 LCD_LISTENING: Final = "ｷｲﾃﾙﾖ"  # 1.1
+LCD_SPEAK: Final = "ﾊﾅｼﾃﾈ!"  # 1.2 録音の間（マイクが音を取り始めてから）
 LCD_THINKING: Final = "ｶﾝｶﾞｴﾁｭｳ"  # 1.4
 LCD_SLEEP_TIME: Final = "ｵﾔｽﾐ ｼﾞｶﾝ"  # 5.2
 

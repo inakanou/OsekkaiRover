@@ -20,11 +20,14 @@ def test_話す言葉は要件の文言と同じ() -> None:
 
 def test_LCD_の文字は要件の文言と同じ() -> None:
     assert texts.LCD_LISTENING == "ｷｲﾃﾙﾖ"
+    assert texts.LCD_SPEAK == "ﾊﾅｼﾃﾈ!"
     assert texts.LCD_THINKING == "ｶﾝｶﾞｴﾁｭｳ"
     assert texts.LCD_SLEEP_TIME == "ｵﾔｽﾐ ｼﾞｶﾝ"
 
 
-@pytest.mark.parametrize("text", [texts.LCD_LISTENING, texts.LCD_THINKING, texts.LCD_SLEEP_TIME])
+@pytest.mark.parametrize(
+    "text", [texts.LCD_LISTENING, texts.LCD_SPEAK, texts.LCD_THINKING, texts.LCD_SLEEP_TIME]
+)
 def test_LCD_の文字は_16_セルに収まり_ROM_にない文字を含まない(text: str) -> None:
     codes = to_lcd_codes(text)
     assert len(codes) <= LCD_COLS

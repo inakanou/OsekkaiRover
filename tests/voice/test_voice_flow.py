@@ -24,6 +24,7 @@ from osekkai.voice.flow import GatewayIO, LeaseGatewayIO, ListenFlow, ListenOutc
 from osekkai.voice.intents import Heard, IntentRegistry
 from osekkai.voice.texts import (
     LCD_LISTENING,
+    LCD_SPEAK,
     LCD_THINKING,
     SAY_CALL,
     SAY_FOLLOW_UP,
@@ -42,6 +43,7 @@ LISTEN_START: list[Event] = [
     ("show", LCD_LISTENING, Face.CALL.text()),
     ("say", SAY_CALL),
     ("led", True),
+    ("show", LCD_SPEAK, Face.CALL.text()),
     ("led", False),
     ("show", LCD_THINKING, Face.NORMAL.text()),
 ]
@@ -107,6 +109,7 @@ def _no_words_in_log(caplog: pytest.LogCaptureFixture) -> None:
     for hidden in (TEXT, *PHRASES, *OTHER_PHRASES, SAY_CALL, SAY_NOT_HEARD, SAY_UNKNOWN):
         assert hidden not in text
     assert LCD_LISTENING not in text
+    assert LCD_SPEAK not in text
     assert LCD_THINKING not in text
 
 
@@ -322,6 +325,7 @@ def test_続けての聞き取りは_うなずかずに_うん_なあに_と聞�
         ("show", LCD_LISTENING, Face.CALL.text()),
         ("say", SAY_FOLLOW_UP),
         ("led", True),
+        ("show", LCD_SPEAK, Face.CALL.text()),
         ("led", False),
         ("show", LCD_THINKING, Face.NORMAL.text()),
         ("release",),
