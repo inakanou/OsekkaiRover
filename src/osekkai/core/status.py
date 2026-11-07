@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any, Final
 
 from osekkai.core.display import FailureLog
 from osekkai.core.paths import ensure_private_dir
-from osekkai.core.types import Resource
+from osekkai.core.types import Priority, Resource
 
 if TYPE_CHECKING:
     from osekkai.core.arbiter import Arbiter
@@ -163,12 +163,21 @@ def read_snapshot(path: Path) -> ServiceSnapshot | None:
 
 
 def busy_resources(arbiter: Arbiter) -> dict[str, str]:
-    """資源の値 → 持ち主。基盤の内部の持ち主（`core.` で始まる）は除く。"""
+    """資源の値 → 持ち主。基盤の内部の持ち主（`core.` で始まる）と、見守りの帯
+    （`Priority.BACKGROUND` 以下）で走行のほかの資源を借りている機能は除く。
+
+    見守りの機能（見つけてあいさつなど）はいつも首などを借りているが、中断を知らせれば
+    すぐ返すので、入れ替えを断る「作業中」には数えない。走行の資源は、安全のため
+    どの帯でも数える。
+    """
     busy: dict[str, str] = {}
     for resource in Resource:
-        owner = arbiter.holder(resource)
-        if owner is not None and not owner.startswith(INTERNAL_OWNER_PREFIX):
-            busy[resource.value] = owner
+        lease = arbiter.lease_for(resource)
+        if lease is None or lease.owner.startswith(INTERNAL_OWNER_PREFIX):
+            continue
+        if lease.priority <= Priority.BACKGROUND and resource is not Resource.DRIVE:
+            continue
+        busy[resource.value] = lease.owner
     return busy
 
 

@@ -168,6 +168,47 @@ def test_止まっていて何も持たれていなければ作業中は空(
     assert snapshot.busy == {}
 
 
+def test_見守りの帯の機能が借りているだけなら作業中に数えない(
+    fakes: FakeDeviceSet, clock: FakeClock
+) -> None:
+    # 見つけてあいさつは顔を探すためにいつも首を借りる（BACKGROUND）。中断を知らせれば
+    # すぐ返すので、入れ替えを断る「作業中」には数えない（device-deployment 2.2）
+    motion = MotionService(fakes.servos, fakes.motors, MotionSettings(), clock)
+    arbiter = Arbiter(clock, motion)
+    arbiter.acquire("presence", Priority.BACKGROUND, [Resource.NECK])
+    arbiter.acquire("routine", Priority.SCHEDULED, [Resource.VOICE])
+
+    snapshot = build_snapshot(
+        arbiter=arbiter,
+        motion=motion,
+        version="v0.2.0",
+        pid=1,
+        clock=clock,
+        unavailable=[],
+        features=[],
+    )
+    assert snapshot.busy == {"voice": "routine"}
+
+
+def test_見守りの帯でも走行の資源を借りていれば作業中に数える(
+    fakes: FakeDeviceSet, clock: FakeClock
+) -> None:
+    motion = MotionService(fakes.servos, fakes.motors, MotionSettings(), clock)
+    arbiter = Arbiter(clock, motion)
+    arbiter.acquire("patrol", Priority.BACKGROUND, [Resource.DRIVE, Resource.NECK])
+
+    snapshot = build_snapshot(
+        arbiter=arbiter,
+        motion=motion,
+        version="v0.2.0",
+        pid=1,
+        clock=clock,
+        unavailable=[],
+        features=[],
+    )
+    assert snapshot.busy == {"drive": "patrol"}
+
+
 # --- StatusReporter ---
 
 
