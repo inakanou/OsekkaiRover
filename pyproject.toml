@@ -37,8 +37,10 @@ dev = [
 ]
 
 # 機能を発見するエントリーポイントの群。機能を足したら、ここに 1 行足して入れ直す
+# （.venv/bin/pip install -e '.[dev]'）
 [project.entry-points."osekkai.features"]
 routine = "osekkai.features.routine:RoutineFeature"
+presence = "osekkai.features.presence:PresenceFeature"
 voice = "osekkai.voice:VoiceGatewayFeature"
 
 [tool.setuptools.packages.find]
@@ -74,7 +76,18 @@ warn_unreachable = true
 
 # 実機の依存は型を見ない
 [[tool.mypy.overrides]]
-module = ["smbus2", "smbus2.*", "lgpio", "lgpio.*", "numpy", "numpy.*"]
+module = [
+    "smbus2",
+    "smbus2.*",
+    "lgpio",
+    "lgpio.*",
+    "numpy",
+    "numpy.*",
+    "cv2",
+    "cv2.*",
+    "picamera2",
+    "picamera2.*",
+]
 ignore_missing_imports = true
 
 # 音声の入口の聞き取りの依存（extras の voice）は開発 PC と CI に入れないので、型を見ない

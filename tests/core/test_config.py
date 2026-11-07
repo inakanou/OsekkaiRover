@@ -55,15 +55,17 @@ def test_同梱の見本とリポジトリの見本は同じ内容() -> None:
 
 
 def test_見本はそのまま既定値と同じに読める(xdg_dirs: dict[str, Path]) -> None:
+    # 見本には登録した機能の節もあるので、発見した機能の設定のモデルも渡す
+    discovered = feature_models(cls.spec for cls in FeatureRegistry().feature_classes())
     paths = Paths()
     _write(paths, REPO_EXAMPLE.read_text(encoding="utf-8"))
-    # 見本には登録された機能（音声の入口）の節があるので、登録された機能の設定のモデルも渡す
-    registered = feature_models(cls.spec for cls in FeatureRegistry().feature_classes())
-    report = ConfigLoader(paths, {**MODELS, **registered}).load()
+    report = ConfigLoader(paths, MODELS | discovered).load()
     assert report.fatal_errors == []
     assert report.feature_errors == {}
     assert report.warnings == []
     assert report.core == CoreConfig()
+    for name, model in discovered.items():
+        assert report.features[name] == model()
 
 
 def test_ファイルがなければ見本から作って場所をログに残す(

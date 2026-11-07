@@ -44,13 +44,14 @@ BASE_NAMES = [
     "core.buttons",
     "core.servos",
 ]
-# 登録された音声の入口の項目は、基盤の項目の後に並ぶ。開発 PC と CI には faster-whisper が
-# ないので、見本の設定（recognizer: auto）では打った文字の聞き取りになり、どちらも飛ばす
-# 登録した機能の項目（本物の機能の発見を使うサブプロセスのテストで、基盤の項目の後に並ぶ）
+HARDWARE_NAMES = ["core.lcd", "core.hat", "core.buttons", "core.servos"]
+# 登録した機能の項目（本物の機能の発見を使うサブプロセスのテストで、基盤の項目の後に
+# 機能の名前の順に並ぶ）。開発 PC と CI には faster-whisper がないので、見本の設定
+# （recognizer: auto）では音声の入口は打った文字の聞き取りになり、どちらも飛ばす
+PRESENCE_NAMES = ["presence.camera", "presence.models", "presence.faces"]
 ROUTINE_NAMES = ["routine.holidays", "routine.quiet_hours", "routine.records"]
 VOICE_NAMES = ["voice.mic", "voice.model"]
-ALL_NAMES = [*BASE_NAMES, *ROUTINE_NAMES, *VOICE_NAMES]
-HARDWARE_NAMES = ["core.lcd", "core.hat", "core.buttons", "core.servos"]
+ALL_NAMES = [*BASE_NAMES, *PRESENCE_NAMES, *ROUTINE_NAMES, *VOICE_NAMES]
 
 
 def _place_config() -> None:
