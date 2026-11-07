@@ -13,7 +13,9 @@ from osekkai.core.config import (
     CoreConfig,
     FeatureConfig,
 )
+from osekkai.core.feature import feature_models
 from osekkai.core.paths import Paths
+from osekkai.core.registry import FeatureRegistry
 
 REPO_EXAMPLE = Path(__file__).resolve().parents[2] / "config" / "osekkai.example.yaml"
 HIDDEN = "9876"
@@ -55,8 +57,11 @@ def test_同梱の見本とリポジトリの見本は同じ内容() -> None:
 def test_見本はそのまま既定値と同じに読める(xdg_dirs: dict[str, Path]) -> None:
     paths = Paths()
     _write(paths, REPO_EXAMPLE.read_text(encoding="utf-8"))
-    report = ConfigLoader(paths, MODELS).load()
+    # 見本には登録された機能（音声の入口）の節があるので、登録された機能の設定のモデルも渡す
+    registered = feature_models(cls.spec for cls in FeatureRegistry().feature_classes())
+    report = ConfigLoader(paths, {**MODELS, **registered}).load()
     assert report.fatal_errors == []
+    assert report.feature_errors == {}
     assert report.warnings == []
     assert report.core == CoreConfig()
 

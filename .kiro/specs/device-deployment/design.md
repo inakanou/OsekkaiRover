@@ -728,6 +728,7 @@ def run_provision(steps: Sequence[Step], log: Callable[[str, str], None]) -> Pro
   3. `boot_config`: `/boot/firmware/config.txt` に `dtparam=i2c_arm=on` と `dtoverlay=hifiberry-dac` がなければ足す（足す前に写しを取る）。再起動が要る
   4. `groups`: `gpio`・`i2c`・`audio` に入っていなければ入れる。再起動（ログインし直し）が要る
   5. `linger`: `loginctl enable-linger`
+  5a. `mic_power`: マイク（C270、USB の 046d:0825）を USB の省電力で眠らせない udev の決まり（`/etc/udev/rules.d/90-osekkai-mic-power.rules`）を置き、`udevadm` ですぐに当てる。決まりのファイルが同じ中身なら済み（voice-gateway の実機確認で、眠ったマイクが起きるのに約 1.8 秒かかったため）
   6. `layout`: `~/osekkai-rover/{releases,tool}`、`~/.local/state/osekkai-deploy/` を 0700 で作る
   7. `voices`・`models`: 取得元と sha256 を道具に固定し、ないものだけを取る。同じ名前で sha256 が違うファイルがあれば上書きせず警告する（8.5）
   8. `reminder`: 戻し忘れのタイマーを写して有効にする

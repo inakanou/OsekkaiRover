@@ -143,7 +143,9 @@ def test_self_check_に日課の_3_つの項目が並ぶ(
 
     data = json.loads(capsys.readouterr().out)
     names = [row["name"] for row in data["results"]]
-    assert names[-3:] == ROUTINE_CHECK_NAMES
+    # 日課の項目は、基盤の項目の後に、この順で続けて並ぶ（ほかの機能の項目はその前後）
+    start = names.index(ROUTINE_CHECK_NAMES[0])
+    assert names[start : start + 3] == ROUTINE_CHECK_NAMES
     rows = {row["name"]: row for row in data["results"]}
     for name in ROUTINE_CHECK_NAMES:
         assert rows[name] == {"name": name, "status": "ok", "reason": ""}

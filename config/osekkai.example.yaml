@@ -44,6 +44,21 @@ core:
 # greeting:
 #   enabled: true
 
+# 音声の入口（ボタンを押して話しかけると、言葉を機能に渡す）。くわしくは docs/voice.md
+voice:
+  enabled: true
+  # マイクの名前（arecord -L で出る名前）。実機のマイクに合わせて直す
+  mic_device: "plughw:CARD=U0x46d0x825,DEV=0"
+  listen_seconds: 5.0         # 1 回の録音の長さ（秒、2〜15）
+  model: base                 # 聞き取りのモデルの大きさ（base か small）
+  # 聞ける時間帯（始め、終わり）。時刻は引用符で囲む。外の時間は「ねる じかん」と答える
+  hours: ["07:00", "21:30"]
+  follow_up_seconds: 30.0     # 続けて聞くの待ちの長さ（秒、5〜120）
+  # 聞き取りの選び方: auto、whisper（実機の聞き取り）、typed（端末で打った文字）。
+  # 実機では whisper にする（auto だと faster-whisper がないときに打った文字になり、self-check で気づけない）
+  recognizer: auto
+  max_gain: 20.0              # 小さい声を持ち上げる倍率の上限（1〜50）
+
 # 日課（決まった時刻の声かけ）。書き方は docs/routine.md を見る。
 # 使うときは、行の頭の「# 」を消す。時刻はすべて引用符で囲む（例: "07:00"）。
 # 下の時刻と言葉は見本の値。家の暮らしに合わせて直す。

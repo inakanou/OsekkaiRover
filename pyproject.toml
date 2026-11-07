@@ -24,6 +24,11 @@ pi = [
     "lgpio",
     "numpy",
 ]
+# 実機の音声の入口（聞き取り）だけ。開発 PC と CI には入れない
+voice = [
+    "faster-whisper>=1.1,<2",
+    "ctranslate2>=4.4,<5",
+]
 dev = [
     "pytest>=8",
     "ruff>=0.6",
@@ -34,6 +39,7 @@ dev = [
 # 機能を発見するエントリーポイントの群。機能を足したら、ここに 1 行足して入れ直す
 [project.entry-points."osekkai.features"]
 routine = "osekkai.features.routine:RoutineFeature"
+voice = "osekkai.voice:VoiceGatewayFeature"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -69,6 +75,11 @@ warn_unreachable = true
 # 実機の依存は型を見ない
 [[tool.mypy.overrides]]
 module = ["smbus2", "smbus2.*", "lgpio", "lgpio.*", "numpy", "numpy.*"]
+ignore_missing_imports = true
+
+# 音声の入口の聞き取りの依存（extras の voice）は開発 PC と CI に入れないので、型を見ない
+[[tool.mypy.overrides]]
+module = ["faster_whisper", "faster_whisper.*", "ctranslate2", "ctranslate2.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

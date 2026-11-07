@@ -10,7 +10,9 @@ import pytest
 import yaml
 
 from osekkai.core.config import ConfigLoader
+from osekkai.core.feature import feature_models
 from osekkai.core.paths import Paths
+from osekkai.core.registry import FeatureRegistry
 from rover_deploy.calibration import MigrationResult, migrate
 
 REPO = Path(__file__).resolve().parents[2]
@@ -40,8 +42,11 @@ def calibration_of(path: Path) -> dict[str, object]:
 def core_accepts(path: Path, tmp_path: Path) -> tuple[float, float, float, tuple[int, int]]:
     """基盤の読み込みで検証し、調整値を返す。"""
     paths = Paths({}, home=tmp_path / "loader-home", uid=1000)
-    report = ConfigLoader(paths, {}).load(override=path)
+    # 見本には登録された機能（音声の入口）の節があるので、登録された機能の設定のモデルを渡す
+    models = feature_models(cls.spec for cls in FeatureRegistry().feature_classes())
+    report = ConfigLoader(paths, models).load(override=path)
     assert report.fatal_errors == []
+    assert report.feature_errors == {}
     assert report.warnings == []
     c = report.core.motion.calibration
     return (c.steering, c.pan, c.tilt, c.motor_direction)

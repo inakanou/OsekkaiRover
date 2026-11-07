@@ -27,29 +27,31 @@ Claude Code のスキル（`/kiro-*` コマンド）を使い、要件 → 設�
 | ステアリング（product / tech / structure / roadmap） | 作成済み（`.kiro/steering/`） |
 | 基盤 `rover-core` | 完了。起動と安全な停止、設定と保存、LCD・声・ボタン・首・走行、資源の調停、機能を足す口、待機画面（`src/osekkai/core`、実機のアダプタ `src/osekkai/adapters/pi`、ハードなしの偽物 `src/osekkai/adapters/fake`） |
 | 実機への配置 `device-deployment` | 完了。版を入れる・確かめる・だめなら戻す・初期設定（`deploy/`、手順書は [`docs/deploy.md`](docs/deploy.md)） |
-| 日課 `daily-routine` | 実装中（`src/osekkai/features/routine`、手順書は [`docs/routine.md`](docs/routine.md)） |
-| ほかのスペック | brief だけ（`voice-gateway`・`presence`・`conversation`・`daruma-game`・`remote-control`） |
+| 日課 `daily-routine` | 完了。実機で確かめた（`src/osekkai/features/routine`、手順書は [`docs/routine.md`](docs/routine.md)） |
+| 音声の入口 `voice-gateway` | 実装済み。実機の確認はこれから（`src/osekkai/voice`、手順書は [`docs/voice.md`](docs/voice.md)） |
+| ほかのスペック | brief だけ（`presence`・`conversation`・`daruma-game`・`remote-control`） |
 
 ## 機能
 
-基盤（`src/osekkai/core`）に、機能を足していきます。機能は `src/osekkai/features/` にあり、`pyproject.toml` のエントリーポイントで登録します。
+基盤（`src/osekkai/core`）に、機能を足していきます。機能は `src/osekkai/features/`（音声の入口は `src/osekkai/voice/`）にあり、`pyproject.toml` のエントリーポイントで登録します。
 
 | 機能 | 名前 | 内容 | 手順書 |
 | --- | --- | --- | --- |
 | 日課 | `routine` | 決まった時刻に声をかけ、できたらほめて星をためる。寝る時刻におやすみモードに入る | [`docs/routine.md`](docs/routine.md) |
+| 音声の入口 | `voice` | ボタンを押して話すと、聞き取った言葉を、その言葉を登録した機能に渡す（`src/osekkai/voice`） | [`docs/voice.md`](docs/voice.md) |
 
 日課の設定は、設定ファイルの `routine:` の節に書きます。見本では全部コメントなので、書くまではタスクは 0 個です。
+音声の入口の設定は、設定ファイルの `voice:` の節に書きます。実機では `recognizer: whisper` にします。
 
 ## 今後の予定
 
 スペックを 1 つずつ、要件 → 設計 → タスク → 実装 → PR の順に進めます（[`roadmap.md`](.kiro/steering/roadmap.md)）。
 
-1. **日課**（`daily-routine`）: 試しのコマンドと通しの確かめを終えて、実機で確かめる。ここまでで、実機で日課が動きます
-2. **音声の入口**（`voice-gateway`）: ボタンを押して話すと、言葉に合う機能へ渡す
-3. **見つけてあいさつ**（`presence`）: 顔を見つけて首を向け、覚えた顔ならあいさつする
-4. **おしゃべり**（`conversation`）: ほかの機能に当てはまらない言葉に、Claude との会話で応える
-5. **あそび**（`daruma-game`）: だるまさんがころんだ
-6. **スマホのラジコン**（`remote-control`）: 家の Wi-Fi から操作する
+1. **音声の入口**（`voice-gateway`）: ボタンを押して話すと、言葉に合う機能へ渡す。実機で確かめる
+2. **見つけてあいさつ**（`presence`）: 顔を見つけて首を向け、覚えた顔ならあいさつする
+3. **おしゃべり**（`conversation`）: ほかの機能に当てはまらない言葉に、Claude との会話で応える
+4. **あそび**（`daruma-game`）: だるまさんがころんだ
+5. **スマホのラジコン**（`remote-control`）: 家の Wi-Fi から操作する
 
 ## ディレクトリ構成
 
@@ -60,11 +62,12 @@ Claude Code のスキル（`/kiro-*` コマンド）を使い、要件 → 設�
 │   ├── core/                 # 基盤（ポート・資源の調停・機能を足す口・設定・保存・待機画面）
 │   ├── adapters/pi/          # 実機用のアダプタ（ハードのライブラリはここだけで読む）
 │   ├── adapters/fake/        # テストと PC で使う偽物
-│   └── features/routine/     # 日課
+│   ├── features/routine/     # 日課
+│   └── voice/                # 音声の入口
 ├── tests/                    # テスト（src/osekkai と同じ構成。配置の道具は tests/deploy）
 ├── config/                   # 設定の見本（osekkai.example.yaml）。実際の設定はリポジトリの外
 ├── deploy/                   # 実機への配置の道具（rover-deploy）と systemd のユニット
-├── docs/                     # 手順書（deploy.md、routine.md）
+├── docs/                     # 手順書（deploy.md、routine.md、voice.md）
 ├── scripts/                  # 開発用スクリプト
 ├── .github/                  # CI（GitHub Actions）と PR テンプレート
 ├── .claude/
