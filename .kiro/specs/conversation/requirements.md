@@ -86,7 +86,7 @@
 **Objective:** As a 保護者, I want おしゃべりが日課やおやすみの邪魔をしないこと, so that 生活の流れが守られる
 
 #### Acceptance Criteria
-1. If おしゃべりの途中で、より優先度の高い機能（日課など）が声か画面を求めたとき, the Conversation shall 話すのを止めて資源を返し、その会話を終える
+1. If おしゃべりの途中で、より優先度の高い機能（日課など）が声か画面を求めたとき, the Conversation shall 返事を待っているときは話さずに、話している途中のときはいま話している一言を言い終えてから、資源を返し、その会話を終える
 2. While 静かな状態（おやすみ）のとき, the Conversation shall 返事を求めず、声も画面も使わない
 3. If 返事を待つ間に静かな状態になったとき, the Conversation shall 届いた返事を話さずに会話を終える
 4. If 声か画面を借りられないとき, the Conversation shall 返事を話さずに会話を終え、その回を数えない
