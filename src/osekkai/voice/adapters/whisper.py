@@ -131,14 +131,15 @@ def _to_audio(raw: bytes, max_gain: float) -> Any:
     return samples * np.float32(compute_gain(peak, max_gain))
 
 
-def _read_all(stream: IO[bytes], chunks: list[bytes]) -> None:
-    """標準出力を終わりまで読む（録音のスレッド）。"""
+def _read_all(stream: IO[bytes], chunks: list[bytes], heard: threading.Event) -> None:
+    """標準出力を終わりまで読む（録音のスレッド）。最初の音が届いたら `heard` を立てる。"""
     try:
         while True:
             chunk = stream.read(_READ_SIZE)
             if not chunk:
                 return
             chunks.append(chunk)
+            heard.set()
     except (OSError, ValueError):
         # 止めたときに閉じられた、など。足りない分は録音の失敗として扱う
         return
@@ -239,14 +240,16 @@ class WhisperRecognizer:
         except (OSError, ValueError) as error:
             raise RecognitionFailed.from_error(error) from None
         try:
-            # 合図が例外を出しても、finally で arecord を止める
-            on_recording(True)
             stdout = proc.stdout
             if stdout is None:
                 raise RecognitionFailed(MSG_RECORD_FAILED)
             chunks: list[bytes] = []
+            # マイクは開いてから最初の音が届くまでに時間がかかる（実機の C270 で約 2 秒）。
+            # 録音の合図（LED）は、最初の音が届いてから出す（1.2。早く出すと話し始めが切れる）
+            heard = threading.Event()
+            signalled = False
             reader = threading.Thread(
-                target=_read_all, args=(stdout, chunks), name="voice-arecord", daemon=True
+                target=_read_all, args=(stdout, chunks, heard), name="voice-arecord", daemon=True
             )
             reader.start()
             polls = max(1, int((seconds + _RECORD_MARGIN_SECONDS) / _POLL_SECONDS) + 1)
@@ -254,8 +257,14 @@ class WhisperRecognizer:
                 if not should_continue():
                     _stop(proc)
                     raise ListenCancelled
-                reader.join(_POLL_SECONDS)
+                if not signalled and heard.wait(_POLL_SECONDS):
+                    # 合図が例外を出しても、finally で arecord を止める
+                    signalled = True
+                    on_recording(True)
+                reader.join(_POLL_SECONDS if signalled else 0.0)
                 if not reader.is_alive():
+                    if not signalled and heard.is_set():
+                        on_recording(True)
                     break
             else:
                 self._log.warning("録音が終わりません")

@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import types
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -135,13 +136,19 @@ def _make_fake_faster_whisper(state: FakeModelState) -> types.ModuleType:
 
 
 class FakeStdout:
-    def __init__(self, chunks: list[bytes], block: bool) -> None:
+    def __init__(
+        self, chunks: list[bytes], block: bool, gate: threading.Event | None = None
+    ) -> None:
         self._chunks = list(chunks)
         self._block = block
+        self._gate = gate  # 立つまで最初の音を返さない（マイクを開くのにかかる時間）
         self.closed_event = threading.Event()
         self.closed = False
 
     def read(self, size: int = -1) -> bytes:
+        if self._gate is not None:
+            self._gate.wait(5.0)
+            self._gate = None
         if self._chunks:
             return self._chunks.pop(0)
         if self._block:
@@ -154,9 +161,16 @@ class FakeStdout:
 
 
 class FakeProc:
-    def __init__(self, args: list[str], chunks: list[bytes], returncode: int, block: bool) -> None:
+    def __init__(
+        self,
+        args: list[str],
+        chunks: list[bytes],
+        returncode: int,
+        block: bool,
+        gate: threading.Event | None = None,
+    ) -> None:
         self.args = args
-        self.stdout = FakeStdout(chunks, block)
+        self.stdout = FakeStdout(chunks, block, gate)
         self._final = returncode
         self.returncode: int | None = None
         self.terminated = False
@@ -190,10 +204,11 @@ class FakeArecord:
     list_returncode: int = 0
     list_error: BaseException | None = None
     run_calls: list[tuple[list[str], dict[str, Any]]] = field(default_factory=list)
+    gate: threading.Event | None = None
 
     def popen(self, args: list[str], **kwargs: Any) -> FakeProc:
         self.popen_kwargs.append(kwargs)
-        proc = FakeProc(args, self.chunks, self.returncode, self.block)
+        proc = FakeProc(args, self.chunks, self.returncode, self.block, self.gate)
         self.procs.append(proc)
         return proc
 
@@ -735,3 +750,37 @@ def test_聞き取りの文字と言葉はログに出さない(
     assert "だるまさん" not in caplog.text
     assert "なぞなぞ" not in caplog.text
     assert MIC not in caplog.text
+
+
+def test_録音の合図はマイクの最初の音が届いてから出す(
+    model_dir: Path, arecord: FakeArecord, model_state: FakeModelState
+) -> None:
+    # 実機のマイクは、開いてから最初の音が届くまで約 2 秒かかる。その間に合図を出すと、
+    # 子どもの話し始めが録音に入らない（1.2）
+    arecord.gate = threading.Event()
+    recognizer = _ready(model_dir)
+    recording = Recording()
+    done = threading.Event()
+
+    def listen() -> None:
+        recognizer.listen(5.0, hints=[], should_continue=_always, on_recording=recording)
+        done.set()
+
+    threading.Thread(target=listen, daemon=True).start()
+    time.sleep(0.3)
+    assert recording.events == []  # まだ音が届いていない
+    arecord.gate.set()
+    assert done.wait(5.0)
+    assert recording.events == [True, False]
+
+
+def test_音が届かないまま失敗したら録音の合図は点けずに消すだけ(
+    model_dir: Path, arecord: FakeArecord, model_state: FakeModelState
+) -> None:
+    arecord.chunks = []
+    arecord.returncode = 1
+    recognizer = _ready(model_dir)
+    recording = Recording()
+    with pytest.raises(RecognitionFailed):
+        recognizer.listen(5.0, hints=[], should_continue=_always, on_recording=recording)
+    assert recording.events == [False]
