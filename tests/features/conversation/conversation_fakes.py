@@ -23,9 +23,9 @@ from osekkai.core.motion import MotionService
 from osekkai.core.paths import Paths
 from osekkai.core.quiet import QuietMode
 from osekkai.core.storage import StateStore
-from osekkai.core.types import Priority, Resource
+from osekkai.core.types import Resource
 from osekkai.core.voice import VoiceService
-from osekkai.features.conversation.config import ConversationConfig
+from osekkai.features.conversation.feature import ConversationFeature
 from osekkai.features.conversation.ports import ChatResult, Turn
 
 MSG_SCRIPT_EMPTY = "偽の会話の AI の台本が尽きました"
@@ -189,10 +189,5 @@ class KitContext(CoreFeatureContext):
         return lease
 
 
-# 流れのテストで使う申告（機能の申告は 4.2 で作る。名前・優先度・資源を同じにする）
-FLOW_SPEC = FeatureSpec(
-    name="conversation",
-    priority=Priority.INTERACTIVE,
-    resources=frozenset({Resource.VOICE, Resource.DISPLAY, Resource.BUTTON}),
-    config_model=ConversationConfig,
-)
+# 流れのテストで使う申告（機能の申告と同じもの）
+FLOW_SPEC = ConversationFeature.spec
