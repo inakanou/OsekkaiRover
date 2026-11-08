@@ -84,7 +84,7 @@
   - _Boundary: adapters/sensors_
   - _Requirements: 5.1, 5.4_
 
-- [ ] 3.2 (P) USB カメラ（C270）の実機のアダプタを作る
+- [x] 3.2 (P) USB カメラ（C270）の実機のアダプタを作る
   - 設定の指定か、C270 の決まった場所からデバイスを見つける
   - MJPG 640×480 で開き、カメラの JPEG をそのまま受け取る。ハフマン表がない JPEG には標準の表を差し込む。そのまま受け取れない版では JPEG に直す
   - テストは `test_remote_adapters_usb_camera.py` に置く
@@ -224,3 +224,4 @@
 - 2.4: 走行の判定は止まる側に倒す: 命令の時刻が今より先・NaN、後退を始めた時刻が今より先、far の印のない無限の距離は止める。前に進む命令は後退の印も解く（前を押す＝後ろを離した）
 - 2.6: 写真の保存先は photos.default_photo_dir(paths)。名前は Clock.now() の壁の時刻で、prune にも Clock.now() を渡す
 - 3.1: HatSensors(clock=...) は clock が要る（feature と cli で渡す）。実機で確かめること: ADC の 1 回の i2c_rdwr の読み方、lgpio の gpio_trigger・gpio_read・gpio_get_chip_info・alert と callback（ns の時刻）、基盤が開いている gpiochip をもう一度開けるか、sysfs に label があるか。30 ms で下がらないときは gpio_read で echo がまだ高いときだけ far
+- 3.2: 実機の OpenCV 4.10 は CONVERT_RGB=0 で (1, N) の uint8 を返し、C270 の JPEG に DHT はない（実機で確かめた）

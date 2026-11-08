@@ -156,7 +156,7 @@ REMOTE_FILES = sorted(REMOTE_DIR.rglob("*.py"))
 
 def test_remote_のモジュールが見つかる() -> None:
     names = {_module_name(p) for p in REMOTE_FILES}
-    assert {REMOTE, ADAPTERS, PORTS, FAKE, SENSORS} <= names
+    assert {REMOTE, ADAPTERS, PORTS, FAKE, SENSORS, USB_CAMERA} <= names
 
 
 @pytest.mark.parametrize("path", REMOTE_FILES, ids=_module_name)
