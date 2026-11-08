@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -207,3 +208,99 @@ class FakeGameIO:
         if not 0 <= self._index < len(self._rounds):
             raise AssertionError(MSG_SCRIPT_EMPTY)
         return self._rounds[self._index]
+
+
+class FakeLease:
+    """偽のリースの口（声・LCD・首・ボタン）。呼ばれた操作を `events` に順に覚える。
+
+    `events` は複数のスレッド（踊りのスレッド）から足される。
+    `speak_hook`・`dance_hook` は、話す・踊るの最中に呼ばれる（並びを確かめるのに使う）。
+    """
+
+    def __init__(self) -> None:
+        self.active = True
+        self.events: list[tuple[object, ...]] = []
+        self.presses = 0
+        self.say_error: Exception | None = None
+        self.dance_error: Exception | None = None
+        self.speak_hook: Callable[[], None] | None = None
+        self.dance_hook: Callable[[], None] | None = None
+        self._lock = threading.Lock()
+        self.voice = _FakeVoice(self)
+        self.display = _FakeDisplay(self)
+        self.neck = _FakeNeck(self)
+        self.button = _FakeButton(self)
+
+    def record(self, *event: object) -> None:
+        with self._lock:
+            self.events.append(event)
+
+    @property
+    def names(self) -> list[object]:
+        """覚えた操作の名前の並び。"""
+        with self._lock:
+            return [event[0] for event in self.events]
+
+
+class _FakeVoice:
+    def __init__(self, lease: FakeLease) -> None:
+        self._lease = lease
+
+    def say(self, text: str) -> None:
+        self._lease.record("say", text)
+        if self._lease.speak_hook is not None:
+            self._lease.speak_hook()
+        if self._lease.say_error is not None:
+            raise self._lease.say_error
+        self._lease.record("said", text)
+
+
+class _FakeDisplay:
+    def __init__(self, lease: FakeLease) -> None:
+        self._lease = lease
+
+    def show(self, line1: str, line2: str) -> None:
+        self._lease.record("show", line1, line2)
+
+
+class _FakeNeck:
+    def __init__(self, lease: FakeLease) -> None:
+        self._lease = lease
+
+    def look(self, pan: float, tilt: float) -> None:
+        self._lease.record("look", pan, tilt)
+
+    def home(self) -> None:
+        self._lease.record("home")
+
+    def nod(self, times: int = 2) -> None:
+        self._lease.record("nod", times)
+
+    def dance(self, drive: object = None) -> None:
+        """`drive` は走行の口（遊びは渡さない）。渡されたかを覚える。"""
+        self._lease.record("dance", drive)
+        if self._lease.dance_hook is not None:
+            self._lease.dance_hook()
+        if self._lease.dance_error is not None:
+            raise self._lease.dance_error
+        self._lease.record("danced")
+
+
+class _FakeButton:
+    def __init__(self, lease: FakeLease) -> None:
+        self._lease = lease
+
+    def clear(self) -> None:
+        self._lease.presses = 0
+        self._lease.record("clear")
+
+    def has_press(self) -> bool:
+        self._lease.record("has_press")
+        return self._lease.presses > 0
+
+    def wait_press(self, timeout: float | None) -> bool:
+        self._lease.record("wait_press", timeout)
+        if self._lease.presses > 0:
+            self._lease.presses -= 1
+            return True
+        return False
