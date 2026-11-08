@@ -489,7 +489,7 @@ class DangerVoice:
     def should_speak(self, now: float) -> bool: ...  # 5.6
 ```
 - `decide` の決まり（上から順に）:
-  1. 命令がない・`STOP`・`now - at > 0.5` → 止まる（4.3、4.4）。`back_latched` を解く（6.3）。
+  1. 命令がない・`STOP`・`now - at` が 0〜0.5 秒の外（先の時刻・NaN を含む） → 止まる（4.3、4.4）。`back_latched` を解く（6.3）。
   2. 前に進む命令:
      - `judge_front` が `NONE` 以外 → 止まる。`stopped_by` を返す（5.2〜5.4）。
      - 前の判定が危険なら `danger` に持ち、前に進む命令は受け付けない（5.3）。後退の命令は判定を待たない。
@@ -500,7 +500,7 @@ class DangerVoice:
      - 後退から前に進む命令に変わったら `back_since` を空にする。
   4. それ以外は、選んだ速さで、決まった角度で走る（4.2、4.5、4.6）。
 - `judge_front`:
-  - 距離が `None`（読めない）、または床の値に `None` がある → `UNKNOWN`（5.4）。
+  - 距離が `None`（読めない）・NaN・負・`far` の印のない無限、または（`cliff_stop` のとき）床の値に `None`・負がある → `UNKNOWN`（5.4）。`cliff_stop` が偽なら床の値は見ない（5.7）。
   - 距離 < `stop_cm` → `OBSTACLE`。
   - `cliff_stop` で、床の値のどれかが `cliff_reference` 以下 → `EDGE`（5.7）。
   - 物と段差が同時なら `EDGE`（落ちる方を先に知らせる）。
