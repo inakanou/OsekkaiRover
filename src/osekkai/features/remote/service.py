@@ -495,17 +495,6 @@ class RemoteService:
             else:
                 self._notices[token] = message
 
-    def _message_for(self, token: str) -> str | None:
-        """その端末に出す知らせ。断りの知らせが先、次に危険の知らせ（操作する端末だけ）。"""
-        with self._lock:
-            notice = self._notices.get(token)
-            danger = self._danger_message
-        if notice is not None:
-            return notice
-        if danger is not None and self._slot.holder() == token:
-            return danger
-        return None
-
     # --- 走行の繰り返し ---
 
     def _run(self) -> None:

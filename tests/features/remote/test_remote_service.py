@@ -208,8 +208,8 @@ def test_前に物があれば1回の読みで止まり_LCDと知らせと声を
     assert rig.moves() == [("stop",)]
     assert rig.sensors.reads == 1
     assert rig.shows() == [_show(texts.LCD_STOP, texts.FACE_STOP.text())]
-    assert rig.service._message_for(ME) == texts.MSG_DANGER_OBSTACLE
-    assert rig.service._message_for(OTHER) is None
+    assert rig.service.status(ME).message == texts.MSG_DANGER_OBSTACLE
+    assert rig.service.status(OTHER).message != texts.MSG_DANGER_OBSTACLE  # 危険は操作する端末だけ
     _wait(lambda: rig.says() == [("said", texts.SAY_DANGER_OBSTACLE)])
     assert ("say", texts.SAY_DANGER_OBSTACLE, True) in rig.ctx.calls
 
@@ -219,7 +219,7 @@ def test_段差なら段差の知らせと声(rig: _Rig) -> None:
     rig.service.drive(ME, Move.FWD)
     rig.step()
     assert rig.moves() == [("stop",)]
-    assert rig.service._message_for(ME) == texts.MSG_DANGER_CLIFF
+    assert rig.service.status(ME).message == texts.MSG_DANGER_CLIFF
     _wait(lambda: rig.says() == [("said", texts.SAY_DANGER_CLIFF)])
 
 
@@ -228,7 +228,7 @@ def test_センサーが読めなければ前に進まない(rig: _Rig) -> None:
     rig.service.drive(ME, Move.FWD)
     assert rig.step()
     assert rig.moves() == [("stop",)]
-    assert rig.service._message_for(ME) == texts.MSG_DANGER_OBSTACLE
+    assert rig.service.status(ME).message == texts.MSG_DANGER_OBSTACLE
 
 
 def test_危険の声は10秒に1回で_知らせは毎回出す(rig: _Rig) -> None:
@@ -239,7 +239,7 @@ def test_危険の声は10秒に1回で_知らせは毎回出す(rig: _Rig) -> N
         _wait(lambda: not rig.service._speaking)
         rig.clock.advance(1.0)
     assert len(rig.says()) == 1
-    assert rig.service._message_for(ME) == texts.MSG_DANGER_OBSTACLE
+    assert rig.service.status(ME).message == texts.MSG_DANGER_OBSTACLE
     rig.clock.advance(6.0)
     rig.service.drive(ME, Move.FWD)
     rig.step()
@@ -267,7 +267,7 @@ def test_危険が続く間も後退は受け付け_前に戻れば知らせが�
     rig.service.drive(ME, Move.BACK)
     rig.step()
     assert rig.moves()[-1] == ("drive", 0.0, -20)
-    assert rig.service._message_for(ME) is None
+    assert rig.service.status(ME).message is None
 
 
 # --- 受け付けの順 ---
@@ -277,7 +277,7 @@ def test_ほかの端末が操作する端末なら断る(rig: _Rig) -> None:
     rig.service.drive(ME, Move.FWD)
     assert rig.service.drive(OTHER, Move.STOP) is Reply.NOT_NOW
     assert rig.service.set_fast(OTHER, True) is Reply.NOT_NOW
-    assert rig.service._message_for(OTHER) == texts.MSG_OTHER_OPERATOR
+    assert rig.service.status(OTHER).message == texts.MSG_OTHER_OPERATOR
     rig.step()
     assert rig.moves() == [("drive", 0.0, 20)]
 
@@ -299,7 +299,7 @@ def test_使えないときは断り_リースを借りない(
 ) -> None:
     setup(rig)
     assert rig.service.drive(ME, Move.FWD) is Reply.NOT_NOW
-    assert rig.service._message_for(ME) == message
+    assert rig.service.status(ME).message == message
     assert rig.ctx.calls == []
     assert rig.slot.holder() is None
 
@@ -309,13 +309,13 @@ def test_使えるようになれば断りの知らせが消える(rig: _Rig) ->
     rig.service.drive(ME, Move.FWD)
     rig.ctx.end_quiet()
     assert rig.service.drive(ME, Move.FWD) is Reply.OK
-    assert rig.service._message_for(ME) is None
+    assert rig.service.status(ME).message is None
 
 
 def test_操作の段を借りられなければ断る(rig: _Rig) -> None:
     rig.ctx.busy = {Resource.DRIVE}
     assert rig.service.drive(ME, Move.FWD) is Reply.NOT_NOW
-    assert rig.service._message_for(ME) == texts.MSG_BUSY
+    assert rig.service.status(ME).message == texts.MSG_BUSY
     assert not rig.step()
     assert rig.moves() == []
 
@@ -833,7 +833,7 @@ def test_ほかの端末の首とブッブーとダンスと話させるは断�
 ) -> None:
     rig.service.drive(ME, Move.STOP)
     assert act(rig.service) is Reply.NOT_NOW
-    assert rig.service._message_for(OTHER) == texts.MSG_OTHER_OPERATOR
+    assert rig.service.status(OTHER).message == texts.MSG_OTHER_OPERATOR
     assert not [c for c in rig.ctx.calls if c[0] in ("look", "say", "show")]
 
 

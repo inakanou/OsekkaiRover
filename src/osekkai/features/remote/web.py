@@ -379,6 +379,8 @@ def create_app(
         token: str = g.token
         result = service.take_photo(token)  # 話し終えて撮るまで、このスレッドで待つ
         body = status_json(token, result.reply)
+        if result.reply is Reply.FAILED:  # 9.3。FAILED は首の失敗にも使うので、写真だけここで
+            body["message"] = texts.MSG_PHOTO_FAILED
         return jsonify(
             {
                 "reply": body["reply"],

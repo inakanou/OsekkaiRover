@@ -27,8 +27,8 @@ from osekkai.core.feature import FeatureContext, FeatureSpec
 from osekkai.core.paths import Paths
 from osekkai.core.types import Priority, Resource
 
-from .adapters.fake import ClearSensors, NoUsbCamera
-from .adapters.sensors import HatSensors, sensors_available
+from .adapters.fake import ClearSensors, NoUsbCamera, UnreadableSensors
+from .adapters.sensors import HatSensors, on_raspberry_pi, sensors_available
 from .adapters.usb_camera import UsbCamera, find_usb_camera, usb_camera_available
 from .checks import (
     REASON_NO_FLASK,
@@ -144,11 +144,20 @@ class RemoteFeature:
     # --- 組み立て ---
 
     def _make_sensors(self) -> SensorPort:
-        """渡されたセンサー、実機のセンサー、ライブラリがなければいつも安全な偽物（PC と CI）。"""
+        """渡されたセンサー、実機のセンサー、ライブラリがないときの偽物。
+
+        Pi の上でライブラリがないときは、いつも読めない偽物にして前に進ませない。
+        いつも安全な偽物は Pi でない PC と CI だけで使う。
+        """
         if self._sensors_given is not None:
             return self._sensors_given
         if sensors_available():
             return HatSensors(clock=self._ctx.clock)
+        if on_raspberry_pi():
+            logger.warning(
+                "Raspberry Pi なのにセンサーの部品（smbus2・lgpio）がないので、前には進ませません"
+            )
+            return UnreadableSensors()
         logger.info("センサーのライブラリがないので、偽のセンサーを使います")
         return ClearSensors()
 

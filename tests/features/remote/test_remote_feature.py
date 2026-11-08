@@ -25,7 +25,7 @@ from osekkai.core.events import QuietChanged
 from osekkai.core.types import Priority, Resource
 from osekkai.features.remote import RemoteFeature
 from osekkai.features.remote import feature as feature_module
-from osekkai.features.remote.adapters.fake import ClearSensors, NoUsbCamera
+from osekkai.features.remote.adapters.fake import ClearSensors, NoUsbCamera, UnreadableSensors
 from osekkai.features.remote.checks import (
     REASON_NO_FLASK,
     REASON_PIN_UNUSABLE,
@@ -435,7 +435,24 @@ def test_センサーのライブラリがなければいつも安全な偽の�
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(feature_module, "sensors_available", lambda: False)
+    monkeypatch.setattr(feature_module, "on_raspberry_pi", lambda: False)
     assert isinstance(_bare(tmp_path)._make_sensors(), ClearSensors)
+
+
+def test_Pi_でセンサーのライブラリがなければいつも読めないセンサーで前に進ませない(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(feature_module, "sensors_available", lambda: False)
+    monkeypatch.setattr(feature_module, "on_raspberry_pi", lambda: True)
+    with caplog.at_level(logging.WARNING, logger="osekkai.features.remote"):
+        made = _bare(tmp_path)._make_sensors()
+    assert isinstance(made, UnreadableSensors)
+    reading = made.read()
+    assert reading.distance_cm is None and not reading.far
+    assert reading.floor == (None, None, None)
+    assert [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING] == [
+        "Raspberry Pi なのにセンサーの部品（smbus2・lgpio）がないので、前には進ませません"
+    ]
 
 
 def test_センサーのライブラリがあれば実機のセンサーを時計つきで作る(

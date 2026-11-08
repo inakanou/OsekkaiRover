@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from enum import Enum
 from typing import Final, Protocol, TypeVar
@@ -67,6 +67,9 @@ BorrowCamera = Callable[[str, Callable[[], bool]], CameraLoan]
 class Camera(Enum):
     NECK = "neck"
     USB = "usb"
+
+
+_CAMERA_NAMES: Final[Mapping[Camera, str]] = {Camera.NECK: "首のカメラ", Camera.USB: "USB のカメラ"}
 
 
 def borrow_from_presence(owner: str, alive: Callable[[], bool]) -> CameraLoan:
@@ -430,4 +433,4 @@ class FrameHub:
             if last is not None and now - last < LOG_EVERY_S:
                 return
             self._logged_at = now
-        logger.warning("remote camera %s failed: %s", self.camera.value, type(error).__name__)
+        logger.warning("%sを読めませんでした: %s", _CAMERA_NAMES[self.camera], type(error).__name__)

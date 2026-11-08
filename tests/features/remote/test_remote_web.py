@@ -632,6 +632,18 @@ def test_撮れないときは知らせを返す(logged_in: Rig) -> None:
     assert body == {"reply": "not_now", "message": texts.MSG_OUT_OF_HOURS, "photos": []}
 
 
+def test_1_枚も撮れなかったときは撮れなかったことを出す(logged_in: Rig) -> None:
+    logged_in.service.photo = PhotoResult((), Reply.FAILED)
+    body = logged_in.post("/api/photo", {}).get_json()
+    assert body == {"reply": "failed", "message": texts.MSG_PHOTO_FAILED, "photos": []}  # 9.3
+
+
+def test_首の失敗では写真の撮れなかった文を出さない(logged_in: Rig) -> None:
+    logged_in.service.reply = Reply.FAILED
+    body = logged_in.post("/api/look", {"way": "up"}).get_json()
+    assert body["message"] != texts.MSG_PHOTO_FAILED
+
+
 def test_撮った写真をJPEGで返す(logged_in: Rig) -> None:
     logged_in.photo_dir.mkdir()
     (logged_in.photo_dir / PHOTO_NAME).write_bytes(JPEG)

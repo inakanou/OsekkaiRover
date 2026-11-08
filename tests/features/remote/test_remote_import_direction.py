@@ -72,6 +72,7 @@ CHECKS_ALLOWED = (
     f"{REMOTE}.config",
     PORTS,
     f"{SENSORS}.sensors_available",
+    f"{SENSORS}.on_raspberry_pi",
     f"{SENSORS}.HatSensors",
     f"{SENSORS}.FLOOR_WARMUP_S",
     f"{USB_CAMERA}.find_usb_camera",
@@ -367,6 +368,7 @@ def test_self_check_の項目は決まった部品だけを読む() -> None:
         "from .config import RemoteConfig\n"
         "from .ports import SensorPort, SensorReading\n"
         "from .adapters.sensors import FLOOR_WARMUP_S, HatSensors, sensors_available\n"
+        "from .adapters.sensors import on_raspberry_pi\n"
         "from .adapters.usb_camera import find_usb_camera\n"
         "from osekkai.core.selfcheck import Check, CheckContext\n"
         "from osekkai.core.clock import Clock, SystemClock\n"

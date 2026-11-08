@@ -60,6 +60,11 @@ def test_端末の知らせは要件の文言と同じ() -> None:
     assert texts.MSG_BACK_GUIDE == "うしろは みえないよ。ゆっくり さがるよ"  # 6.4
 
 
+def test_撮れなかった知らせは短くやさしい文() -> None:
+    # 9.3 は端末の文言を決めていない。要件のかぎかっこの突き合わせ（_QUOTED）には入れない
+    assert texts.MSG_PHOTO_FAILED == "しゃしんが とれなかったよ"
+
+
 def test_おやすみの知らせは時間帯の外と同じ() -> None:
     assert texts.MSG_QUIET == texts.MSG_OUT_OF_HOURS  # 11.2
 

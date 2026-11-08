@@ -806,3 +806,24 @@ def test_ほかのスレッドから読んでも混ざらない(tmp_path: Path) 
         t.join(timeout=5.0)
     assert len(results) == 15
     assert all(r == pytest.approx(1_000_000 * SOUND_CM_PER_NS / 2) for r in results)
+
+
+# --- Raspberry Pi かどうか ---
+
+
+def test_機種の名前に_Raspberry_Pi_があれば_Pi(tmp_path: Path) -> None:
+    model = tmp_path / "model"
+    model.write_bytes(b"Raspberry Pi 5 Model B Rev 1.0\x00")
+    assert sensors.on_raspberry_pi((tmp_path / "none", model)) is True
+
+
+def test_機種の名前がないかほかの機種なら_Pi_でない(tmp_path: Path) -> None:
+    other = tmp_path / "model"
+    other.write_bytes(b"Some Board\x00")
+    assert sensors.on_raspberry_pi((tmp_path / "none",)) is False
+    assert sensors.on_raspberry_pi((other,)) is False
+
+
+def test_機種の名前は決まった場所から読む() -> None:
+    paths = sensors.MODEL_PATHS
+    assert paths == (Path("/proc/device-tree/model"), Path("/sys/firmware/devicetree/base/model"))

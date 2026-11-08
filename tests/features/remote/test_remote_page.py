@@ -171,6 +171,13 @@ def test_写真のボタンは止めてから撮る() -> None:
     assert body.index("stopDriving(") < body.index("/api/photo")
 
 
+def test_写真の返事の知らせを出す() -> None:
+    js = page.APP_JS
+    start = js.index("function takePhoto")
+    body = js[start : js.index("\n  }\n", start)]
+    assert "showMessage(" in body  # 9.3: 撮れなかったことを出す
+
+
 def test_状態は_1_秒ごとに読み_401_で読み直す() -> None:
     js = page.APP_JS
     assert "/api/status" in js

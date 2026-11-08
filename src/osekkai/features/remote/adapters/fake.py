@@ -1,4 +1,8 @@
-"""開発 PC で使う偽物。センサーのライブラリがない PC と CI で使う（15.1）。"""
+"""開発 PC で使う偽物。センサーのライブラリがない PC と CI で使う（15.1）。
+
+UnreadableSensors は、Raspberry Pi なのにセンサーのライブラリがないときに使う。
+いつも読めない（危険）ので、前には進まない。
+"""
 
 from __future__ import annotations
 
@@ -17,6 +21,16 @@ class ClearSensors:
         return SensorReading(
             distance_cm=CLEAR_DISTANCE_CM, floor=(CLEAR_FLOOR, CLEAR_FLOOR, CLEAR_FLOOR)
         )
+
+    def close(self) -> None:
+        pass
+
+
+class UnreadableSensors:
+    """いつも読めないセンサー（SensorPort）。距離も床も読めない（危険）。"""
+
+    def read(self) -> SensorReading:
+        return SensorReading(distance_cm=None, floor=(None, None, None))
 
     def close(self) -> None:
         pass

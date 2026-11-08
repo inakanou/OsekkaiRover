@@ -38,6 +38,11 @@ DEV_ROOT: Final = Path("/dev")
 GPIOCHIP_COMPATIBLE: Final = "raspberrypi,rp1-gpio"  # Pi 5 の 40 ピンの口
 GPIOCHIP_LABEL: Final = "pinctrl-rp1"
 GPIOCHIP_PREFIX: Final = "gpiochip"
+MODEL_PATHS: Final = (
+    Path("/proc/device-tree/model"),
+    Path("/sys/firmware/devicetree/base/model"),
+)
+PI_MODEL_MARK: Final = "Raspberry Pi"
 
 SOUND_M_PER_S: Final = 343.3
 TRIG_PULSE_S: Final = 20e-6  # trig を上げておく時間（HC-SR04 は 10 µs 以上）
@@ -62,6 +67,11 @@ def _module_available(name: str) -> bool:
 def sensors_available() -> bool:
     """smbus2 と lgpio を読み込めるか。開発 PC と CI では偽。"""
     return _module_available("smbus2") and _module_available("lgpio")
+
+
+def on_raspberry_pi(paths: tuple[Path, ...] = MODEL_PATHS) -> bool:
+    """機種の名前（device tree の model）に Raspberry Pi があるか。読めなければ偽。"""
+    return any(PI_MODEL_MARK in _read_text(path) for path in paths)
 
 
 def _read_text(path: Path) -> str:

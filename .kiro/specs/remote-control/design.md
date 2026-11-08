@@ -694,6 +694,9 @@ class RemoteService:
     def may_stream(self, token: str) -> bool: ...  # 8.6
     def tick(self) -> None: ...                    # run の繰り返しから 0.5 秒ごと
     def halt(self) -> None: ...                    # 中断の知らせ・時間帯の終わり・おやすみ
+    def on_lost(self) -> None: ...                 # LeaseKeeper の on_lost。止める合図と首のカメラを返すだけ（話さない・待たない）
+    def neck_allowed(self) -> bool: ...            # NeckSource の may_borrow。NECK を持ち、lost でないとき
+    def drop_operator(self, token: str) -> None: ...  # Sessions.on_end。操作する端末なら走行を止める
     def close(self) -> None: ...
 ```
 - 操作の受け付けの順（どの操作も同じ）:
@@ -749,11 +752,11 @@ class RemoteService:
 | POST | `/login` | フォーム `pin` | 303 で `/`、またはログインの画面に「ばんごうが ちがうよ」「しばらく まってね」 | 403 |
 | POST | `/logout` | JSON `{}` | `{ok}`。印を消す（2.7） | 401, 403 |
 | GET | `/api/status` | — | `Status` の JSON | 401, 403 |
-| POST | `/api/drive` | `{move}` | `{reply, ...Status}` | 400, 401, 403 |
+| POST | `/api/drive` | `{move, seq, page}`（seq は画面ごとに増える番号、page は画面ごとの乱数の印。ログインと page ごとに見た最大の seq 以下の命令は捨てる。形の違う命令は止めるとして扱う） | `{reply, ...Status}` | 400, 401, 403, 413 |
 | POST | `/api/look` | `{way}` | 同上 | 400, 401, 403 |
 | POST | `/api/act` | `{name: horn\|dance\|fast\|slow}` | 同上 | 400, 401, 403 |
 | POST | `/api/say` | `{text}`（文字数は 2000 まで受けて、120 に切る） | 同上 | 400, 401, 403, 413 |
-| POST | `/api/photo` | `{}` | `{reply, photos: ["/photos/<name>"]}` | 401, 403 |
+| POST | `/api/photo` | `{}` | `{reply, message, photos: ["/photos/<name>"]}` | 401, 403 |
 | GET | `/photos/<name>` | — | JPEG（9.7） | 401, 403, 404 |
 | GET | `/stream/<neck\|usb>` | — | `multipart/x-mixed-replace; boundary=frame`（部分ごとに Content-Length） | 401, 403, 404, 503（満員） |
 
@@ -775,6 +778,9 @@ class RemoteService:
   - `start(host="0.0.0.0", port)` は `make_server(threaded=True, request_handler=QuietHandler)` を作り、補助のスレッド `remote-web` で `serve_forever()` する。ポートを使えなければ `OSError` を返し、機能は待ち受けずに理由をログに出す（1.5）。
   - `stop()` は配信に止める合図を出してから `shutdown()` する。
   - `QuietHandler` は werkzeug の要求のログ（アドレスと経路）を出さない（2.8）。
+  - 送る待ちの上限は 10 秒（`SOCKET_TIMEOUT_S`）。読むのをやめた端末への配信を終えて席を返す。
+  - サーバーは自分で開いた口（`socket.create_server`）を `fd=` で渡して作る（werkzeug の `make_server` は開けないと `sys.exit` するため）。サーバーの `handle_error` も端末のアドレスを出さない。
+  - `create_app` は、操作の意味を持つ側を `OperatorService`（使う関数だけの Protocol）として受ける。`RemoteService` がこれを満たす。
 - 画面（`page.py`）:
   - 操作の画面: 6 つの走るボタンと「とめる」、首の 5 つ、ブッブー・ダンス・速さ、写真、話させる欄（120 文字）、「おわる」、2 つの映像の枠、知らせの欄。後退のボタンの近くに 6.4 の案内。
   - 押している間の送り方: `pointerdown` ですぐ送り、150 ms ごとに送る。`pointerup`・`pointercancel`・`lostpointercapture`・画面が隠れた（`visibilitychange`）・写真のボタンで STOP を送る（4.3）。
@@ -794,6 +800,8 @@ class RemoteService:
 def sensors_available() -> bool: ...   # smbus2 と lgpio を読み込めるか（find_spec）
 def find_gpiochip() -> str | None: ...  # sysfs の of_node/compatible か label pinctrl-rp1 で探す
 
+FLOOR_WARMUP_S: Final = 2.0  # bus を開いてから床を読まない（MCU を起こし直した直後のでたらめを使わない）
+
 class HatSensors:  # SensorPort
     TRIG_BCM: Final = 27   # D2
     ECHO_BCM: Final = 22   # D3
@@ -801,7 +809,7 @@ class HatSensors:  # SensorPort
     MIN_INTERVAL_S: Final = 0.06
     ADC_ADDRESSES: Final = (0x14, 0x15)
     FLOOR_REGISTERS: Final = (0x17, 0x16, 0x15)  # A0〜A2
-    def __init__(self, *, bus_number: int = 1) -> None: ...
+    def __init__(self, *, clock: Clock, bus_number: int = 1) -> None: ...  # テストのために lgpio・smbus2・sysfs も差し替えられる
     def read(self) -> SensorReading: ...
     def close(self) -> None: ...
 ```
@@ -826,7 +834,7 @@ def usb_camera_available() -> bool: ...          # cv2 を読み込めるか
 def find_usb_camera(configured: str) -> str | None: ...
 
 class UsbCamera:  # UsbCameraPort
-    def __init__(self, device: str) -> None: ...
+    def __init__(self, device: str, *, clock: Clock | None = None) -> None: ...  # clock はログの間引きに使う
 ```
 - `open`:
   1. `cv2.VideoCapture(device, cv2.CAP_V4L2)` で開く。

@@ -38,6 +38,7 @@ from osekkai.features.remote.checks import (
     REASON_NO_CAMERA,
     REASON_NO_FLASK,
     REASON_NO_LIBRARY,
+    REASON_NO_SENSOR_PARTS,
     REASON_PIN_UNUSABLE,
     REASON_PORT_UNUSABLE,
     REASON_SENSORS_UNREADABLE,
@@ -374,8 +375,24 @@ def test_ライブラリがなければ飛ばす(
     paths: Paths, sensors: _Sensors, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(checks, "sensors_available", lambda: False)
+    monkeypatch.setattr(checks, "on_raspberry_pi", lambda: False)
     assert _run(paths, SENSORS, _remote("")) == CheckResult(CheckStatus.SKIPPED, REASON_NO_LIBRARY)
     assert sensors.reads == 0
+
+
+def test_Pi_でライブラリがなければだめ(
+    paths: Paths, sensors: _Sensors, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(checks, "sensors_available", lambda: False)
+    monkeypatch.setattr(checks, "on_raspberry_pi", lambda: True)
+    assert _run(paths, SENSORS, _remote("")) == CheckResult(
+        CheckStatus.FAILED, REASON_NO_SENSOR_PARTS
+    )
+    assert sensors.reads == 0
+
+
+def test_Pi_での部品がない理由は部品の名前を言う() -> None:
+    assert REASON_NO_SENSOR_PARTS == "センサーの部品（smbus2・lgpio）がありません"
 
 
 def test_ロボットが動いているときはセンサーに触らず飛ばす(paths: Paths, sensors: _Sensors) -> None:
@@ -431,6 +448,7 @@ def test_理由は決まった文だけで値を含まない() -> None:
         REASON_NO_CAMERA,
         REASON_NO_FLASK,
         REASON_NO_LIBRARY,
+        REASON_NO_SENSOR_PARTS,
         REASON_PIN_UNUSABLE,
         REASON_PORT_UNUSABLE,
         REASON_SENSORS_UNREADABLE,

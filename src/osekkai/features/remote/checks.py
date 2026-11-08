@@ -1,7 +1,8 @@
 """ラジコンの self-check の項目（1.4、1.5、13.4〜13.6）。
 
 - `remote.setup`: pin とポートの設定が使えるか。ハードの項目ではない
-- `remote.sensors`: 前の物の距離と床の 3 つを読めるか（ハードの項目）
+- `remote.sensors`: 前の物の距離と床の 3 つを読めるか（ハードの項目）。
+  ライブラリがないとき、Raspberry Pi の上ではだめ、ほかでは飛ばす
 - `remote.usb_camera`: USB のカメラのデバイスのファイルがあるか（カメラは開かない）
 
 無効なときは、すべて飛ばす。設定の誤りは `remote.setup` をだめにし、ほかは飛ばす。
@@ -19,7 +20,7 @@ from typing import Final
 from osekkai.core.clock import Clock, SystemClock
 from osekkai.core.selfcheck import Check, CheckContext, CheckResult, CheckStatus
 
-from .adapters.sensors import FLOOR_WARMUP_S, HatSensors, sensors_available
+from .adapters.sensors import FLOOR_WARMUP_S, HatSensors, on_raspberry_pi, sensors_available
 from .adapters.usb_camera import find_usb_camera
 from .config import RemoteConfig
 from .ports import SensorPort, SensorReading
@@ -31,6 +32,7 @@ __all__ = [
     "REASON_NO_CAMERA",
     "REASON_NO_FLASK",
     "REASON_NO_LIBRARY",
+    "REASON_NO_SENSOR_PARTS",
     "REASON_PIN_UNUSABLE",
     "REASON_PORT_UNUSABLE",
     "REASON_SENSORS_UNREADABLE",
@@ -51,6 +53,7 @@ REASON_PIN_UNUSABLE: Final = "pin は引用符で囲んだ 4〜8 けたの数字
 REASON_NO_FLASK: Final = "Web の部品（flask）がありません"
 REASON_PORT_UNUSABLE: Final = "ポートを使えません"
 REASON_NO_LIBRARY: Final = "センサーのライブラリがない"
+REASON_NO_SENSOR_PARTS: Final = "センサーの部品（smbus2・lgpio）がありません"  # Pi の上で
 REASON_SENSORS_UNREADABLE: Final = "センサーを読めません"
 REASON_NO_CAMERA: Final = "USB カメラが見つかりません"
 
@@ -135,6 +138,8 @@ def _check_sensors(ctx: CheckContext) -> CheckResult:
     if isinstance(config, CheckResult):
         return config
     if not sensors_available():
+        if on_raspberry_pi():  # 実機で部品がないと前に進めない
+            return CheckResult(CheckStatus.FAILED, REASON_NO_SENSOR_PARTS)
         return CheckResult(CheckStatus.SKIPPED, REASON_NO_LIBRARY)
     clock = make_clock()
     sensors = make_sensors(clock)

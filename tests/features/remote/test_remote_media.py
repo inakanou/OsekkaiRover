@@ -287,10 +287,17 @@ def test_元の例外は受けて型の名前だけをまれにログに出す(c
         clock.advance(1.0)
         hub._step()
     messages = [r.getMessage() for r in caplog.records]
-    assert len(messages) == 1  # 続けて失敗しても 1 回だけ
-    assert "OSError" in messages[0]
+    assert messages == ["USB のカメラを読めませんでした: OSError"]  # 続けて失敗しても 1 回だけ
     assert "hidden" not in caplog.text
     assert hub.still() is None
+
+
+def test_首のカメラの失敗も日本語の決まった文で出す(caplog: pytest.LogCaptureFixture) -> None:
+    hub, _ = _hub(_Broken(), Camera.NECK)
+    caplog.set_level(logging.DEBUG, logger="osekkai.features.remote.media")
+    with hub.viewer():
+        hub._step()
+    assert [r.getMessage() for r in caplog.records] == ["首のカメラを読めませんでした: OSError"]
 
 
 def test_片方のカメラが使えなくてももう一方は配れる() -> None:
