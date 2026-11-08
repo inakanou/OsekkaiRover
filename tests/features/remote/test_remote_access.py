@@ -88,3 +88,54 @@ def test_is_private_を使わない() -> None:
     tree = ast.parse(Path(access.__file__).read_text(encoding="utf-8"))
     names = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
     assert "is_private" not in names
+
+
+# --- 要求の Host（DNS の付け替えを防ぐ） ---
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "192.168.1.20",
+        "192.168.1.20:8080",
+        "127.0.0.1:8080",
+        "[::1]",
+        "[fe80::1]:8080",
+        "localhost",
+        "localhost:8080",
+        "LOCALHOST",
+        "raspberrypi5",
+        "raspberrypi5:8080",
+        "rover.local",
+        "rover.local:8080",
+        "Rover.Local",
+    ],
+)
+def test_家のアドレスか家の名前のHostは受ける(host: str) -> None:
+    assert access.is_home_host(host) is True
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        None,
+        "",
+        "203.0.113.5",
+        "203.0.113.5:8080",
+        "[2001:db8::1]:8080",
+        "evil.example",
+        "evil.example:8080",
+        "rover.local.evil.example",
+        ".local",
+        "3232235777",
+        "fe80::1",
+        "[fe80::1",
+        "raspberrypi5:",
+        "raspberrypi5:80a",
+        "rover_pi",
+        "-rover",
+        "rover.local:8080:1",
+    ],
+)
+def test_ほかのHostは受けない(host: str | None) -> None:
+    assert access.is_home_host(host) is False

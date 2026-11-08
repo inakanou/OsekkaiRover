@@ -759,6 +759,7 @@ class RemoteService:
 
 - 要求ごとの確かめの順（`before_request`）:
   1. `is_home_address(REMOTE_ADDR)` でなければ、本文なしの 403（1.2）。
+  1.5. 要求の宛先の名前（Host）が、家の範囲の IP・`localhost`・点のない名前・`.local` で終わる名前のどれでもなければ、本文なしの 403（DNS リバインディングで、家族が開いたほかのサイトから送られるのを防ぐ。`access.is_home_host`）。
   2. `/`・`/login`・`/app.*` 以外は、印（クッキー `remote_session`）を `Sessions.check` で確かめ、だめなら 401（2.1）。
   3. 状態を変える要求（POST）は、`Origin` が要求の `Host` と同じこと（`Origin` がなければ `Sec-Fetch-Site: same-origin`）を確かめ、だめなら 403。`/api/*` の POST は `Content-Type: application/json` だけを受ける。
 - クッキー: `HttpOnly`、`SameSite=Strict`、`Path=/`。期限なし（ブラウザを閉じるまで）。サーバーの表で 12 時間に切る。`Secure` は付けない（HTTP のため）。
@@ -985,6 +986,7 @@ class RemoteFeature:
 
 ## Security Considerations
 - 家のネットワークの判定は、接続の相手のアドレスだけで行い、決まった範囲の表を使う。
+- 要求の宛先の名前（Host）も、家の中の名前だけを受け付ける（DNS リバインディングへの備え）。
 - ログインの状態はサーバーの表で持ち、印は 32 バイトの乱数。クッキーは `HttpOnly`・`SameSite=Strict`。
 - 状態を変える要求は POST だけで、`Origin` か `Sec-Fetch-Site` と JSON の Content-Type を確かめる（同じ機械のほかのポートからの書き換えを防ぐ）。
 - 総当たり: 5 回で 5 分止まる。4 けたの pin の 1 万通りを試すには、約 7 日かかる。手順書で、6 けた以上を勧める。

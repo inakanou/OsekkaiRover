@@ -162,7 +162,7 @@
   - _Boundary: page_
   - _Requirements: 2.7, 4.1, 4.3, 6.4, 8.2, 8.3, 9.2_
 
-- [ ] 6.2 Web の経路・クッキー・確かめの順を作る
+- [x] 6.2 Web の経路・クッキー・確かめの順を作る
   - 要求ごとに、家のアドレスか → ログインの印 → 状態を変える要求の出どころと JSON の確かめ、の順で確かめる。家の外は本文なしで断る
   - ログイン・おわる・状態・走行・首・動き・話させる・写真・写真の取り出しの経路を、設計の表のとおりに作る。形の違う要求は断り、走る命令は止めるとして扱う
   - クッキーは HttpOnly・SameSite=Strict。すべての応答に、保存しない・枠に入れない・CSP の見出しを付ける
@@ -233,3 +233,4 @@
 - 5.2: 首の向きは右と上が +（presence/tracking.py に合わせた。実機で確かめる）。危険の LCD は話す・ダンスの表示より先に出す。_accept は Lease | None を返す
 - 5.3: feature の配線: NeckSource(may_borrow=service.neck_allowed)、LeaseKeeper(on_lost=service.on_lost)、0.5 秒ごとに service.tick()。写真は要求のスレッドで話し終えるまで待つ（上限は強制していない。web で待ちの上限を決める）。首を見る端末が来てから VIEW を借りるまで、首のカメラは一瞬「使えない」になる（画面はすぐ戻る前提で作る）
 - 6.1: /api/drive の本文は {move, seq, page}（page.DRIVE_KEYS）。6.2 は page ごとに見た最大の seq より小さい命令を捨てる（小さく上限のある表で。page と seq はログに出さない）。状態の JSON は page.STATUS_KEYS、操作の応えの文は message に入れる。写真の応えは {reply, message, photos}。/app.css はログインの前でも返す
+- 6.2: 宛先の名前（Host）は access.is_home_host で確かめる（家の IP・localhost・点のない名前・.local）。DNS リバインディングへの備えで、設計に書き足した。create_app は OperatorService の Protocol を受ける。hubs は app.extensions["remote_hubs"] にある（6.3 の配信で使う）
