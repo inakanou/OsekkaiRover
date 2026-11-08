@@ -1,4 +1,5 @@
-"""Web の経路・クッキー・確かめの順（要件 1.1、1.2、2.1〜2.4、2.6、2.7、9.7）。
+"""Web の経路・クッキー・確かめの順・映像の配信・サーバー（要件 1.1、1.2、1.5、2.1〜2.4、
+2.6〜2.8、8.1、8.2、8.6、9.7）。
 
 - Flask はこのモジュールだけが読む。このモジュールは本体（feature）の関数の中で読まれる
 - 要求ごとに、家のアドレスか → ログインの印 → 状態を変える要求の出どころと JSON、の順で確かめる
@@ -17,19 +18,28 @@
 - まちがった pin と止めている間は、ログインの画面に知らせを出して 200 で返す（画面を出し直す）
 - すべての応答に、保存しない・枠に入れない・型を推し量らない・CSP の見出しを付ける
 - 印・pin・入力・page・seq・写真の名前・端末のアドレスをログに出さない。要求のログもここでは出さない
+- 映像（`/stream/<cam>`）は席を取り、新しい 1 枚を部分ごとの長さ付きで送る。満員は 503（8.2）。
+  毎回、止める合図・時間帯（`may_stream`）・ログインを確かめ、だめなら終える（8.6）。
+  席は端末が切れたとき（生成を閉じる）か、送り始める前に応答を閉じたときに返す
+- `WebServer` は補助のスレッド `remote-web` で待ち受ける。ポートを使えなければ `OSError` を返す
+  （1.5）。止めるときは配信に止める合図を出してから待ち受けを止める。要求のログは出さない（2.8）
 """
 
 from __future__ import annotations
 
 import logging
 import re
+import socket
+import sys
 import threading
 from collections import OrderedDict
-from collections.abc import Mapping
-from typing import Final, Protocol
+from collections.abc import Iterator, Mapping
+from contextlib import ExitStack
+from typing import ClassVar, Final, Protocol
 
 from flask import Flask, Response, g, jsonify, request, send_file
 from werkzeug.exceptions import HTTPException
+from werkzeug.serving import BaseWSGIServer, ThreadedWSGIServer, WSGIRequestHandler
 from werkzeug.wrappers import Response as BaseResponse
 
 from . import page, texts
@@ -45,6 +55,10 @@ __all__ = [
     "CSP",
     "MAX_SAY_INPUT",
     "OperatorService",
+    "QuietHandler",
+    "SOCKET_TIMEOUT_S",
+    "STREAM_MIMETYPE",
+    "WebServer",
     "create_app",
 ]
 
@@ -60,6 +74,11 @@ MAX_BODY_BYTES: Final = 64 * 1024  # 要求の本文の上限（2000 文字を \
 MAX_SEQ: Final = 2**53  # JavaScript の整数で数えられる上限
 MAX_PAGES_PER_TOKEN: Final = 4  # 印ごとに seq を覚える画面の数（古い画面から忘れる）
 MAX_TOKENS: Final = 64  # seq を覚える印の数（古く使った印から忘れる）
+STREAM_MIMETYPE: Final = "multipart/x-mixed-replace; boundary=frame"
+FRAME_WAIT_S: Final = 0.5  # 新しい 1 枚を待つ上限。この間ごとに続けてよいかを確かめる
+SOCKET_TIMEOUT_S: Final = 10.0  # 送る・受ける待ちの上限。読まない端末の配信を終える
+JOIN_S: Final = 3.0  # 待ち受けのスレッドの終わりを待つ上限
+_CAMERAS: Final[Mapping[str, Camera]] = {camera.value: camera for camera in Camera}
 _PAGE_ID: Final = re.compile(r"[0-9a-f]{1,32}")
 
 # 印なしで受ける経路（ログインの画面と、その部品）
@@ -109,6 +128,8 @@ class OperatorService(Protocol):
     def take_photo(self, token: str) -> PhotoResult: ...
 
     def status(self, token: str) -> Status: ...
+
+    def may_stream(self, token: str) -> bool: ...
 
 
 class _SeqTable:
@@ -183,11 +204,17 @@ def create_app(
     sessions: Sessions,
     photos: PhotoStore,
     hubs: Mapping[Camera, FrameHub] | None = None,
+    stop_event: threading.Event | None = None,
 ) -> Flask:
-    """経路を持つ Flask の app を作る。hubs は映像の配信（/stream）で使う。"""
+    """経路を持つ Flask の app を作る。
+
+    hubs は映像の配信（/stream）で使う。stop_event が立つと配信を終える
+    （WebServer と同じものを渡す）。
+    """
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = MAX_BODY_BYTES
     app.extensions["remote_hubs"] = dict(hubs) if hubs is not None else {}
+    stopping = stop_event if stop_event is not None else threading.Event()
     seqs = _SeqTable()
     drive_lock = threading.Lock()  # 捨てるかの判定と渡す順を 1 つずつにする
 
@@ -367,4 +394,132 @@ def create_app(
             return _empty(404)
         return send_file(path, mimetype="image/jpeg", max_age=0)
 
+    @app.get("/stream/<cam>")
+    def stream(cam: str) -> Response:
+        camera = _CAMERAS.get(cam)
+        hub = app.extensions["remote_hubs"].get(camera) if camera is not None else None
+        if hub is None:
+            return _empty(404)
+        token: str = g.token
+        seat = ExitStack()  # 席は応答の生きている間だけ持つ
+        viewer = seat.enter_context(hub.viewer())
+        if viewer is None:
+            seat.close()
+            return _empty(503)  # 満員（8.2）
+
+        def keep_going() -> bool:
+            return not stopping.is_set() and service.may_stream(token) and sessions.check(token)
+
+        def parts() -> Iterator[bytes]:
+            try:
+                yield b""  # 1 枚を待たずに見出しを送る（werkzeug は最初の 1 つで見出しを書く）
+                while keep_going():
+                    frame = viewer.next_frame(timeout=FRAME_WAIT_S)
+                    if frame is not None:
+                        yield _part(frame)
+            except Exception as error:  # 配信の途中の誤りは型の名前だけ残して終える
+                logger.warning("映像の配信に失敗しました: %s", type(error).__name__)
+            finally:
+                seat.close()
+
+        response = Response(parts(), content_type=STREAM_MIMETYPE)
+        response.call_on_close(seat.close)  # 送り始める前に閉じたときも席を返す
+        return response
+
     return app
+
+
+def _part(jpeg: bytes) -> bytes:
+    """MJPEG の 1 つの部分。Safari のために長さを付ける。"""
+    head = f"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: {len(jpeg)}\r\n\r\n"
+    return head.encode("ascii") + jpeg + b"\r\n"
+
+
+class QuietHandler(WSGIRequestHandler):
+    """要求のログ（端末のアドレスと経路）を出さない要求ハンドラ（2.8）。"""
+
+    protocol_version = "HTTP/1.1"  # werkzeug が補助のスレッドのときに付けるのと同じ
+    # 読まない端末（電波の外・隠れた画面）で送る待ちが詰まっても、この秒数で切る。
+    # werkzeug は切れたものとして扱い、配信の生成を閉じて席を返す
+    timeout: ClassVar[float | None] = SOCKET_TIMEOUT_S
+
+    def log_request(self, code: int | str = "-", size: int | str = "-") -> None:
+        return None
+
+    def log_error(self, format: str, *args: object) -> None:
+        return None
+
+    def log(self, type: str, message: str, *args: object) -> None:
+        return None
+
+
+class _QuietServer(ThreadedWSGIServer):
+    """要求の処理の思わぬ誤りで、端末のアドレスと中身を標準エラーに書かない（2.8）。"""
+
+    def handle_error(self, request: object, client_address: object) -> None:
+        error = sys.exc_info()[1]
+        logger.warning("Web の接続の処理に失敗しました: %s", type(error).__name__)
+
+
+class WebServer:
+    """Web のサーバーを補助のスレッドで動かし、止める。"""
+
+    def __init__(
+        self,
+        app: Flask,
+        *,
+        host: str = "0.0.0.0",
+        port: int,
+        stop_event: threading.Event,
+    ) -> None:
+        self._app = app
+        self._host = host
+        self._port = port
+        self._stop_event = stop_event
+        self._server: BaseWSGIServer | None = None
+        self._thread: threading.Thread | None = None
+
+    @property
+    def port(self) -> int:
+        """待ち受けているポート（0 を渡したときは決まったポート）。"""
+        return self._server.port if self._server is not None else self._port
+
+    def start(self) -> None:
+        """待ち受けを始める。ポートを使えなければ OSError を返す（1.5）。"""
+        if self._server is not None:
+            return
+        # werkzeug は自分で開けないと標準エラーに書いて SystemExit にするので、先に自分で開ける
+        family = socket.AF_INET6 if ":" in self._host else socket.AF_INET
+        with socket.create_server((self._host, self._port), family=family) as listening:
+            # make_server(threaded=True) と同じ作り方で、誤りを書かない版を使う
+            server = _QuietServer(
+                self._host,
+                self._port,
+                self._app,
+                QuietHandler,
+                fd=listening.fileno(),  # werkzeug は複製して使う
+            )
+        self._server = server
+        self._thread = threading.Thread(
+            target=self._serve, args=(server,), name="remote-web", daemon=True
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        """配信に止める合図を出してから、待ち受けを止める。何度呼んでもよい。"""
+        self._stop_event.set()
+        server, thread = self._server, self._thread
+        self._server = self._thread = None
+        if server is None:
+            return
+        server.shutdown()
+        if thread is not None:
+            thread.join(JOIN_S)
+        server.server_close()
+
+    @staticmethod
+    def _serve(server: BaseWSGIServer) -> None:
+        try:
+            server.serve_forever()
+        except Exception as error:  # 待ち受けの誤りは型の名前だけ残す
+            logger.warning("Web のサーバーが止まりました: %s", type(error).__name__)

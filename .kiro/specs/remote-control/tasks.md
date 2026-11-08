@@ -171,7 +171,7 @@
   - _Depends: 2.1, 2.2, 5.3, 6.1_
   - _Requirements: 1.1, 1.2, 2.1, 2.2, 2.3, 2.4, 2.6, 2.7, 9.7_
 
-- [ ] 6.3 映像の配信と、Web のサーバーの起動・停止を作る
+- [x] 6.3 映像の配信と、Web のサーバーの起動・停止を作る
   - 配信は席を取り、新しい 1 枚を部分ごとの長さ付きで送り、毎回続けてよいかを確かめる。満員は 503。切れたら席を返す
   - サーバーは補助のスレッドで動かし、止めるときは配信に合図を出してから止める。ポートを使えなければ起動しない。要求のログ（アドレスと経路）を出さない
   - test client と実際のポートで、満員の 503・切れたら席が返る・止めると配信も終わる・要求のログにアドレスが出ない・使えないポートの扱いのテストが通る
@@ -234,3 +234,5 @@
 - 5.3: feature の配線: NeckSource(may_borrow=service.neck_allowed)、LeaseKeeper(on_lost=service.on_lost)、0.5 秒ごとに service.tick()。写真は要求のスレッドで話し終えるまで待つ（上限は強制していない。web で待ちの上限を決める）。首を見る端末が来てから VIEW を借りるまで、首のカメラは一瞬「使えない」になる（画面はすぐ戻る前提で作る）
 - 6.1: /api/drive の本文は {move, seq, page}（page.DRIVE_KEYS）。6.2 は page ごとに見た最大の seq より小さい命令を捨てる（小さく上限のある表で。page と seq はログに出さない）。状態の JSON は page.STATUS_KEYS、操作の応えの文は message に入れる。写真の応えは {reply, message, photos}。/app.css はログインの前でも返す
 - 6.2: 宛先の名前（Host）は access.is_home_host で確かめる（家の IP・localhost・点のない名前・.local）。DNS リバインディングへの備えで、設計に書き足した。create_app は OperatorService の Protocol を受ける。hubs は app.extensions["remote_hubs"] にある（6.3 の配信で使う）
+- 6.3: feature は同じ stop_event を create_app と WebServer に渡す。WebServer は 0.0.0.0（IPv4 だけ）で待つ。送る待ちの上限は 10 秒（読まない端末の配信を終えて席を返す）。iPhone の Safari の映像は実機で確かめる
+- 6.3: tests の conversation の登録のテストが osekkai のロガーに閉じた出力先の StreamHandler を残す（core の logging_setup）。webserver のテストは raiseExceptions を monkeypatch で切って避けた。後で conftest か logging_setup で直す

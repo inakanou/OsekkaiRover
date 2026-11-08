@@ -7,7 +7,9 @@ pin の例は 4826。
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import threading
+import time
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Final, Literal
 
@@ -15,16 +17,23 @@ import pytest
 from flask import Flask
 from flask.testing import FlaskClient
 from pydantic import SecretStr
-from remote_fakes import FakeClock
+from remote_fakes import FakeClock, FakeFrameSource
 from werkzeug.test import TestResponse
 
 from osekkai.features.remote import page, texts
 from osekkai.features.remote.drive_rules import Move
 from osekkai.features.remote.login import LoginGuard, Sessions
-from osekkai.features.remote.media import Camera
+from osekkai.features.remote.media import Camera, FrameHub
 from osekkai.features.remote.photos import PhotoStore
 from osekkai.features.remote.service import PhotoResult, Reply, Status, Way
-from osekkai.features.remote.web import COOKIE, CSP, MAX_BODY_BYTES, MAX_SAY_INPUT, create_app
+from osekkai.features.remote.web import (
+    COOKIE,
+    CSP,
+    MAX_BODY_BYTES,
+    MAX_SAY_INPUT,
+    STREAM_MIMETYPE,
+    create_app,
+)
 
 PIN: Final = "4826"
 WRONG_PIN: Final = "1111"
@@ -32,6 +41,7 @@ HOME: Final = "192.168.1.20"
 OUTSIDE: Final = "203.0.113.5"
 SAME_ORIGIN: Final = {"Origin": "http://localhost"}
 JPEG: Final = b"\xff\xd8\xff\xe0jpeg\xff\xd9"
+JPEG2: Final = b"\xff\xd8\xff\xe0two\xff\xd9"
 PHOTO_NAME: Final = "20261108-102030-00-neck.jpg"
 
 
@@ -43,6 +53,7 @@ class FakeService:
         self.reply = Reply.OK
         self.message: str | None = None
         self.photo = PhotoResult((), Reply.OK)
+        self.streaming = True
 
     def drive(self, token: str, move: Move) -> Reply:
         self.calls.append(("drive", move))
@@ -79,6 +90,9 @@ class FakeService:
             message=self.message, operator=operator, fast=False, cameras=cameras, dancing=False
         )
 
+    def may_stream(self, token: str) -> bool:
+        return self.streaming
+
 
 class Rig:
     """偽のサービスと本物のログインの部品で app を作り、test client を持つ。"""
@@ -90,8 +104,16 @@ class Rig:
         self.sessions = Sessions(self.clock)
         self.photo_dir = tmp_path / "photos"
         self.photos = PhotoStore(self.photo_dir, self.clock)
+        self.source = FakeFrameSource([JPEG, JPEG2, JPEG])
+        self.hub = FrameHub(Camera.NECK, self.source, self.clock, run_in_thread=False)
+        self.stop_event = threading.Event()
         self.app: Flask = create_app(
-            service=self.service, guard=self.guard, sessions=self.sessions, photos=self.photos
+            service=self.service,
+            guard=self.guard,
+            sessions=self.sessions,
+            photos=self.photos,
+            hubs={Camera.NECK: self.hub},
+            stop_event=self.stop_event,
         )
         self.client: FlaskClient = self.app.test_client()
         self.client.environ_base["REMOTE_ADDR"] = HOME
@@ -667,3 +689,149 @@ def test_大きすぎる走る命令も止めるとして扱い413(logged_in: Ri
     assert response.data == b""
     assert logged_in.service.calls == [("drive", Move.STOP)]
     _assert_headers(response)
+
+
+# --- 映像の配信（8.1、8.2、8.6） ---
+
+
+def _part(jpeg: bytes) -> bytes:
+    head = f"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: {len(jpeg)}\r\n\r\n"
+    return head.encode("ascii") + jpeg + b"\r\n"
+
+
+def _open_stream(rig: Rig, cam: str = "neck") -> TestResponse:
+    return rig.client.get(f"/stream/{cam}", buffered=False)
+
+
+def _chunks(response: TestResponse) -> Iterator[bytes]:
+    """空でない部分だけ（最初の空の部分は見出しを先に送るためのもの）。"""
+    return (chunk for chunk in response.iter_encoded() if chunk)
+
+
+def _push(rig: Rig) -> None:
+    """新しい 1 枚を読ませる。"""
+    rig.clock.advance(0.1)
+    rig.hub._step()
+
+
+def test_配信は新しい1枚を長さ付きの部分で送る(logged_in: Rig) -> None:
+    response = _open_stream(logged_in)
+    assert response.status_code == 200
+    assert response.headers["Content-Type"] == STREAM_MIMETYPE
+    _assert_headers(response)
+    chunks = _chunks(response)
+    _push(logged_in)
+    assert next(chunks) == _part(JPEG)
+    _push(logged_in)
+    assert next(chunks) == _part(JPEG2)
+    response.close()
+
+
+def test_配信の間は席を持ち閉じると返す(logged_in: Rig) -> None:
+    response = _open_stream(logged_in)
+    assert logged_in.hub.viewers() == 1
+    chunks = _chunks(response)
+    _push(logged_in)
+    next(chunks)
+    response.close()
+    assert logged_in.hub.viewers() == 0
+
+
+def test_最初の1枚の前に閉じても席を返す(logged_in: Rig) -> None:
+    response = _open_stream(logged_in)
+    assert logged_in.hub.viewers() == 1
+    response.close()
+    assert logged_in.hub.viewers() == 0
+
+
+def test_送り始める前に応答を閉じても席を返す(logged_in: Rig) -> None:
+    cookie = logged_in.client.get_cookie(COOKIE)
+    assert cookie is not None
+    with logged_in.app.test_request_context(
+        "/stream/neck",
+        headers={"Cookie": f"{COOKIE}={cookie.value}"},
+        environ_base={"REMOTE_ADDR": HOME},
+    ):
+        response = logged_in.app.full_dispatch_request()
+    assert response.status_code == 200
+    assert logged_in.hub.viewers() == 1
+    response.close()  # 生成を 1 度も進めずに閉じる
+    assert logged_in.hub.viewers() == 0
+
+
+def test_4つ目の端末は503で席は増えない(logged_in: Rig) -> None:
+    opened = [_open_stream(logged_in) for _ in range(FrameHub.MAX_VIEWERS)]
+    assert all(r.status_code == 200 for r in opened)
+    full = _open_stream(logged_in)
+    assert full.status_code == 503
+    assert full.data == b""
+    _assert_headers(full)
+    assert logged_in.hub.viewers() == FrameHub.MAX_VIEWERS
+    for r in opened:
+        r.close()
+    assert logged_in.hub.viewers() == 0
+
+
+@pytest.mark.parametrize("cam", ["usb", "front", ""])
+def test_ないカメラの配信は404(logged_in: Rig, cam: str) -> None:
+    response = logged_in.client.get(f"/stream/{cam}")
+    assert response.status_code == 404
+
+
+def test_ログインしていない配信は401で席を取らない(rig: Rig) -> None:
+    response = _open_stream(rig)
+    assert response.status_code == 401
+    assert rig.hub.viewers() == 0
+
+
+def test_時間帯の外になると配信を終えて席を返す(logged_in: Rig) -> None:
+    response = _open_stream(logged_in)
+    chunks = _chunks(response)
+    _push(logged_in)
+    assert next(chunks) == _part(JPEG)
+    logged_in.service.streaming = False
+    _push(logged_in)
+    with pytest.raises(StopIteration):
+        next(chunks)
+    assert logged_in.hub.viewers() == 0
+    response.close()
+
+
+def test_ログアウトすると配信を終える(logged_in: Rig) -> None:
+    response = _open_stream(logged_in)
+    chunks = _chunks(response)
+    _push(logged_in)
+    assert next(chunks) == _part(JPEG)
+    assert logged_in.post("/logout", {}).status_code == 200
+    _push(logged_in)
+    with pytest.raises(StopIteration):
+        next(chunks)
+    assert logged_in.hub.viewers() == 0
+    response.close()
+
+
+def test_止める合図で配信を終える(logged_in: Rig) -> None:
+    response = _open_stream(logged_in)
+    chunks = _chunks(response)
+    _push(logged_in)
+    assert next(chunks) == _part(JPEG)
+    logged_in.stop_event.set()
+    _push(logged_in)
+    with pytest.raises(StopIteration):
+        next(chunks)
+    assert logged_in.hub.viewers() == 0
+    response.close()
+
+
+def test_新しい1枚がなければ待って続けてよいかを確かめ直す(logged_in: Rig) -> None:
+    response = _open_stream(logged_in)
+    chunks = _chunks(response)
+    timer = threading.Timer(0.2, logged_in.stop_event.set)  # 1 枚もないまま待つ間に止める合図
+    timer.start()
+    started = time.monotonic()
+    with pytest.raises(StopIteration):
+        next(chunks)
+    timer.join()
+    assert time.monotonic() - started < 2.0  # 0.5 秒ごとに確かめ直す
+    assert logged_in.hub.viewers() == 0
+    response.close()
