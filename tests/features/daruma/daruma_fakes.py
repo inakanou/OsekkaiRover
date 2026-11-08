@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -85,8 +85,19 @@ class FakeGameIO:
         *,
         camera: bool = True,
         press_during_intro: bool = False,
+        after_say: Callable[[str], None] | None = None,
+        say_errors: Mapping[str, Exception] | None = None,
+        errors: Mapping[str, Exception] | None = None,
     ) -> None:
+        """`after_say` は話し終えた言葉を受ける（中断の旗を立てるのに使う）。
+
+        `say_errors` はその言葉を話すときに投げる例外、`errors` は口の名前ごとに
+        最初の呼び出しで投げる例外（呼び出しは覚えてから投げる）。
+        """
         self.calls: list[Call] = []
+        self._after_say = after_say
+        self._say_errors = dict(say_errors or {})
+        self._errors = dict(errors or {})
         self._rounds = list(rounds)
         self._camera = camera
         self._press_during_intro = press_during_intro
@@ -106,15 +117,21 @@ class FakeGameIO:
             if self._script.press_while_chanting:
                 self._presses += 1
         self.calls.append(Call("say", (text,)))
+        if text in self._say_errors:
+            raise self._say_errors.pop(text)
+        if self._after_say is not None:
+            self._after_say(text)
 
     def look(self, pan: float, tilt: float) -> None:
         self.calls.append(Call("look", (pan, tilt)))
+        self._maybe_fail("look")
 
     def home(self) -> None:
         self.calls.append(Call("home"))
 
     def nod(self) -> None:
         self.calls.append(Call("nod"))
+        self._maybe_fail("nod")
 
     def celebrate(self, text: str) -> None:
         self.calls.append(Call("celebrate", (text,)))
@@ -139,6 +156,7 @@ class FakeGameIO:
 
     def open_camera(self) -> bool:
         self.calls.append(Call("open_camera", (), self._camera))
+        self._maybe_fail("open_camera")
         return self._camera
 
     def motion(self, seconds: float) -> float:
@@ -157,6 +175,10 @@ class FakeGameIO:
                 self._presses += 1
         elif self._script.press_while_resting:
             self._presses += 1
+
+    def _maybe_fail(self, name: str) -> None:
+        if name in self._errors:
+            raise self._errors.pop(name)
 
     # 確かめ
 

@@ -1,16 +1,20 @@
-"""だるまさんの 1 回の遊びの流れ（始めから勝ち・動いたまで）。
+"""だるまさんの 1 回の遊びの流れ（始めから勝ち・動いた・終わり方・中断まで）。
 
-要件 1.2〜1.5、2.1〜2.9、3.1、3.3、9.1。偽の遊びの口・固定の乱数・偽の日課の状況で確かめる。
+要件 1.2〜1.5、2.1〜2.9、3.1、3.3、4.1〜4.7、5.3、6.3、7.5、9.1。
+偽の遊びの口・固定の乱数・偽の日課の状況で確かめる。
 """
 
 import logging
 import random
+from collections.abc import Callable
 from datetime import timedelta
 
+import pytest
 from daruma_fakes import NOW, Call, FakeGameIO, RoundScript, make_rules, make_status
 
+from osekkai.core.types import DeviceUnavailable, LeaseRevoked, SpeechFailed
 from osekkai.features.daruma import texts
-from osekkai.features.daruma.flow import GameFlow, GameResult
+from osekkai.features.daruma.flow import END_SAYS, CameraLost, GameFlow, GameResult
 from osekkai.features.daruma.rules import EndReason, Rules, pick_chant, pick_pause
 from osekkai.features.routine.api import RoutineStatus
 
@@ -27,14 +31,16 @@ def _flow(
     rules: Rules | None = None,
     status: RoutineStatus | None = None,
     seed: int = SEED,
+    status_fn: Callable[[], RoutineStatus | None] | None = None,
+    interrupted: Callable[[], EndReason | None] = lambda: None,
 ) -> GameFlow:
     return GameFlow(
         rules=rules or make_rules(),
         call_name=NAME,
         rng=random.Random(seed),
-        status=lambda: status,
+        status=status_fn or (lambda: status),
         now=lambda: NOW,
-        interrupted=lambda: None,
+        interrupted=interrupted,
         log=logging.getLogger("test.daruma.flow"),
     )
 
@@ -45,8 +51,13 @@ def _play(
     rules: Rules | None = None,
     status: RoutineStatus | None = None,
     seed: int = SEED,
+    status_fn: Callable[[], RoutineStatus | None] | None = None,
+    interrupted: Callable[[], EndReason | None] = lambda: None,
 ) -> GameResult:
-    return _flow(rules=rules, status=status, seed=seed).play(io)
+    flow = _flow(
+        rules=rules, status=status, seed=seed, status_fn=status_fn, interrupted=interrupted
+    )
+    return flow.play(io)
 
 
 def _after(calls: list[Call], name: str, arg: object) -> list[Call]:
@@ -139,7 +150,7 @@ def test_round_shows_chant_looks_away_then_chants_with_fixed_rng() -> None:
     chant = pick_chant(rng)
     pause = pick_pause(rng)
     after_go = _after(io.calls, "say", SAY_GO)[1:]  # 押下を消した後
-    assert after_go == [
+    assert after_go[:10] == [
         Call("show", (chant.lcd, texts.FACE_CHANT.text())),
         Call("look", texts.POSE_AWAY),
         Call("say", (chant.speech,)),
@@ -177,9 +188,10 @@ def test_watch_uses_configured_seconds() -> None:
 
 def _assert_win(io: FakeGameIO, result: GameResult) -> None:
     assert result == GameResult(EndReason.WIN, 0)
-    assert io.calls[-2:] == [
+    assert io.calls[-3:] == [
         Call("show", (texts.LCD_WIN, texts.FACE_WIN.text())),
         Call("celebrate", (SAY_WIN,)),
+        Call("home"),  # 話し終えたら首を正面に（4.7）
     ]
     assert texts.SAY_KORONDA not in io.spoken
     assert "motion" not in io.names
@@ -231,7 +243,7 @@ def test_moved_shows_nods_says_rests_then_clears_presses() -> None:
     _play(io, rules=make_rules(max_rounds=1))
 
     after_watch = _after(io.calls, "say", texts.SAY_KORONDA)
-    assert after_watch == [
+    assert after_watch[:7] == [
         Call("motion", (2.5,)),
         Call("pressed", (), False),
         Call("show", (texts.LCD_MOVED, texts.FACE_MOVED.text())),
@@ -286,3 +298,249 @@ def test_rounds_follow_rules_advance() -> None:
 
     assert result == GameResult(EndReason.MAX_ROUNDS, 3)
     assert io.rounds_started == 3
+
+
+# 終わり方（4.1〜4.3、4.6、4.7）
+
+
+class _Flag:
+    """中断の確かめの偽物。`reason` を立てると、それを返す。"""
+
+    def __init__(self) -> None:
+        self.reason: EndReason | None = None
+
+    def __call__(self) -> EndReason | None:
+        return self.reason
+
+    def raise_on(self, text: str, reason: EndReason) -> Callable[[str], None]:
+        """`text` を話し終えたときに旗を立てる口を返す。"""
+
+        def hook(spoken: str) -> None:
+            if spoken == text:
+                self.reason = reason
+
+        return hook
+
+
+def _chant_speeches() -> set[str]:
+    return {chant.speech for chant in texts.CHANTS}
+
+
+def test_end_says_covers_spoken_endings_only() -> None:
+    assert END_SAYS == {
+        EndReason.MAX_ROUNDS: texts.SAY_MAX_ROUNDS,
+        EndReason.NOBODY: texts.SAY_NOBODY,
+        EndReason.NEXT_TASK: texts.SAY_NEXT_TASK,
+        EndReason.NO_CAMERA: texts.SAY_NO_CAMERA,
+        EndReason.CAMERA_LOST: texts.SAY_CAMERA_LOST,
+    }
+
+
+def test_ends_after_max_rounds_with_phrase_then_home() -> None:
+    io = FakeGameIO([MOVED] * 15)
+
+    result = _play(io)
+
+    assert result == GameResult(EndReason.MAX_ROUNDS, 15)
+    assert io.rounds_started == 15
+    assert io.calls[-2:] == [Call("say", (texts.SAY_MAX_ROUNDS,)), Call("home")]
+
+
+def test_ends_after_five_still_rounds_with_nobody_phrase() -> None:
+    io = FakeGameIO([MOVED, STILL, STILL, STILL, STILL, STILL])
+
+    result = _play(io)
+
+    assert result == GameResult(EndReason.NOBODY, 6)
+    assert io.calls[-2:] == [Call("say", (texts.SAY_NOBODY,)), Call("home")]
+
+
+def test_next_task_near_before_round_2_ends_with_round_phrase() -> None:
+    io = FakeGameIO([MOVED, MOVED])
+    near = make_status(next_task_in=timedelta(minutes=5))
+
+    # 始める前と 1 回目の前は遠い。1 回目の後で近くなる
+    def status() -> RoutineStatus | None:
+        return near if io.rounds_started >= 1 else None
+
+    result = _play(io, status_fn=status)
+
+    assert result == GameResult(EndReason.NEXT_TASK, 1)
+    assert io.rounds_started == 1
+    assert texts.SAY_NEXT_TASK_BEFORE not in io.spoken
+    assert io.calls[-2:] == [Call("say", (texts.SAY_NEXT_TASK,)), Call("home")]
+
+
+def test_start_endings_return_head_after_phrase() -> None:
+    io = FakeGameIO([STILL], camera=False)
+
+    _play(io)
+
+    assert io.calls[-2:] == [Call("say", (texts.SAY_NO_CAMERA,)), Call("home")]
+
+
+def test_camera_error_while_watching_says_phrase_then_ends() -> None:
+    io = FakeGameIO([MOVED, RoundScript(motion=CameraLost())])
+
+    result = _play(io)
+
+    assert result == GameResult(EndReason.CAMERA_LOST, 1)
+    assert io.calls[-3:] == [
+        Call("motion", (2.5,)),
+        Call("say", (texts.SAY_CAMERA_LOST,)),
+        Call("home"),
+    ]
+
+
+def test_camera_error_when_opening_says_phrase_then_ends() -> None:
+    io = FakeGameIO([STILL], errors={"open_camera": CameraLost()})
+
+    result = _play(io)
+
+    assert result == GameResult(EndReason.CAMERA_LOST, 0)
+    assert io.spoken == [texts.SAY_CAMERA_LOST]
+    assert io.names[-1] == "home"
+
+
+# 中断・おやすみ・止める旗（4.4、4.5）
+
+
+@pytest.mark.parametrize("reason", [EndReason.PREEMPTED, EndReason.QUIET, EndReason.STOPPED])
+def test_interrupt_while_chanting_finishes_words_then_says_nothing(reason: EndReason) -> None:
+    flag = _Flag()
+    chants: list[str] = []
+
+    # 2 回目の唱え言葉を話し終えたときに旗を立てる
+    def after_say(text: str) -> None:
+        if text in _chant_speeches():
+            chants.append(text)
+            if len(chants) == 2:
+                flag.reason = reason
+
+    io = FakeGameIO([MOVED, MOVED], after_say=after_say)
+
+    result = _play(io, interrupted=flag)
+
+    assert result == GameResult(reason, 1)
+    # 唱え言葉は言い終え、その後は何の手順もしない（首も動かさない）
+    assert io.calls[-1].name == "say"
+    assert io.calls[-1].args[0] in _chant_speeches()
+    assert "home" not in io.names
+
+
+@pytest.mark.parametrize("reason", [EndReason.PREEMPTED, EndReason.QUIET, EndReason.STOPPED])
+def test_interrupt_before_start_says_nothing(reason: EndReason) -> None:
+    io = FakeGameIO([STILL])
+
+    result = _play(io, interrupted=lambda: reason)
+
+    assert result == GameResult(reason, 0)
+    assert io.calls == []
+
+
+def test_interrupt_during_moved_rest_ends_without_more_steps() -> None:
+    flag = _Flag()
+    io = FakeGameIO([MOVED, MOVED], after_say=flag.raise_on(texts.SAY_MOVED, EndReason.QUIET))
+
+    result = _play(io, interrupted=flag)
+
+    assert result == GameResult(EndReason.QUIET, 0)
+    assert io.names[-1] == "say"
+    assert io.spoken[-1] == texts.SAY_MOVED
+    assert "home" not in io.names
+
+
+def test_interrupt_before_end_phrase_does_not_say_it() -> None:
+    flag = _Flag()
+    io = FakeGameIO([MOVED], after_say=flag.raise_on(texts.SAY_MOVED, EndReason.PREEMPTED))
+
+    result = _play(io, rules=make_rules(max_rounds=1), interrupted=flag)
+
+    assert result.reason is EndReason.PREEMPTED
+    assert texts.SAY_MAX_ROUNDS not in io.spoken
+    assert "home" not in io.names
+
+
+def test_interrupt_after_end_phrase_does_not_move_head() -> None:
+    flag = _Flag()
+    io = FakeGameIO([MOVED], after_say=flag.raise_on(texts.SAY_MAX_ROUNDS, EndReason.PREEMPTED))
+
+    result = _play(io, rules=make_rules(max_rounds=1), interrupted=flag)
+
+    assert result == GameResult(EndReason.PREEMPTED, 1)
+    assert io.spoken[-1] == texts.SAY_MAX_ROUNDS
+    assert "home" not in io.names
+
+
+# 話す口・首の誤り（4.4、5.3）
+
+
+def test_revoked_while_speaking_ends_silently() -> None:
+    io = FakeGameIO([MOVED], say_errors={texts.SAY_KORONDA: LeaseRevoked()})
+
+    result = _play(io)
+
+    assert result == GameResult(EndReason.PREEMPTED, 0)
+    assert io.spoken[-1] == texts.SAY_KORONDA
+    assert io.names[-1] == "say"
+
+
+def test_revoked_on_head_step_ends_silently() -> None:
+    io = FakeGameIO([MOVED], errors={"look": LeaseRevoked()})
+
+    result = _play(io)
+
+    assert result.reason is EndReason.PREEMPTED
+    assert io.names[-1] == "look"
+
+
+@pytest.mark.parametrize("error", [SpeechFailed(NAME), DeviceUnavailable(NAME)])
+def test_speech_or_device_failure_ends_with_error_and_logs_type_only(
+    error: Exception, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.DEBUG)
+    io = FakeGameIO([MOVED], say_errors={SAY_GO: error})
+
+    result = _play(io)
+
+    assert result == GameResult(EndReason.ERROR, 0)
+    assert io.names[-1] == "say"
+    assert type(error).__name__ in caplog.text
+    assert NAME not in caplog.text
+
+
+def test_head_failure_ends_with_error() -> None:
+    io = FakeGameIO([MOVED], errors={"nod": DeviceUnavailable()})
+
+    result = _play(io)
+
+    assert result.reason is EndReason.ERROR
+    assert io.names[-1] == "nod"
+
+
+def test_other_exceptions_propagate() -> None:
+    io = FakeGameIO([MOVED], errors={"look": ValueError("x")})
+
+    with pytest.raises(ValueError):
+        _play(io)
+
+
+# ログ（6.3、7.5）
+
+
+def test_logs_have_no_call_name_or_motion(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.DEBUG)
+    flag = _Flag()
+    scenarios: list[tuple[FakeGameIO, Callable[[], EndReason | None]]] = [
+        (FakeGameIO([RoundScript(motion=0.4321)] * 15), lambda: None),
+        (FakeGameIO([STILL] * 5), lambda: None),
+        (FakeGameIO([RoundScript(press_in_pause=True)]), lambda: None),
+        (FakeGameIO([RoundScript(motion=CameraLost(NAME))]), lambda: None),
+        (FakeGameIO([MOVED], after_say=flag.raise_on(SAY_GO, EndReason.QUIET)), flag),
+    ]
+    for io, interrupted in scenarios:
+        _play(io, interrupted=interrupted)
+
+    assert caplog.records  # 終わり方の種類は出す
+    assert NAME not in caplog.text
+    assert "0.4321" not in caplog.text
