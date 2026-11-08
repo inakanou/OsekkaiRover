@@ -8,7 +8,7 @@
 `rover-core` の機能を足す口（エントリーポイント `osekkai.features`）に `daruma` として登録します。基盤・入口・`presence`・日課は書き換えません。
 
 ### Goals
-- サンプルと同じ遊び方（唱え言葉 3 種類、首の向き、0〜1.2 秒の間、2.5 秒見る、15 回まで）
+- サンプルと同じ遊び方（唱え言葉 3 種類、首の向き、0〜1.2 秒の間、2.5 秒見る）。回数はサンプルの 15 回をやめ、既定 10 回のうちにタッチできなければローバーの勝ちにする
 - 「見ている間の押下は動いた」「唱える間の押下は勝ち」を、ルールとして守る
 - 日課のタスクが近いとき・始まるとき・おやすみ・カメラの誤りのどれでも、やさしく終え、首を正面に戻し、資源とカメラを返す
 - タイヤを回さない。資源の申告に走行（DRIVE）を入れないことで、形として守る
@@ -155,13 +155,13 @@ stateDiagram-v2
     Starting --> Ended: no camera
     Starting --> Intro: ready
     Intro --> Round: wait 5 s then clear presses
-    Round --> Chant: before round checks pass
+    Round --> Chant: before round checks pass (say rounds left in last 3)
     Round --> Ended: next task near
     Chant --> Ended: press while chanting is win
     Chant --> Watch: pause ends
     Watch --> Moved: motion over threshold or press
     Watch --> Round: still and rounds left
-    Watch --> Ended: max rounds or nobody
+    Watch --> Ended: max rounds (rover wins)
     Watch --> Ended: camera lost
     Moved --> Round: wait 5 s then clear presses
     Moved --> Ended: max rounds
@@ -169,7 +169,7 @@ stateDiagram-v2
 ```
 - どの状態でも、中断・静かな状態・止める旗に気づいたら、話さずに Ended に移る（4.4、4.5）
 - Ended では、カメラを返し、首を正面に戻し、リースを返す（4.7）
-- 同じ回で「回数を終えた」と「だれもいない」が重なったら、だれもいないの言葉にする
+- 止まり続けても終えない。止まるのが上手な子と、だれもいないのは見分けられないので、回数を終えるまで遊ぶ（4.1）
 
 ### 1 回の流れ
 ```mermaid
@@ -202,7 +202,7 @@ sequenceDiagram
 |-------------|---------|------------|------------|-------|
 | 1.1 | 「だるま」「転んだ」で始める | DarumaFeature, texts | `register_words`、`START_PHRASES` | — |
 | 1.2 | 始めの LCD と言葉 | GameFlow, texts | `GameIO.show/say` | 状態 Intro |
-| 1.3 | 5 秒後に言い、押下を数えずに 1 回目 | GameFlow | `GameIO.rest`、`clear_presses` | 状態 Intro |
+| 1.3 | 5 秒後に回数を入れて言い、押下を数えずに 1 回目 | GameFlow, texts | `GameIO.rest`、`clear_presses`、`say_go` | 状態 Intro |
 | 1.4 | カメラを使えなければ断る | GameFlow, LeaseGameIO | `GameIO.open_camera`、`EndReason.NO_CAMERA` | 状態 Starting |
 | 1.5 | 次のタスクが近い・最中なら断る | rules, GameFlow | `schedule_blocks`、`EndReason.NEXT_TASK` | 状態 Starting |
 | 1.6 | 資源を借りられなければ話さない | run_game | `ResourceBusy` → `EndReason.BUSY` | 状態 Starting |
@@ -220,8 +220,8 @@ sequenceDiagram
 | 3.3 | ハートの LCD、首だけで踊りながら話す | GameFlow, LeaseGameIO, texts | `GameIO.celebrate`、`dance()` | 状態 Chant |
 | 3.4 | 呼び名は設定、なければ「きみ」 | DarumaConfig, texts | `call_name`、`say_with_name` | — |
 | 3.5 | 星を増やさない | 境界（保存先を使わない） | — | — |
-| 4.1 | 回数を終えたら終える | rules, GameFlow | `advance`、`EndReason.MAX_ROUNDS` | 状態 Watch |
-| 4.2 | 続けて止まっていたら終える | rules, GameFlow | `Tally.still_streak`、`EndReason.NOBODY` | 状態 Watch |
+| 4.1 | 回数を終えたらローバーの勝ちで終える | rules, GameFlow | `advance`、`EndReason.MAX_ROUNDS` | 状態 Watch |
+| 4.2 | 最後の 3 回は唱える前に残りの回数を話す | rules, GameFlow, texts | `rounds_left`、`SAY_ROUNDS_LEFT` | 状態 Round |
 | 4.3 | 次の回の前に次の予定を見る | rules, GameFlow | `schedule_blocks` | 状態 Round |
 | 4.4 | 譲るときは言い終えて黙って返す | GameFlow, run_game | `interrupted()`、`on_preempt`、`EndReason.PREEMPTED` | 状態 全部 |
 | 4.5 | おやすみになったら黙って終える | GameFlow, run_game | `ctx.is_quiet`、`EndReason.QUIET` | 状態 全部 |
@@ -274,8 +274,7 @@ class DarumaConfig(FeatureConfig):
     call_name: str = ""                                          # 空なら「きみ」（3.4）
     threshold: float = Field(default=0.01, gt=0.0, lt=1.0)      # これより大きいと動いた（2.6）
     watch_seconds: float = Field(default=2.5, ge=1.0, le=10.0)  # 見る長さ（2.5）
-    max_rounds: int = Field(default=15, ge=1, le=50)            # 4.1
-    nobody_rounds: int = Field(default=5, ge=1, le=50)          # 続けて止まっていたら終える回数（4.2）
+    max_rounds: int = Field(default=10, ge=1, le=50)            # この回数のうちにタッチする（4.1）
     end_before_task_min: int = Field(default=10, ge=0, le=120)  # 次のタスクの何分前に終えるか（1.5、4.3）
 ```
 - `enabled`（基盤の項目）が偽なら、基盤が開始しないので言葉を登録しない（7.2）
@@ -284,8 +283,9 @@ class DarumaConfig(FeatureConfig):
 - 始める語句: `START_PHRASES = ("だるま", "転んだ")`（入口が正規化して含むかを見る。「だーるーま」も「だるま」になる）
 - 唱え言葉: `Chant(speech, lcd)` の 3 つ — 「だーるーまーさーんーがー」/「ﾀﾞｰﾙｰﾏｰｻｰﾝｶﾞｰ」、「だるまさんが」/「ﾀﾞﾙﾏｻﾝｶﾞ」、「だるまさんがー」/「ﾀﾞﾙﾏｻﾝｶﾞｰ」（2.1）
 - LCD: 始め「ﾀﾞﾙﾏｻﾝｶﾞ」「ｺﾛﾝﾀﾞ!」（1.2）、唱える間は 1 行目に唱え言葉・2 行目に普通の顔、「ﾐﾃﾙﾖ!」と呼びかけの顔（2.4）、「ｳｺﾞｲﾀ!」と呼びかけの顔（2.7）、勝ちは `chr(Glyph.HEART) + " ﾀｯﾁ! ｶﾁ! " + chr(Glyph.HEART)` と喜んだ顔（3.3。LCD の ROM に「♥」はないので、絵の文字のハートを使う）。2 行とも `center()` で中央に置く
-- 言葉: 要件の文のとおり。`SAY_INTRO`（1.2）、`SAY_GO`（1.3、`{name}` を含む）、`SAY_KORONDA`（2.4）、`SAY_MOVED`（2.7）、`SAY_WIN`（3.3、`{name}` を含む）、`SAY_NO_CAMERA`（1.4）、`SAY_NEXT_TASK_BEFORE`（1.5「…また あとで あそぼうね」）、`SAY_NEXT_TASK`（4.3「…また あそぼうね」）、`SAY_MAX_ROUNDS`（4.1）、`SAY_NOBODY`（4.2）、`SAY_CAMERA_LOST`（4.6）
+- 言葉: 要件の文のとおり。`SAY_INTRO`（1.2）、`SAY_GO`（1.3、`{rounds}` と `{name}` を含む）、`SAY_KORONDA`（2.4）、`SAY_MOVED`（2.7）、`SAY_WIN`（3.3、`{name}` を含む）、`SAY_NO_CAMERA`（1.4）、`SAY_NEXT_TASK_BEFORE`（1.5「…また あとで あそぼうね」）、`SAY_NEXT_TASK`（4.3「…また あそぼうね」）、`SAY_MAX_ROUNDS`（4.1「おしまい！こんどは ローバーの かち。…」）、`SAY_ROUNDS_LEFT`（4.2。残り 3・2・1 の回の言葉「あと さんかい」「あと にかい」「さいごの いっかい」。声が正しく読むように、数はかなで書く）、`SAY_CAMERA_LOST`（4.6）
 - `texts` はほかの部品を読まない（`rules` が `texts` を読むので、逆は作らない）。終わり方と言葉の対応の表 `END_SAYS: Mapping[EndReason, str]` は `flow.py` に置く。話さない終わり方（BUSY・PREEMPTED・QUIET・STOPPED・ERROR）は表に入れない。始める前の次の予定（1.5）は `SAY_NEXT_TASK_BEFORE` を流れが直接使う
+- `say_go(max_rounds) -> str`: `SAY_GO` の `{rounds}` を設定の回数（数字）にする。`{name}` は残す。回数を先に入れるので、呼び名の中の `{rounds}` は置き換わらない（1.3）
 - `say_with_name(template, call_name) -> str`: `{name}` を呼び名に（空なら「きみ」）
 - 首の角度: `POSE_AWAY = (70.0, -30.0)`、`POSE_FACING = (0.0, 10.0)`（pan、tilt。範囲に収めるのは基盤。5.2）
 - 長さ: `INTRO_WAIT_S = 5.0`（1.3）、`MOVED_WAIT_S = 5.0`（2.8）、`PAUSE_MAX_S = 1.2`（2.3）
@@ -305,8 +305,7 @@ class RoundKind(Enum):
 
 class EndReason(Enum):
     WIN = "win"                  # 3.3
-    MAX_ROUNDS = "max_rounds"    # 4.1
-    NOBODY = "nobody"            # 4.2
+    MAX_ROUNDS = "max_rounds"    # 4.1（ローバーの勝ち）
     NEXT_TASK = "next_task"      # 1.5、4.3
     NO_CAMERA = "no_camera"      # 1.4
     CAMERA_LOST = "camera_lost"  # 4.6
@@ -321,7 +320,6 @@ class Rules:
     threshold: float
     watch_seconds: float
     max_rounds: int
-    nobody_rounds: int
     end_before_task: timedelta
     @classmethod
     def from_config(cls, config: DarumaConfig) -> Rules: ...
@@ -329,18 +327,18 @@ class Rules:
 @dataclass(frozen=True)
 class Tally:
     rounds: int = 0          # 終えた回の数（勝ちの回は数えない）
-    still_streak: int = 0    # 続けて STILL だった回の数
 
 def judge_watch(motion: float, pressed: bool, threshold: float) -> RoundKind: ...   # MOVED か STILL
 def advance(tally: Tally, kind: RoundKind, rules: Rules) -> tuple[Tally, EndReason | None]: ...
+def rounds_left(tally: Tally, rules: Rules) -> int: ...   # これから始める回を含めた残り（4.2）
 def schedule_blocks(status: RoutineStatus | None, now: datetime, margin: timedelta) -> bool: ...
 def pick_chant(rng: random.Random) -> Chant: ...
 def pick_pause(rng: random.Random) -> float: ...    # 0 以上 PAUSE_MAX_S 以下
 ```
 - `judge_watch`: `pressed` が真、または `motion > threshold` なら MOVED（押下は動きの量より先に見る）。それ以外は STILL
 - `advance`（MOVED・STILL だけを受ける。WIN は ValueError）:
-  - `rounds` を 1 増やす。MOVED なら `still_streak = 0`、STILL なら 1 増やす
-  - `still_streak >= nobody_rounds` なら NOBODY（4.2）。そうでなく `rounds >= max_rounds` なら MAX_ROUNDS（4.1）。どちらでもなければ None
+  - `rounds` を 1 増やす。`rounds >= max_rounds` なら MAX_ROUNDS（4.1）。そうでなければ None。STILL が続いても終えない
+- `rounds_left`: `max_rounds - rounds`。1 回目の前は `max_rounds`、最後の回の前は 1（4.2）
 - `schedule_blocks`（1.5、4.3、4.8）:
   - `status` が None（日課が動いていない）→ 偽
   - `status.in_task` → 真
@@ -393,16 +391,17 @@ class GameFlow:
 - 手順:
   1. 次の予定が近ければ（`schedule_blocks`）`SAY_NEXT_TASK_BEFORE` を話して NEXT_TASK（1.5）
   2. `open_camera()` が偽なら `SAY_NO_CAMERA` を話して NO_CAMERA（1.4）
-  3. 始めの LCD を出し、`SAY_INTRO` を話す。`rest(5)`。`SAY_GO` を話し、`clear_presses()`（1.2、1.3）
+  3. 始めの LCD を出し、`SAY_INTRO` を話す。`rest(5)`。`say_go(max_rounds)` を話し、`clear_presses()`（1.2、1.3）
   4. 回ごと:
      1. 次の予定が近ければ `SAY_NEXT_TASK` を話して NEXT_TASK（4.3）
-     2. `pick_chant` → LCD に唱え言葉 → `look(POSE_AWAY)` → 唱え言葉を話す（2.1、2.2）
-     3. `pressed()` か `wait_press(pick_pause())` が真なら、勝ちの LCD を出し `celebrate(SAY_WIN)` で WIN（3.1、3.3）
-     4. `look(POSE_FACING)` → 「ﾐﾃﾙﾖ!」と呼びかけの顔 → `SAY_KORONDA`（2.4）
-     5. `motion(watch_seconds)`（2.5）。`CameraLost` なら `SAY_CAMERA_LOST` を話して CAMERA_LOST（4.6）
-     6. `judge_watch(motion, pressed(), threshold)`（2.6）
-     7. MOVED なら「ｳｺﾞｲﾀ!」と呼びかけの顔 → `nod()` → `SAY_MOVED` → `rest(5)` → `clear_presses()`（2.7、2.8）
-     8. `advance`。終わり方が出たら、`END_SAYS` の言葉を話して終える。出なければ次の回（STILL は待たずに。2.9）
+     2. `rounds_left` が `SAY_ROUNDS_LEFT` にあれば（残り 3・2・1）、その言葉を話す（4.2）。首は前の回のまま。この間の押下は、これまでの回の間の押下と同じく、次の唱える間の押下として勝ちになる
+     3. `pick_chant` → LCD に唱え言葉 → `look(POSE_AWAY)` → 唱え言葉を話す（2.1、2.2）
+     4. `pressed()` か `wait_press(pick_pause())` が真なら、勝ちの LCD を出し `celebrate(SAY_WIN)` で WIN（3.1、3.3）
+     5. `look(POSE_FACING)` → 「ﾐﾃﾙﾖ!」と呼びかけの顔 → `SAY_KORONDA`（2.4）
+     6. `motion(watch_seconds)`（2.5）。`CameraLost` なら `SAY_CAMERA_LOST` を話して CAMERA_LOST（4.6）
+     7. `judge_watch(motion, pressed(), threshold)`（2.6）
+     8. MOVED なら「ｳｺﾞｲﾀ!」と呼びかけの顔 → `nod()` → `SAY_MOVED` → `rest(5)` → `clear_presses()`（2.7、2.8）
+     9. `advance`。終わり方が出たら、`END_SAYS` の言葉を話して終える。出なければ次の回（STILL は待たずに。2.9）
   5. 終わりの言葉を話し終えたら `home()`（4.7。返すときにも基盤が戻す）
 - 例外: `LeaseRevoked` → PREEMPTED（話さない）。`SpeechFailed`・`DeviceUnavailable` → ERROR（型の名前だけを記録）。そのほかの例外は外に出し、`run_game` が ERROR にする
 - 中断のときの決まり（4.4）: `say` は話し終わるまで戻らないので、話している一言は言い終える。その後の手順の前の `interrupted()` で止まり、終わりの言葉も話さない
@@ -528,7 +527,7 @@ def run_game(ctx: FeatureContext, config: DarumaConfig, stop: threading.Event, *
 
 ### Unit Tests
 - `rules.judge_watch`: 動きの量がしきい値ちょうどは STILL、超えると MOVED。動きの量 0 でも押下があれば MOVED（2.6）
-- `rules.advance`: 15 回目の MOVED で MAX_ROUNDS。STILL が 5 回続くと NOBODY、間に MOVED があれば数え直す。同じ回で両方なら NOBODY（4.1、4.2）
+- `rules.advance`: 10 回目の MOVED で MAX_ROUNDS。STILL が続いても 10 回目まで終えない（4.1）。`rules.rounds_left` はこれから始める回を含めて数える（4.2）
 - `rules.schedule_blocks`: 状況が None は偽（4.8）、タスクの最中は真、`next_task_at` が None は偽、10 分ちょうどは偽で 9 分 59 秒は真、時刻を過ぎていれば真（1.5、4.3）
 - `rules.pick_chant`・`pick_pause`: 種を固定すると同じ並び。間は 0〜1.2 秒の中（2.1、2.3）
 - `DarumaConfig`: 既定値、範囲の外（しきい値 0・1、見る長さ 0.5、回数 0 など）で誤り、誤りの文に値が出ない（7.1、7.3）。`texts.say_with_name` が空の呼び名を「きみ」にする（3.4）
@@ -537,7 +536,8 @@ def run_game(ctx: FeatureContext, config: DarumaConfig, stop: threading.Event, *
 - 勝ち: 唱えている間の押下、間の中の押下のどちらでも勝ちの LCD・踊りながらの言葉で終わる。間の後（見ている間）の押下は MOVED（2.6、3.1、3.3）
 - 動いた: ｳｺﾞｲﾀ!・うなずき・言葉・5 秒の待ち・押下を消す、の順。待ちの間の押下で勝ちにならない（2.7、2.8）。STILL のときは待たない（2.9）
 - 始め: LCD と言葉、5 秒、いくよー の後に押下を消す。始める前の押下で勝ちにならない（1.2、1.3）
-- 終わり方ごとの言葉: 回数・だれもいない・次の予定（始める前と回の前で言葉が違う）・カメラなし・カメラの誤り（4.1–4.3、1.4、1.5、4.6）
+- 終わり方ごとの言葉: 回数（ローバーの勝ち）・次の予定（始める前と回の前で言葉が違う）・カメラなし・カメラの誤り（4.1、4.3、1.4、1.5、4.6）
+- 回数: 始めの言葉に設定の回数が入る（1.3）。残りの回数の言葉は最後の 3 回の唱える前だけ。回数が 1・2 のときは 1 回目の残りから話す（4.2）
 - 中断: 唱え言葉を話している途中に中断の旗が立つと、その一言は言い終え、その後は何も話さず、首も動かさない（4.4）。静かな状態でも同じ（4.5）
 - `LeaseGameIO`（偽のリースの口・偽のカメラ）: 踊りは走行の口なしで呼ばれる（5.1）、`motion` のどの例外も `CameraLost`、`close` でカメラを返す、ログに動きの量が出ない（4.6、4.7、6.3）
 - `DarumaFeature`: 言葉で 1 回だけ遊び、遊んでいる間の言葉は捨てる（4.9）。無効の設定では語句を登録しない（7.2）。思いがけない例外の後も次の言葉で遊べる（5.3）。申告に DRIVE がない（5.1）
