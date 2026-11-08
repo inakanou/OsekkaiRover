@@ -3,4 +3,6 @@
 基盤はエントリーポイント（`pyproject.toml` の `osekkai.features`）から機能を見つける。
 """
 
-__all__: list[str] = []
+from osekkai.features.daruma.feature import DarumaFeature
+
+__all__ = ["DarumaFeature"]
