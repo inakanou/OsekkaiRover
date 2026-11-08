@@ -60,7 +60,7 @@ OsekkaiRover は、SunFounder PiCar-X（Raspberry Pi 5 + Robot HAT + I2C LCD 160
 - [x] voice-gateway -- 音声の入口。ボタンで聞き取り、言葉に合う機能へ渡す。Dependencies: rover-core
 - [x] presence -- 見つけてあいさつ。顔の検出と追従、覚えた顔の認識とあいさつ、顔の登録と削除、カメラの機能の提供。Dependencies: rover-core
 - [x] conversation -- おしゃべり。他の機能に当てはまらない言葉を Claude との会話で受ける。子ども向けの安全対策と利用上限。Dependencies: rover-core, voice-gateway
-- [ ] daruma-game -- あそび「だるまさんがころんだ」。Dependencies: rover-core, voice-gateway, presence
+- [ ] daruma-game -- あそび「だるまさんがころんだ」。Dependencies: rover-core, voice-gateway, presence, daily-routine
 - [ ] remote-control -- スマホのラジコン。家の Wi-Fi からの操作、映像、写真、話させる。Dependencies: rover-core, presence
 
 ## Progress Notes
