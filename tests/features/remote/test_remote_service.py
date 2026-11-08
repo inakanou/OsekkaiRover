@@ -1076,6 +1076,24 @@ def test_10秒の交代で走行を止め_首を見る端末がいなければ�
     assert not cams.neck_hub.available()
 
 
+def test_操作する端末のログインが切れたら席を空けて走行を止める(cams: _CamRig) -> None:
+    cams.service.drive(ME, Move.FWD)
+    cams.step()
+    cams.service.drop_operator(ME)
+    assert cams.slot.holder() is None
+    assert cams.moves()[-1] == ("stop",)
+    cams.step()
+    assert cams.moves()[-1] == ("stop",)
+
+
+def test_操作する端末でない印のログインが切れても走行は止めない(cams: _CamRig) -> None:
+    cams.service.drive(ME, Move.FWD)
+    cams.step()
+    cams.service.drop_operator(OTHER)
+    assert cams.slot.holder() == ME
+    assert cams.moves() == [("drive", 0.0, 20)]
+
+
 def test_10秒の交代で首を見る端末がいれば見るだけの段に下げる(cams: _CamRig) -> None:
     cams.service.drive(ME, Move.FWD)
     cams.step()

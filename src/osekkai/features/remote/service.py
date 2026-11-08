@@ -396,6 +396,11 @@ class RemoteService:
         self._stop_driving()
         self._release_neck_camera()
 
+    def drop_operator(self, token: str) -> None:
+        """ログインが切れた印を席から外す。操作する端末だったなら走行を止める（3.4）。"""
+        if self._slot.drop(token):
+            self._stop_driving()
+
     def on_lost(self) -> None:
         """中断の後片付け（LeaseKeeper の on_lost。基盤の短いスレッド）。
 

@@ -49,6 +49,7 @@ dev = [
 [project.entry-points."osekkai.features"]
 conversation = "osekkai.features.conversation:ConversationFeature"
 daruma = "osekkai.features.daruma:DarumaFeature"
+remote = "osekkai.features.remote:RemoteFeature"
 routine = "osekkai.features.routine:RoutineFeature"
 presence = "osekkai.features.presence:PresenceFeature"
 voice = "osekkai.voice:VoiceGatewayFeature"
