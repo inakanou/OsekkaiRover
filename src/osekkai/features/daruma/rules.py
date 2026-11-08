@@ -29,8 +29,7 @@ class EndReason(Enum):
     """遊びの終わり方。"""
 
     WIN = "win"  # 3.3
-    MAX_ROUNDS = "max_rounds"  # 4.1
-    NOBODY = "nobody"  # 4.2
+    MAX_ROUNDS = "max_rounds"  # 4.1（タッチされずに回数を終えた。ローバーの勝ち）
     NEXT_TASK = "next_task"  # 1.5、4.3
     NO_CAMERA = "no_camera"  # 1.4
     CAMERA_LOST = "camera_lost"  # 4.6
@@ -47,8 +46,7 @@ class Rules:
 
     threshold: float  # これより大きいと動いた（2.6）
     watch_seconds: float  # 見る長さ（2.5）
-    max_rounds: int  # 最大の回数（4.1）
-    nobody_rounds: int  # 続けて止まっていたら終える回数（4.2）
+    max_rounds: int  # この回数のうちにタッチする（4.1）
     end_before_task: timedelta  # 次のタスクのこれより前に終える（1.5、4.3）
 
     @classmethod
@@ -58,7 +56,6 @@ class Rules:
             threshold=config.threshold,
             watch_seconds=config.watch_seconds,
             max_rounds=config.max_rounds,
-            nobody_rounds=config.nobody_rounds,
             end_before_task=timedelta(minutes=config.end_before_task_min),
         )
 
@@ -68,7 +65,6 @@ class Tally:
     """ここまでの回の数え。"""
 
     rounds: int = 0  # 終えた回の数（勝ちの回は数えない）
-    still_streak: int = 0  # 続けて STILL だった回の数
 
 
 def judge_watch(motion: float, pressed: bool, threshold: float) -> RoundKind:
@@ -79,20 +75,22 @@ def judge_watch(motion: float, pressed: bool, threshold: float) -> RoundKind:
 
 
 def advance(tally: Tally, kind: RoundKind, rules: Rules) -> tuple[Tally, EndReason | None]:
-    """回の結果で数えを進め、終わるなら理由を返す（4.1、4.2）。
+    """回の結果で数えを進め、終わるなら理由を返す（4.1）。
 
     MOVED・STILL だけを受ける（WIN は ValueError）。
-    だれもいないと回数を終えたが同じ回で重なったら、だれもいないにする。
+    止まり続けても終えない（止まるのが上手な子と、だれもいないのは見分けられない）。
     """
     if kind is RoundKind.WIN:
         raise ValueError("勝ちの回は数えない")
-    streak = 0 if kind is RoundKind.MOVED else tally.still_streak + 1
-    after = Tally(rounds=tally.rounds + 1, still_streak=streak)
-    if after.still_streak >= rules.nobody_rounds:
-        return after, EndReason.NOBODY
+    after = Tally(rounds=tally.rounds + 1)
     if after.rounds >= rules.max_rounds:
         return after, EndReason.MAX_ROUNDS
     return after, None
+
+
+def rounds_left(tally: Tally, rules: Rules) -> int:
+    """これから始める回を含めた、残りの回の数（4.2）。"""
+    return rules.max_rounds - tally.rounds
 
 
 def schedule_blocks(status: RoutineStatus | None, now: datetime, margin: timedelta) -> bool:

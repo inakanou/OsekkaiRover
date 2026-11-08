@@ -26,8 +26,7 @@ def make_rules(
     *,
     threshold: float = 0.01,
     watch_seconds: float = 2.5,
-    max_rounds: int = 15,
-    nobody_rounds: int = 5,
+    max_rounds: int = 10,
     end_before_task_min: int = 10,
 ) -> Rules:
     """テスト用の決まり（既定は設定の既定と同じ）。"""
@@ -35,7 +34,6 @@ def make_rules(
         threshold=threshold,
         watch_seconds=watch_seconds,
         max_rounds=max_rounds,
-        nobody_rounds=nobody_rounds,
         end_before_task=timedelta(minutes=end_before_task_min),
     )
 

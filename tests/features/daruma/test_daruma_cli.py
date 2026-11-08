@@ -74,7 +74,7 @@ class Rig:
 
 @pytest.fixture
 def rig(xdg_dirs: dict[str, Path], monkeypatch: pytest.MonkeyPatch) -> Rig:
-    _write_config("daruma:\n  enabled: true\n  watch_seconds: 1.0\n  nobody_rounds: 1\n")
+    _write_config("daruma:\n  enabled: true\n  watch_seconds: 1.0\n  max_rounds: 1\n")
     rig = Rig()
     monkeypatch.setattr(cli, "build_devices", rig.build)
     monkeypatch.setattr(cli, "make_fake_camera", rig.camera)
@@ -125,7 +125,7 @@ def test_偽のハードで遊びを_1_回終えて_0_で戻る(
 
     assert code == 0  # 8.1
     out, _ = capsys.readouterr()
-    assert "nobody" in out  # 動かない台本なので、だれもいないで終わる
+    assert "max_rounds" in out  # 動かない台本なので、回数を終えてローバーの勝ち
     assert rig.fake_flags == [True]
     console = rig.console.getvalue()
     assert _spoke(console, texts.SAY_INTRO)  # 話しかけたときと同じ遊び
@@ -135,7 +135,7 @@ def test_偽のハードで遊びを_1_回終えて_0_で戻る(
 def test_偽のカメラの台本が動いたなら_動いたの流れになる(rig: Rig) -> None:
     # 押下が来なくても、台本の量がしきい値を超えれば 動いた になる（8.4）
     rig.values = (0.5, 0.0)
-    _write_config("daruma:\n  watch_seconds: 1.0\n  nobody_rounds: 1\n  max_rounds: 3\n")
+    _write_config("daruma:\n  watch_seconds: 1.0\n  max_rounds: 1\n")
     assert cli.main(["--play", "--fake-hardware"]) == 0
     assert _spoke(rig.console.getvalue(), texts.SAY_MOVED)
 

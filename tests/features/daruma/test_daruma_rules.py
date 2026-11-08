@@ -19,6 +19,7 @@ from osekkai.features.daruma.rules import (
     judge_watch,
     pick_chant,
     pick_pause,
+    rounds_left,
     schedule_blocks,
 )
 from osekkai.features.daruma.texts import CHANTS, PAUSE_MAX_S
@@ -28,12 +29,11 @@ NOW = datetime(2026, 5, 1, 9, 0, tzinfo=UTC)
 MARGIN = timedelta(minutes=10)
 
 
-def _rules(max_rounds: int = 15, nobody_rounds: int = 5) -> Rules:
+def _rules(max_rounds: int = 10) -> Rules:
     return Rules(
         threshold=0.01,
         watch_seconds=2.5,
         max_rounds=max_rounds,
-        nobody_rounds=nobody_rounds,
         end_before_task=MARGIN,
     )
 
@@ -50,7 +50,6 @@ def test_rules_from_config_copies_values_and_minutes() -> None:
         threshold=0.2,
         watch_seconds=3.0,
         max_rounds=7,
-        nobody_rounds=3,
         end_before_task_min=12,
     )
 
@@ -60,7 +59,6 @@ def test_rules_from_config_copies_values_and_minutes() -> None:
         threshold=0.2,
         watch_seconds=3.0,
         max_rounds=7,
-        nobody_rounds=3,
         end_before_task=timedelta(minutes=12),
     )
 
@@ -94,70 +92,56 @@ def test_judge_press_and_motion_is_moved() -> None:
     assert judge_watch(0.5, True, 0.01) is RoundKind.MOVED
 
 
-# --- 回数と終わり方（4.1、4.2） ---
+# --- 回数と終わり方（4.1） ---
 
 
-def test_advance_counts_round_and_still_streak() -> None:
+def test_advance_counts_round() -> None:
     tally, end = advance(Tally(), RoundKind.STILL, _rules())
 
-    assert tally == Tally(rounds=1, still_streak=1)
+    assert tally == Tally(rounds=1)
     assert end is None
 
 
-def test_advance_moved_resets_still_streak() -> None:
-    tally, end = advance(Tally(rounds=3, still_streak=3), RoundKind.MOVED, _rules())
-
-    assert tally == Tally(rounds=4, still_streak=0)
-    assert end is None
-
-
-def test_advance_ends_at_max_rounds() -> None:
-    rules = _rules(max_rounds=15)
-
-    before, end_before = advance(Tally(rounds=13), RoundKind.MOVED, rules)
-    last, end_last = advance(before, RoundKind.MOVED, rules)
-
-    assert before.rounds == 14
-    assert end_before is None
-    assert last.rounds == 15
-    assert end_last is EndReason.MAX_ROUNDS
-
-
-def test_advance_ends_when_still_streak_reaches_nobody_rounds() -> None:
-    rules = _rules(nobody_rounds=5)
-
-    four, end_four = advance(Tally(rounds=3, still_streak=3), RoundKind.STILL, rules)
-    five, end_five = advance(four, RoundKind.STILL, rules)
-
-    assert four.still_streak == 4
-    assert end_four is None
-    assert five.still_streak == 5
-    assert end_five is EndReason.NOBODY
-
-
-def test_advance_moved_in_between_restarts_still_count() -> None:
-    rules = _rules(nobody_rounds=5)
+def test_advance_still_rounds_do_not_end_before_max_rounds() -> None:
+    # 止まるのが上手な子は、だれもいないと見分けられない。止まり続けても終えない
+    rules = _rules(max_rounds=10)
     tally = Tally()
-    kinds = [RoundKind.STILL] * 4 + [RoundKind.MOVED] + [RoundKind.STILL] * 4
     ends = []
-    for kind in kinds:
-        tally, end = advance(tally, kind, rules)
+    for _ in range(9):
+        tally, end = advance(tally, RoundKind.STILL, rules)
         ends.append(end)
 
     assert ends == [None] * 9
-    assert tally == Tally(rounds=9, still_streak=4)
-
     tally, end = advance(tally, RoundKind.STILL, rules)
-    assert end is EndReason.NOBODY
+    assert tally == Tally(rounds=10)
+    assert end is EndReason.MAX_ROUNDS
 
 
-def test_advance_both_on_same_round_is_nobody() -> None:
-    rules = _rules(max_rounds=15, nobody_rounds=5)
+def test_advance_ends_at_max_rounds() -> None:
+    rules = _rules(max_rounds=10)
 
-    tally, end = advance(Tally(rounds=14, still_streak=4), RoundKind.STILL, rules)
+    before, end_before = advance(Tally(rounds=8), RoundKind.MOVED, rules)
+    last, end_last = advance(before, RoundKind.MOVED, rules)
 
-    assert tally == Tally(rounds=15, still_streak=5)
-    assert end is EndReason.NOBODY
+    assert before.rounds == 9
+    assert end_before is None
+    assert last.rounds == 10
+    assert end_last is EndReason.MAX_ROUNDS
+
+
+def test_no_nobody_end_reason() -> None:
+    assert "NOBODY" not in EndReason.__members__
+
+
+# --- 残りの回数（4.2） ---
+
+
+def test_rounds_left_counts_this_round() -> None:
+    rules = _rules(max_rounds=10)
+
+    assert rounds_left(Tally(), rules) == 10
+    assert rounds_left(Tally(rounds=7), rules) == 3
+    assert rounds_left(Tally(rounds=9), rules) == 1
 
 
 def test_advance_does_not_take_win() -> None:
