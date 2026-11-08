@@ -92,7 +92,7 @@
   - _Boundary: adapters/usb_camera_
   - _Requirements: 8.1, 8.3_
 
-- [ ] 3.3 センサーを確かめる道具を作る
+- [x] 3.3 センサーを確かめる道具を作る
   - `python -m osekkai.features.remote --sensor-test [--seconds N] [--fake-hardware] [--config PATH]` で、N 秒（1〜600、既定 30）の間、0.5 秒ごとに距離・床の 3 つ・段差の判定・設定で危険になるかを出す
   - ロボットが動いているときは始めずに決まった文を出して 75 で終える。基盤を起動せず、モーターとサーボに触らない
   - 終了コード 0・1・2・75 と、偽のハードでの出力のテストが通る
