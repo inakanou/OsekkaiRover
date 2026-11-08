@@ -39,9 +39,11 @@ ENTRY_ONLY = (
     "osekkai.core.logging_setup",
     "osekkai.core.config.ConfigLoader",
     "osekkai.core.clock.SystemClock",
+    "osekkai.core.paths",
 )
-# ENTRY_ONLY を読んでよいコマンドの入口（道具ができたら足す）
-ENTRY_MODULES: frozenset[str] = frozenset()
+# ENTRY_ONLY を読んでよいコマンドの入口（道具だけ。__main__ は cli を読むだけ）
+CLI = f"{DARUMA}.cli"
+ENTRY_MODULES: frozenset[str] = frozenset({CLI})
 # ハードのライブラリは、どこでも（関数の中でも）読まない
 HARDWARE_LIBS = (
     "smbus2",
@@ -246,12 +248,21 @@ def test_基盤の決まった口のほかを見つける(source: str) -> None:
         "from osekkai.core.logging_setup import setup\n",
         "from osekkai.core.config import ConfigLoader\n",
         "from osekkai.core.clock import SystemClock\n",
+        "from osekkai.core.paths import Paths\n",
         "def f():\n    from osekkai.core.runtime import Runtime\n",
     ],
 )
-def test_入口だけの口はほかのモジュールでは断る(source: str) -> None:
-    for module in (FLOW, f"{DARUMA}.feature", f"{DARUMA}.cli", DARUMA):
+def test_入口だけの口は道具のほかのモジュールでは断る(source: str) -> None:
+    others = (FLOW, f"{DARUMA}.feature", f"{DARUMA}.camera", f"{DARUMA}.__main__", DARUMA)
+    for module in others:
         assert _check(source, module) != [], module
+    assert _check(source, CLI) == []  # 道具だけは読んでよい
+
+
+def test_道具でもアダプタとほかの機能の公開の口のほかは断る() -> None:
+    assert _check("from osekkai.adapters.fake.console import x\n", CLI) != []
+    assert _check("from osekkai.features.presence.feature import X\n", CLI) != []
+    assert _check("from osekkai.core.storage import StateStore\n", CLI) != []
 
 
 @pytest.mark.parametrize("lib", HARDWARE_LIBS)
