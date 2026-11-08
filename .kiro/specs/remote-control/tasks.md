@@ -179,7 +179,7 @@
   - _Requirements: 1.5, 2.8, 8.1, 8.2, 8.6_
 
 - [ ] 7. self-check・機能・登録
-- [ ] 7.1 self-check の 3 つの項目を作る
+- [x] 7.1 self-check の 3 つの項目を作る
   - `remote.setup`（無効は飛ばす。設定の誤り・pin が使えない・Web の部品がないはだめ。止まっているときだけポートを確かめる）、`remote.sensors`（動いているときは飛ばす。止まっているときは 1 回読む）、`remote.usb_camera`（デバイスのファイルがあるか）
   - 理由は決まった文だけで、pin・アドレス・値を出さない
   - 項目の部品を直接呼ぶテストで、それぞれの場合（無効・誤り・pin・Web の部品・ポート・動いている・読めない・デバイスがない）が通る。この時点では機能に組み込まない
@@ -236,3 +236,4 @@
 - 6.2: 宛先の名前（Host）は access.is_home_host で確かめる（家の IP・localhost・点のない名前・.local）。DNS リバインディングへの備えで、設計に書き足した。create_app は OperatorService の Protocol を受ける。hubs は app.extensions["remote_hubs"] にある（6.3 の配信で使う）
 - 6.3: feature は同じ stop_event を create_app と WebServer に渡す。WebServer は 0.0.0.0（IPv4 だけ）で待つ。送る待ちの上限は 10 秒（読まない端末の配信を終えて席を返す）。iPhone の Safari の映像は実機で確かめる
 - 6.3: tests の conversation の登録のテストが osekkai のロガーに閉じた出力先の StreamHandler を残す（core の logging_setup）。webserver のテストは raiseExceptions を monkeypatch で切って避けた。後で conftest か logging_setup で直す
+- 7.1: self-check の理由の文は checks.REASON_*（feature のログにも使える）。checks は SystemClock(_NotSynced()) で床の待ちを待つ（cli と同じ作り）

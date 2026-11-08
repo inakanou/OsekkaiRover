@@ -65,6 +65,21 @@ HARDWARE_LIBS = (
     "anthropic",
 )
 
+# self-check の項目は、設定・口・アダプタの見つけ方（と確かめに使うセンサー）・
+# 基盤の self-check と時計だけを読む。本物の時計は、確かめのために使ってよい
+CHECKS = f"{REMOTE}.checks"
+CHECKS_ALLOWED = (
+    f"{REMOTE}.config",
+    PORTS,
+    f"{SENSORS}.sensors_available",
+    f"{SENSORS}.HatSensors",
+    f"{SENSORS}.FLOOR_WARMUP_S",
+    f"{USB_CAMERA}.find_usb_camera",
+    "osekkai.core.selfcheck",
+    "osekkai.core.clock.Clock",
+    "osekkai.core.clock.SystemClock",
+)
+
 # Flask は web だけが読む（一番上でもよい）。web は本体の関数の中だけで読む
 FLASK = "flask"
 WEB = f"{REMOTE}.web"
@@ -138,6 +153,8 @@ def _violation(module: str, ref: ImportRef) -> bool:
         return True
     if _matches(name, WEB):
         return not (module == FEATURE and ref.in_function)
+    if module == CHECKS and _matches(name, OSEKKAI):
+        return not any(_matches(name, allowed) for allowed in CHECKS_ALLOWED)
     if any(_matches(name, entry) for entry in ENTRY_ONLY):
         return module not in ENTRY_MODULES
     if _matches(module, ADAPTERS) and _matches(name, REMOTE):
@@ -343,6 +360,38 @@ def test_web_は本体の関数の中だけで読める() -> None:
     for module in (CLI, SERVICE, f"{REMOTE}.__main__"):
         assert _check(lazy, module) != [], module
     assert _check("from .web import x\n", REMOTE, is_package=True) != []
+
+
+def test_self_check_の項目は決まった部品だけを読む() -> None:
+    source = (
+        "from .config import RemoteConfig\n"
+        "from .ports import SensorPort, SensorReading\n"
+        "from .adapters.sensors import FLOOR_WARMUP_S, HatSensors, sensors_available\n"
+        "from .adapters.usb_camera import find_usb_camera\n"
+        "from osekkai.core.selfcheck import Check, CheckContext\n"
+        "from osekkai.core.clock import Clock, SystemClock\n"
+    )
+    assert _check(source, CHECKS) == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from .service import RemoteService\n",
+        "from .web import create_app\n",
+        "from . import texts\n",
+        "from .media import FrameHub\n",
+        "from .adapters.sensors import find_gpiochip\n",
+        "from .adapters.usb_camera import UsbCamera\n",
+        "from .adapters.fake import ClearSensors\n",
+        "from osekkai.core.feature import FeatureSpec\n",
+        "from osekkai.core.instance_lock import InstanceLock\n",
+        "from osekkai.features.presence.api import borrow_camera\n",
+        "import flask\n",
+    ],
+)
+def test_self_check_の項目はほかの部品を読まない(source: str) -> None:
+    assert _check(source, CHECKS) != []
 
 
 def test_外のふつうのライブラリは読んでよい() -> None:
