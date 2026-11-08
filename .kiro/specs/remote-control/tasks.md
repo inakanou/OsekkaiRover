@@ -75,7 +75,7 @@
   - _Requirements: 9.5, 9.6, 9.7_
 
 - [ ] 3. アダプタと道具
-- [ ] 3.1 (P) 超音波と床センサーの実機のアダプタを作る
+- [x] 3.1 (P) 超音波と床センサーの実機のアダプタを作る
   - 超音波は echo の両方の端の時刻の差で距離を出す（待ち 30 ms、間隔 60 ms 以上）。上がらないときは読めない、上がって下がらないときは物がないとする
   - 床センサーは、チャンネルごとに書き込みと読み取りを 1 回の転送で行い、0〜4095 の外は読めないとする
   - Pi 5 の gpiochip を sysfs から見つける。基盤が使う GPIO には触らない。開けない・読めないときは例外を出さず読めない値を返す
@@ -223,3 +223,4 @@
 - 2.3: 知らせの文の表は availability.MESSAGES と message_for（OK は None）。service と web はこちらを使う
 - 2.4: 走行の判定は止まる側に倒す: 命令の時刻が今より先・NaN、後退を始めた時刻が今より先、far の印のない無限の距離は止める。前に進む命令は後退の印も解く（前を押す＝後ろを離した）
 - 2.6: 写真の保存先は photos.default_photo_dir(paths)。名前は Clock.now() の壁の時刻で、prune にも Clock.now() を渡す
+- 3.1: HatSensors(clock=...) は clock が要る（feature と cli で渡す）。実機で確かめること: ADC の 1 回の i2c_rdwr の読み方、lgpio の gpio_trigger・gpio_read・gpio_get_chip_info・alert と callback（ns の時刻）、基盤が開いている gpiochip をもう一度開けるか、sysfs に label があるか。30 ms で下がらないときは gpio_read で echo がまだ高いときだけ far
