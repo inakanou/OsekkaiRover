@@ -19,7 +19,8 @@ from osekkai.features.daruma.rules import EndReason, Rules, pick_chant, pick_pau
 from osekkai.features.routine.api import RoutineStatus
 
 NAME = "ﾃｽﾄ"
-SAY_GO = texts.say_with_name(texts.SAY_GO, NAME)
+SAY_GO = texts.say_with_name(texts.say_go(10), NAME)
+LAST = texts.SAY_ROUNDS_LEFT[1]  # さいごの いっかい
 SAY_WIN = texts.say_with_name(texts.SAY_WIN, NAME)
 SEED = 7
 STILL = RoundScript(motion=0.0)
@@ -123,9 +124,20 @@ def test_intro_shows_lcd_says_waits_5s_then_go_then_clears_presses() -> None:
         Call("show", texts.LCD_INTRO),
         Call("say", (texts.SAY_INTRO,)),
         Call("rest", (texts.INTRO_WAIT_S,)),
-        Call("say", (SAY_GO,)),
+        Call("say", (texts.say_with_name(texts.say_go(1), NAME),)),
         Call("clear_presses"),
     ]
+
+
+@pytest.mark.parametrize("max_rounds", [1, 10, 50])
+def test_go_says_configured_rounds(max_rounds: int) -> None:
+    io = FakeGameIO([RoundScript(press_while_chanting=True)])
+
+    _play(io, rules=make_rules(max_rounds=max_rounds))
+
+    go = texts.say_with_name(texts.say_go(max_rounds), NAME)
+    assert io.spoken[1] == go  # 1.3
+    assert go.startswith(f"{max_rounds}かいの うちに ")
 
 
 def test_presses_before_go_do_not_count() -> None:
@@ -142,9 +154,9 @@ def test_presses_before_go_do_not_count() -> None:
 
 
 def test_round_shows_chant_looks_away_then_chants_with_fixed_rng() -> None:
-    io = FakeGameIO([STILL])
+    io = FakeGameIO([STILL] * 10)
 
-    _play(io, rules=make_rules(max_rounds=1))
+    _play(io)  # 1 回目は残りの回数を話さない
 
     rng = random.Random(SEED)
     chant = pick_chant(rng)
@@ -167,7 +179,7 @@ def test_round_shows_chant_looks_away_then_chants_with_fixed_rng() -> None:
 def test_same_seed_gives_same_chants() -> None:
     def chants(seed: int) -> list[str]:
         io = FakeGameIO([STILL] * 4)
-        _play(io, seed=seed, rules=make_rules(max_rounds=4, nobody_rounds=5))
+        _play(io, seed=seed, rules=make_rules(max_rounds=4))
         return [s for s in io.spoken if s in {c.speech for c in texts.CHANTS}]
 
     first = chants(SEED)
@@ -284,10 +296,11 @@ def test_still_goes_to_next_round_without_rest() -> None:
     assert rests == [Call("rest", (texts.INTRO_WAIT_S,))]  # 始めの 5 秒だけ
     assert "nod" not in io.names
     assert texts.SAY_MOVED not in io.spoken
-    # 見終わった後の押下の確かめの次は、すぐ 2 回目の唱え言葉の LCD
+    # 見終わった後の押下の確かめの次は、すぐ 2 回目の残りの回数と唱え言葉の LCD
     first_watch = _after(io.calls, "motion", 2.5)
     assert first_watch[0].name == "pressed"
-    assert first_watch[1].name == "show"
+    assert first_watch[1] == Call("say", (LAST,))
+    assert first_watch[2].name == "show"
     assert io.rounds_started == 2
 
 
@@ -329,30 +342,98 @@ def _chant_speeches() -> set[str]:
 def test_end_says_covers_spoken_endings_only() -> None:
     assert END_SAYS == {
         EndReason.MAX_ROUNDS: texts.SAY_MAX_ROUNDS,
-        EndReason.NOBODY: texts.SAY_NOBODY,
         EndReason.NEXT_TASK: texts.SAY_NEXT_TASK,
         EndReason.NO_CAMERA: texts.SAY_NO_CAMERA,
         EndReason.CAMERA_LOST: texts.SAY_CAMERA_LOST,
     }
 
 
-def test_ends_after_max_rounds_with_phrase_then_home() -> None:
-    io = FakeGameIO([MOVED] * 15)
+def test_ends_after_max_rounds_with_rover_wins_phrase_then_home() -> None:
+    io = FakeGameIO([MOVED] * 10)
 
     result = _play(io)
 
-    assert result == GameResult(EndReason.MAX_ROUNDS, 15)
-    assert io.rounds_started == 15
+    assert result == GameResult(EndReason.MAX_ROUNDS, 10)
+    assert io.rounds_started == 10
     assert io.calls[-2:] == [Call("say", (texts.SAY_MAX_ROUNDS,)), Call("home")]
+    assert "ローバーの かち" in texts.SAY_MAX_ROUNDS  # 4.1
 
 
-def test_ends_after_five_still_rounds_with_nobody_phrase() -> None:
-    io = FakeGameIO([MOVED, STILL, STILL, STILL, STILL, STILL])
+def test_still_rounds_do_not_end_early() -> None:
+    # 止まり続けても、だれもいないとして終えない。10 回でローバーの勝ち（4.1）
+    io = FakeGameIO([STILL] * 10)
 
     result = _play(io)
 
-    assert result == GameResult(EndReason.NOBODY, 6)
-    assert io.calls[-2:] == [Call("say", (texts.SAY_NOBODY,)), Call("home")]
+    assert result == GameResult(EndReason.MAX_ROUNDS, 10)
+    assert io.spoken[-1] == texts.SAY_MAX_ROUNDS
+
+
+def _left_says_before_chants(io: FakeGameIO) -> list[str | None]:
+    """回ごとに、唱え言葉の直前に話した残りの回数の言葉（なければ None）。"""
+    left = set(texts.SAY_ROUNDS_LEFT.values())
+    found: list[str | None] = []
+    pending: str | None = None
+    for text in io.spoken:
+        if text in left:
+            pending = text
+        elif text in _chant_speeches():
+            found.append(pending)
+            pending = None
+    return found
+
+
+def test_rounds_left_said_only_for_last_three_rounds() -> None:
+    io = FakeGameIO([STILL] * 10)
+
+    _play(io)
+
+    assert _left_says_before_chants(io) == [None] * 7 + [
+        "あと さんかい",
+        "あと にかい",
+        "さいごの いっかい",
+    ]  # 4.2
+
+
+@pytest.mark.parametrize(
+    ("max_rounds", "expected"),
+    [
+        (1, ["さいごの いっかい"]),
+        (2, ["あと にかい", "さいごの いっかい"]),
+        (3, ["あと さんかい", "あと にかい", "さいごの いっかい"]),
+    ],
+)
+def test_rounds_left_with_few_rounds(max_rounds: int, expected: list[str]) -> None:
+    io = FakeGameIO([STILL] * max_rounds)
+
+    _play(io, rules=make_rules(max_rounds=max_rounds))
+
+    assert _left_says_before_chants(io) == expected
+
+
+def test_rounds_left_is_said_before_chant_lcd() -> None:
+    io = FakeGameIO([STILL] * 3)
+
+    _play(io, rules=make_rules(max_rounds=3))
+
+    chant = pick_chant(random.Random(SEED))
+    after_go = _after(io.calls, "say", texts.say_with_name(texts.say_go(3), NAME))
+    assert after_go[:4] == [
+        Call("clear_presses"),
+        Call("say", ("あと さんかい",)),
+        Call("show", (chant.lcd, texts.FACE_CHANT.text())),
+        Call("look", texts.POSE_AWAY),
+    ]
+
+
+def test_rounds_left_after_win_is_not_said() -> None:
+    io = FakeGameIO([STILL] * 7 + [RoundScript(press_in_pause=True)])
+
+    result = _play(io)
+
+    assert result == GameResult(EndReason.WIN, 7)
+    assert _left_says_before_chants(io) == [None] * 7 + ["あと さんかい"]
+    assert io.spoken[-1] == SAY_WIN
 
 
 def test_next_task_near_before_round_2_ends_with_round_phrase() -> None:
@@ -533,7 +614,7 @@ def test_logs_have_no_call_name_or_motion(caplog: pytest.LogCaptureFixture) -> N
     flag = _Flag()
     scenarios: list[tuple[FakeGameIO, Callable[[], EndReason | None]]] = [
         (FakeGameIO([RoundScript(motion=0.4321)] * 15), lambda: None),
-        (FakeGameIO([STILL] * 5), lambda: None),
+        (FakeGameIO([STILL] * 10), lambda: None),
         (FakeGameIO([RoundScript(press_in_pause=True)]), lambda: None),
         (FakeGameIO([RoundScript(motion=CameraLost(NAME))]), lambda: None),
         (FakeGameIO([MOVED], after_say=flag.raise_on(SAY_GO, EndReason.QUIET)), flag),

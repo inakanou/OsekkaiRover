@@ -27,15 +27,16 @@ def test_決まった言葉は要件の文言と同じ() -> None:
         "だるまさんが ころんだ、しよう！ローバーが おにだよ。"
         "ローバーから はなれて、スタートの ところに いってね"
     )  # 1.2
-    assert texts.SAY_GO == "ローバーに タッチ できたら {name}の かち。いくよー！"  # 1.3
+    assert texts.SAY_GO == (
+        "{rounds}かいの うちに ローバーに タッチ できたら {name}の かち。いくよー！"
+    )  # 1.3
     assert texts.SAY_NO_CAMERA == "ごめんね、カメラが ないと あそべないんだ"  # 1.4
     before = "あ、つぎの よていの じかんが ちかいね。また あとで あそぼうね"
     assert before == texts.SAY_NEXT_TASK_BEFORE  # 1.5
     assert texts.SAY_KORONDA == "ころんだ！"  # 2.4
     assert texts.SAY_MOVED == "あっ、うごいた！スタートに もどってね"  # 2.7
     assert texts.SAY_WIN == "タッチ されちゃった！{name}の かち！やったね！"  # 3.3
-    assert texts.SAY_MAX_ROUNDS == "きょうは ここまで！たのしかったね。また あそぼうね"  # 4.1
-    assert texts.SAY_NOBODY == "あれ、だれも いないのかな。また あそぼうね"  # 4.2
+    assert texts.SAY_MAX_ROUNDS == "おしまい！こんどは ローバーの かち。また あそぼうね"  # 4.1
     assert texts.SAY_NEXT_TASK == "あ、つぎの よていの じかんが ちかいね。また あそぼうね"  # 4.3
     assert (
         texts.SAY_CAMERA_LOST == "ごめんね、カメラが うまく うごかないみたい。また あそぼうね"
@@ -46,6 +47,38 @@ def test_始める前と途中の次の予定の言葉は違う() -> None:
     # 1.5 は「また あとで」、4.3 は「また」
     assert "また あとで あそぼうね" in texts.SAY_NEXT_TASK_BEFORE
     assert "あとで" not in texts.SAY_NEXT_TASK
+
+
+def test_だれもいないの言葉はない() -> None:
+    # 止まるのが上手な子と、だれもいないのは見分けられないので、その決まりはやめた
+    assert not hasattr(texts, "SAY_NOBODY")
+
+
+# --- 回数（1.3、4.2） ---
+
+
+@pytest.mark.parametrize("max_rounds", [1, 10, 50])
+def test_始めの言葉に設定の回数が入る(max_rounds: int) -> None:
+    said = texts.say_with_name(texts.say_go(max_rounds), "ゆう")
+    assert said == f"{max_rounds}かいの うちに ローバーに タッチ できたら ゆうの かち。いくよー！"
+
+
+def test_回数を入れても呼び名の場所は残る() -> None:
+    assert texts.NAME_SLOT in texts.say_go(10)
+    assert texts.ROUNDS_SLOT not in texts.say_go(10)
+
+
+def test_残りの回数の言葉は最後の_3_回だけ() -> None:
+    assert dict(texts.SAY_ROUNDS_LEFT) == {
+        3: "あと さんかい",
+        2: "あと にかい",
+        1: "さいごの いっかい",
+    }  # 4.2
+
+
+def test_残りの回数の言葉は書き換えられない() -> None:
+    with pytest.raises(TypeError):
+        texts.SAY_ROUNDS_LEFT[4] = "x"  # type: ignore[index]
 
 
 # --- 呼び名 ---
@@ -60,8 +93,8 @@ def test_呼び名を入れた言葉(template: str) -> None:
 
 @pytest.mark.parametrize("call_name", ["", "  "])
 def test_呼び名が空なら_きみ(call_name: str) -> None:
-    assert texts.say_with_name(texts.SAY_GO, call_name) == (
-        "ローバーに タッチ できたら きみの かち。いくよー！"
+    assert texts.say_with_name(texts.say_go(10), call_name) == (
+        "10かいの うちに ローバーに タッチ できたら きみの かち。いくよー！"
     )  # 3.4
     assert texts.say_with_name(texts.SAY_WIN, call_name) == (
         "タッチ されちゃった！きみの かち！やったね！"
@@ -71,6 +104,8 @@ def test_呼び名が空なら_きみ(call_name: str) -> None:
 def test_呼び名の波かっこはそのまま入る() -> None:
     # str.format を使わないので、呼び名の中の波かっこで壊れない
     assert "{x}の かち" in texts.say_with_name(texts.SAY_WIN, "{x}")
+    # 回数を先に入れるので、呼び名の中の回数の目印はそのまま
+    assert "{rounds}の かち" in texts.say_with_name(texts.say_go(10), "{rounds}")
 
 
 def test_呼び名のない言葉はそのまま() -> None:
