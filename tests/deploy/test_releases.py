@@ -153,8 +153,8 @@ def test_初めての準備は写しを作り_取得し_worktree_と仮想環境
             str(venv / "bin/pip"),
             "install",
             "-e",
-            f"{directory}[pi,voice]",
-        ),  # 音声の入口の依存も入れる
+            f"{directory}[pi,voice,conversation]",
+        ),  # 音声の入口とおしゃべりの依存も入れる
     ]
     assert all(call.check for call in fake.calls)
     pip_call = fake.calls[-1]

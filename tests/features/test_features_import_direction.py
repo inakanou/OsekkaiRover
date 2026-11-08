@@ -42,6 +42,14 @@ LAZY_ONLY_LIBS = {"jpholiday": frozenset({"osekkai.features.routine.calendar"})}
 FEATURE_ADAPTER_LIBS = {
     "osekkai.features.presence.adapters.opencv": frozenset({"cv2", "numpy"}),
     "osekkai.features.presence.adapters.picamera": frozenset({"picamera2"}),
+    # おしゃべりの Claude のアダプタだけが、関数の中で anthropic を読む（conversation の設計）
+    "osekkai.features.conversation.adapters.claude": frozenset({"anthropic"}),
+}
+
+# 基盤のアダプタのうち、決まったモジュールだけが読んでよいもの（狭い許し）。
+# おしゃべりの本体だけが、端末の偽物が動いているかの判定（typed_input_active）を読む
+ADAPTER_ALLOWLIST = {
+    "osekkai.adapters.fake.console": frozenset({"osekkai.features.conversation.feature"}),
 }
 
 
@@ -124,10 +132,18 @@ def _lazy_ok(module: str, ref: ImportRef) -> bool:
     return True
 
 
+def _adapter_allowed(module: str, name: str) -> bool:
+    """許しの表にある基盤のアダプタを、許されたモジュールが読み込むか。"""
+    return any(
+        _matches(name, adapter) and module in modules
+        for adapter, modules in ADAPTER_ALLOWLIST.items()
+    )
+
+
 def _is_forbidden(module: str, ref: ImportRef) -> bool:
     name = ref.name
     if _matches(name, ADAPTERS_PACKAGE):
-        return True
+        return not _adapter_allowed(module, name)
     if _matches(name, ENTRY_MODULE):
         return module not in ENTRY_ALLOWLIST
     if _is_other_feature(name, _own_feature(module)):
@@ -241,3 +257,52 @@ def test_見つけてあいさつのコマンドは_osekkai___main___を読み�
     source = "from osekkai.__main__ import build_devices\n"
     assert _check(source, "osekkai.features.presence.cli") == []
     assert _check(source, "osekkai.features.presence.feature") != []
+
+
+CLAUDE_ADAPTER = "osekkai.features.conversation.adapters.claude"
+CONVERSATION_FEATURE = "osekkai.features.conversation.feature"
+
+
+def test_Claude_のアダプタだけは関数の中で_anthropic_を読み込める() -> None:
+    lazy = "def f():\n    import anthropic\n"
+    assert _check(lazy, CLAUDE_ADAPTER) == []
+    assert _check("def f():\n    from anthropic import Anthropic\n", CLAUDE_ADAPTER) == []
+    # 一番上での読み込み・おしゃべりのほかのモジュール・ほかの機能は断る
+    assert _check("import anthropic\n", CLAUDE_ADAPTER) == ["anthropic"]
+    for module in (
+        CONVERSATION_FEATURE,
+        "osekkai.features.conversation.adapters.scripted",
+        "osekkai.features.conversation.checks",
+        "osekkai.features.presence.adapters.opencv",
+    ):
+        assert _check(lazy, module) == ["anthropic"], module
+
+
+def test_Claude_のアダプタでもほかのハードのライブラリは断る() -> None:
+    assert _check("def f():\n    import cv2\n", CLAUDE_ADAPTER) == ["cv2"]
+
+
+def test_おしゃべりの本体だけは端末の偽物の判定を読み込める() -> None:
+    source = "from osekkai.adapters.fake.console import typed_input_active\n"
+    assert _check(source, CONVERSATION_FEATURE) == []
+    assert _check("def f():\n    " + source, CONVERSATION_FEATURE) == []
+    # おしゃべりのほかのモジュールとほかの機能は断る
+    for module in (
+        "osekkai.features.conversation.flow",
+        "osekkai.features.conversation.adapters.scripted",
+        CLAUDE_ADAPTER,
+        "osekkai.features.conversation",
+        "osekkai.features.presence.feature",
+        "osekkai.features.routine.feature",
+    ):
+        assert _check(source, module) != [], module
+
+
+def test_おしゃべりの本体でも端末の偽物のほかの_adapters_は断る() -> None:
+    for source in (
+        "from osekkai.adapters.fake.clock import FakeClock\n",
+        "from osekkai.adapters.fake import devices\n",
+        "import osekkai.adapters.pi\n",
+        "import osekkai.adapters\n",
+    ):
+        assert _check(source, CONVERSATION_FEATURE) != [], source
