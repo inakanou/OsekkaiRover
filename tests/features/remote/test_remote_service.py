@@ -11,12 +11,19 @@ import logging
 import random
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from pathlib import Path
 
 import pytest
-from remote_fakes import FakeClock, FakeContext, FakeDrive, FakeNeck, ScriptedSensors
+from remote_fakes import (
+    FakeClock,
+    FakeContext,
+    FakeDrive,
+    FakeFrameSource,
+    FakeNeck,
+    ScriptedSensors,
+)
 
 from osekkai.adapters.fake.clock import JST
 from osekkai.core.lcd_text import center
@@ -25,10 +32,17 @@ from osekkai.features.remote import texts
 from osekkai.features.remote.config import RemoteConfig
 from osekkai.features.remote.drive_rules import Move
 from osekkai.features.remote.leases import LeaseKeeper, Level
+from osekkai.features.remote.media import Camera, FrameHub
 from osekkai.features.remote.operator_slot import OperatorSlot
 from osekkai.features.remote.photos import PhotoStore
 from osekkai.features.remote.ports import SensorReading
-from osekkai.features.remote.service import MAX_FAILURES, RemoteService, Reply
+from osekkai.features.remote.service import (
+    MAX_FAILURES,
+    PhotoResult,
+    RemoteService,
+    Reply,
+    Status,
+)
 
 ME = "hidden1"  # 印の偽の値（ログに出ないことを確かめる）
 OTHER = "hidden2"
@@ -38,18 +52,28 @@ EDGE = SensorReading(distance_cm=100.0, floor=(100, 1000, 1000))
 
 
 class _Rig:
-    def __init__(self, tmp_path: Path, *, threaded: bool = False, **config: object) -> None:
-        self.clock = FakeClock()
-        self.ctx = FakeContext(self.clock)
+    def __init__(
+        self,
+        tmp_path: Path,
+        *,
+        threaded: bool = False,
+        clock: FakeClock | None = None,
+        ctx: FakeContext | None = None,
+        hubs: Mapping[Camera, FrameHub] | None = None,
+        **config: object,
+    ) -> None:
+        self.clock = clock if clock is not None else FakeClock()
+        self.ctx = ctx if ctx is not None else FakeContext(self.clock)
         self.sensors = ScriptedSensors()
         self.lost = 0
         self.leases = LeaseKeeper(self.ctx.as_context(), self._on_lost)
         self.slot = OperatorSlot(self.clock)
+        self.photo_dir = tmp_path
         self.service = RemoteService(
             self.ctx.as_context(),
             RemoteConfig.model_validate({"enabled": True, **config}),
             self.sensors,
-            {},
+            hubs if hubs is not None else {},
             PhotoStore(tmp_path, self.clock),
             self.slot,
             self.leases,
@@ -58,7 +82,9 @@ class _Rig:
         self.service._threaded = threaded
 
     def _on_lost(self) -> None:
+        # 機能と同じく、中断の知らせをサービスに渡す（12.2）
         self.lost += 1
+        self.service.on_lost()
 
     def step(self) -> bool:
         return self.service._drive_step()
@@ -818,3 +844,377 @@ def test_おやすみの間は首とブッブーとダンスと話させるを�
     assert rig.service.dance(ME) is Reply.NOT_NOW
     assert rig.service.say_text(ME, "やあ") is Reply.NOT_NOW
     assert rig.ctx.calls == []
+
+
+# --- 写真（9.1〜9.4） ---
+
+NECK_JPEG = b"neck-jpg"
+USB_JPEG = b"usb-jpg"
+NECK_NAME = "20260101-090000-00-neck.jpg"
+USB_NAME = "20260101-090000-00-usb.jpg"
+
+
+class _StillSource(FakeFrameSource):
+    """撮った順を文脈の calls に覚える偽の映像の元。"""
+
+    def __init__(self, ctx: FakeContext, name: str, still: bytes | None) -> None:
+        super().__init__(still=still)
+        self._ctx = ctx
+        self._name = name
+
+    def still(self) -> bytes | None:
+        self._ctx._recorder.record("still", self._name)
+        return super().still()
+
+
+class _CamRig(_Rig):
+    """首と USB の偽のカメラのハブを持つ。"""
+
+    def __init__(
+        self,
+        tmp_path: Path,
+        *,
+        neck: bytes | None = NECK_JPEG,
+        usb: bytes | None = USB_JPEG,
+    ) -> None:
+        clock = FakeClock()
+        ctx = FakeContext(clock)
+        self.neck_source = _StillSource(ctx, "neck", neck)
+        self.usb_source = _StillSource(ctx, "usb", usb)
+        self.neck_hub = FrameHub(Camera.NECK, self.neck_source, clock, run_in_thread=False)
+        self.usb_hub = FrameHub(Camera.USB, self.usb_source, clock, run_in_thread=False)
+        super().__init__(
+            tmp_path,
+            clock=clock,
+            ctx=ctx,
+            hubs={Camera.NECK: self.neck_hub, Camera.USB: self.usb_hub},
+        )
+
+    def level(self) -> frozenset[Resource] | None:
+        lease = self.leases.lease
+        return None if lease is None else lease.resources
+
+
+@pytest.fixture
+def cams(tmp_path: Path) -> _CamRig:
+    return _CamRig(tmp_path)
+
+
+def _photo_in_thread(rig: _Rig) -> tuple[threading.Thread, list[PhotoResult]]:
+    results: list[PhotoResult] = []
+    thread = threading.Thread(target=lambda: results.append(rig.service.take_photo(ME)))
+    thread.start()
+    return thread, results
+
+
+def test_写真は走行を止めてLCDを出し_話し終えてから首とUSBを撮って保存する(
+    cams: _CamRig, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.DEBUG)
+    cams.service.drive(ME, Move.FWD)
+    cams.step()
+    before = len(cams.ctx.calls)
+    result = cams.service.take_photo(ME)
+    assert result == PhotoResult((NECK_NAME, USB_NAME), Reply.OK)
+    calls = [c for c in cams.ctx.calls[before:] if c[0] in ("stop", "show", "say", "said", "still")]
+    assert calls == [
+        ("stop",),
+        _show(texts.LCD_PHOTO, texts.FACE_DRIVE.text()),
+        ("say", texts.SAY_PHOTO_CHEESE, True),
+        ("said", texts.SAY_PHOTO_CHEESE),
+        ("still", "neck"),
+        ("still", "usb"),
+        ("say", texts.SAY_PHOTO_DONE, True),
+        ("said", texts.SAY_PHOTO_DONE),
+    ]
+    assert (cams.photo_dir / NECK_NAME).read_bytes() == NECK_JPEG
+    assert (cams.photo_dir / USB_NAME).read_bytes() == USB_JPEG
+    # 走る命令は STOP になっている（9.1、4.3）
+    cams.step()
+    assert cams.moves()[-1] == ("stop",)
+    assert NECK_NAME not in caplog.text
+    assert USB_NAME not in caplog.text
+
+
+def test_写真は撮れたカメラの分だけ返す(tmp_path: Path) -> None:
+    rig = _CamRig(tmp_path, neck=None)
+    assert rig.service.take_photo(ME) == PhotoResult((USB_NAME,), Reply.OK)
+    assert rig.says()[-1] == ("said", texts.SAY_PHOTO_DONE)
+
+
+def test_1枚も撮れなければ謝ってFAILEDを返す(tmp_path: Path) -> None:
+    rig = _CamRig(tmp_path, neck=None, usb=None)
+    assert rig.service.take_photo(ME) == PhotoResult((), Reply.FAILED)
+    assert rig.says()[-1] == ("said", texts.SAY_PHOTO_FAILED)
+    assert list(tmp_path.glob("*.jpg")) == []
+
+
+def test_撮っている途中の次の写真の要求は無視する(cams: _CamRig) -> None:
+    cams.ctx.speech.hold()
+    thread, results = _photo_in_thread(cams)
+    assert cams.ctx.speech.speaking.wait(WAIT_S)
+    assert cams.service.take_photo(ME) == PhotoResult((), Reply.IGNORED)
+    cams.ctx.speech.release()
+    thread.join(WAIT_S)
+    assert results == [PhotoResult((NECK_NAME, USB_NAME), Reply.OK)]
+    # 終われば、また撮れる
+    assert cams.service.take_photo(ME).reply is Reply.OK
+
+
+@pytest.mark.parametrize(
+    "interrupt",
+    [lambda r: r.ctx.preempt_latest(), lambda r: r.service.halt()],
+    ids=["中断の知らせ", "止め方"],
+)
+def test_写真の途中で止められたら撮らずに話さない(
+    cams: _CamRig, interrupt: Callable[[_Rig], object]
+) -> None:
+    cams.ctx.speech.hold()
+    thread, results = _photo_in_thread(cams)
+    assert cams.ctx.speech.speaking.wait(WAIT_S)
+    interrupt(cams)
+    cams.ctx.speech.release()
+    thread.join(WAIT_S)
+    assert results == [PhotoResult((), Reply.FAILED)]
+    assert [c for c in cams.ctx.calls if c[0] == "still"] == []
+    assert cams.says() == [("said", texts.SAY_PHOTO_CHEESE)]
+
+
+def test_ほかの端末の写真は断る(cams: _CamRig) -> None:
+    cams.service.drive(OTHER, Move.STOP)
+    assert cams.service.take_photo(ME) == PhotoResult((), Reply.NOT_NOW)
+    assert [c for c in cams.ctx.calls if c[0] == "still"] == []
+
+
+# --- 定期の確かめと止め方（3.3、3.4、11.4、12.2、12.4、12.6） ---
+
+
+@pytest.mark.parametrize(
+    "setup",
+    [
+        lambda r: r.clock.set_now(datetime(2026, 1, 1, 20, 0, tzinfo=JST)),
+        lambda r: r.ctx.request_quiet(),
+        lambda r: r.clock.set_synchronized(False),
+    ],
+    ids=["時間帯の終わり", "おやすみ", "時刻が確かでない"],
+)
+def test_使えなくなれば止めてリースと首のカメラを返す(
+    cams: _CamRig, setup: Callable[[_Rig], None]
+) -> None:
+    cams.service.drive(ME, Move.FWD)
+    cams.step()
+    setup(cams)
+    cams.service.tick()
+    assert cams.moves() == [("drive", 0.0, 20), ("stop",)]
+    assert cams.leases.lease is None
+    assert ("release",) in cams.ctx.calls
+    assert not cams.neck_hub.available()
+    assert cams.neck_source.closes >= 1
+    assert not cams.service.may_stream(ME)
+    assert not cams.step()
+
+
+def test_時間帯の終わりの知らせを端末に出す(cams: _CamRig) -> None:
+    cams.service.drive(ME, Move.FWD)
+    cams.clock.set_now(datetime(2026, 1, 1, 20, 0, tzinfo=JST))
+    cams.service.tick()
+    assert cams.service.status(ME).message == texts.MSG_OUT_OF_HOURS
+
+
+@pytest.mark.parametrize(
+    "interrupt",
+    [
+        lambda r: r.service.halt(),
+        lambda r: r.service.on_lost(),
+        lambda r: (r.ctx.request_quiet(), r.service.tick()),
+    ],
+    ids=["止め方", "中断の後片付け", "おやすみの確かめ"],
+)
+def test_止め方でダンスは次の段に進まない(
+    rig: _Rig, monkeypatch: pytest.MonkeyPatch, interrupt: Callable[[_Rig], object]
+) -> None:
+    gate = _Gate(rig, monkeypatch)
+    rig.service.dance(ME)
+    assert gate.waiting.wait(WAIT_S)
+    lease = rig.leases.lease
+    assert lease is not None
+    interrupt(rig)
+    assert not rig.service._dance_go(lease, ME)
+    gate.open()
+    _wait(lambda: not rig.service._dancing)
+    assert _dance_looks(rig) == [("look", 30.0, 15.0)]
+
+
+def test_止め方は走行を止めて首のカメラを返す(cams: _CamRig) -> None:
+    cams.service.drive(ME, Move.FWD)
+    cams.step()
+    cams.service.halt()
+    assert cams.moves()[-1] == ("stop",)
+    assert not cams.neck_hub.available()
+    cams.step()
+    assert cams.moves()[-1] == ("stop",)
+
+
+def test_中断の後片付けは話さず待たず借りない(cams: _CamRig) -> None:
+    cams.service.drive(ME, Move.FWD)
+    cams.step()
+    cams.ctx.preempt_latest()
+    after = cams.ctx.calls[cams.ctx.calls.index(("preempt",)) :]
+    assert [c for c in after if c[0] in ("say", "acquire")] == []
+    assert not cams.neck_hub.available()
+    assert not cams.service.neck_allowed()
+
+
+def test_10秒の交代で走行を止め_首を見る端末がいなければリースを返す(cams: _CamRig) -> None:
+    cams.service.drive(ME, Move.FWD)
+    cams.step()
+    cams.clock.advance(OperatorSlot.IDLE_SECONDS)
+    cams.service.tick()
+    assert cams.slot.holder() is None
+    assert ("stop",) in cams.moves()
+    assert cams.level() is None
+    assert not cams.neck_hub.available()
+
+
+def test_10秒の交代で首を見る端末がいれば見るだけの段に下げる(cams: _CamRig) -> None:
+    cams.service.drive(ME, Move.FWD)
+    cams.step()
+    with cams.neck_hub.viewer():
+        cams.clock.advance(OperatorSlot.IDLE_SECONDS)
+        cams.service.tick()
+        assert ("stop",) in cams.moves()
+        assert cams.level() == frozenset({Resource.NECK})
+        assert cams.service.neck_allowed()
+    assert not cams.step()
+
+
+def test_交代の前は段を下げない(cams: _CamRig) -> None:
+    cams.service.drive(ME, Move.FWD)
+    cams.clock.advance(OperatorSlot.IDLE_SECONDS - 0.5)
+    cams.service.tick()
+    assert cams.slot.holder() == ME
+    level = cams.level()
+    assert level is not None
+    assert Resource.DRIVE in level
+
+
+def test_首を見る端末が来れば見るだけの段を借り_いなくなれば返す(cams: _CamRig) -> None:
+    with cams.neck_hub.viewer():
+        cams.service.tick()
+        assert cams.level() == frozenset({Resource.NECK})
+        assert cams.service.neck_allowed()
+    cams.service.tick()
+    assert cams.level() is None
+    assert not cams.service.neck_allowed()
+    assert not cams.neck_hub.available()
+
+
+def test_見るだけの段を借りられなければ5秒おいて借り直す(cams: _CamRig) -> None:
+    cams.ctx.busy = {Resource.NECK}
+    with cams.neck_hub.viewer():
+        cams.service.tick()
+        assert cams.level() is None
+        cams.ctx.busy = set()
+        cams.clock.advance(LeaseKeeper.RETRY_SECONDS - 0.5)
+        cams.service.tick()
+        assert cams.level() is None
+        cams.clock.advance(0.5)
+        cams.service.tick()
+        assert cams.level() == frozenset({Resource.NECK})
+
+
+def test_確かめでカメラのハブも進める(cams: _CamRig, monkeypatch: pytest.MonkeyPatch) -> None:
+    ticked: list[Camera] = []
+    for hub in (cams.neck_hub, cams.usb_hub):
+        monkeypatch.setattr(hub, "tick", lambda c=hub.camera: ticked.append(c))
+    cams.service.tick()
+    assert ticked == [Camera.NECK, Camera.USB]
+
+
+def test_確かめの思わぬ失敗は型の名前だけ残して走行を止める(
+    cams: _CamRig, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    cams.service.drive(ME, Move.FWD)
+    cams.step()
+
+    def broken() -> bool:
+        raise RuntimeError("hidden3")
+
+    monkeypatch.setattr(cams.slot, "expire", broken)
+    cams.service.tick()
+    assert cams.moves()[-1] == ("stop",)
+    assert "RuntimeError" in caplog.text
+    assert "hidden3" not in caplog.text
+    cams.step()
+    assert cams.moves()[-1] == ("stop",)
+
+
+# --- 状態の知らせ（3.2、8.3、8.6、12.2） ---
+
+
+def test_状態は操作する端末と速さとカメラと踊りを返す(cams: _CamRig) -> None:
+    cams.service.set_fast(ME, True)
+    cams.usb_hub._available = False
+    assert cams.service.status(ME) == Status(
+        message=None,
+        operator="me",
+        fast=True,
+        cameras={Camera.NECK: True, Camera.USB: False},
+        dancing=False,
+    )
+    other = cams.service.status(OTHER)
+    assert other.operator == "other"
+    assert other.message == texts.MSG_OTHER_OPERATOR
+
+
+def test_操作する端末がいなければnone(cams: _CamRig) -> None:
+    status = cams.service.status(ME)
+    assert status.operator == "none"
+    assert status.message is None
+    assert not status.fast
+
+
+def test_中断の後はほかのことをしている知らせ(cams: _CamRig) -> None:
+    cams.service.drive(ME, Move.FWD)
+    cams.ctx.preempt_latest()
+    assert cams.service.status(ME).message == texts.MSG_BUSY
+
+
+def test_危険で止めた知らせは操作する端末に出す(cams: _CamRig) -> None:
+    cams.sensors.set(NEAR)
+    cams.service.drive(ME, Move.FWD)
+    cams.step()
+    assert cams.service.status(ME).message == texts.MSG_DANGER_OBSTACLE
+    assert cams.service.status(OTHER).message == texts.MSG_OTHER_OPERATOR
+    _wait(lambda: not cams.service._speaking)
+
+
+def test_踊っている間は状態に出す(rig: _Rig, monkeypatch: pytest.MonkeyPatch) -> None:
+    gate = _Gate(rig, monkeypatch)
+    rig.service.dance(ME)
+    assert gate.waiting.wait(WAIT_S)
+    assert rig.service.status(ME).dancing
+    gate.open()
+    _wait(lambda: not rig.service._dancing)
+    assert not rig.service.status(ME).dancing
+
+
+@pytest.mark.parametrize(
+    ("setup", "message"),
+    [
+        (
+            lambda r: r.clock.set_now(datetime(2026, 1, 1, 6, 59, tzinfo=JST)),
+            texts.MSG_OUT_OF_HOURS,
+        ),
+        (lambda r: r.ctx.request_quiet(), texts.MSG_QUIET),
+        (lambda r: r.clock.set_synchronized(False), texts.MSG_NO_CLOCK),
+    ],
+    ids=["時間帯の外", "おやすみ", "時刻が確かでない"],
+)
+def test_使えないときは映像を止め_知らせを出す(
+    cams: _CamRig, setup: Callable[[_Rig], None], message: str
+) -> None:
+    assert cams.service.may_stream(ME)
+    setup(cams)
+    assert not cams.service.may_stream(ME)
+    assert cams.service.status(ME).message == message

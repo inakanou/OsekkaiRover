@@ -1,5 +1,7 @@
-"""操作の受け付けと、0.1 秒ごとの走行の繰り返し、首・ブッブー・ダンス・話させる
-（要件 3.2、3.4、4.2〜4.8、5.1〜5.6、6.1〜6.3、7.1〜7.6、10.1〜10.5、11.1〜11.3、12.3）。
+"""操作の受け付けと、0.1 秒ごとの走行の繰り返し、首・ブッブー・ダンス・話させる、
+写真・状態の知らせ・定期の確かめ・止め方
+（要件 3.2〜3.4、4.2〜4.8、5.1〜5.6、6.1〜6.3、7.1〜7.6、8.6、9.1〜9.4、10.1〜10.5、
+11.1〜11.4、12.2〜12.4、12.6）。
 
 - どの操作も「使えるか → 操作する端末か → 操作の段のリース」の順で確かめる。
   だめなら NOT_NOW を返し、その端末への知らせの文を覚える
@@ -16,6 +18,13 @@
   ログにも、このオブジェクトにも残さない
 - ダンスと話す間の LCD は、走行の LCD より先に出す（危険の「ｽﾄｯﾌﾟ!」だけはさらに先）。
   終われば繰り返しが走行の表示に戻す
+- 写真は要求のスレッドで撮る。「はい、チーズ！」を話し終えてから首・USB の順に 1 枚ずつ撮る。
+  撮っている途中の次の要求は無視する（9.4）。写真の名前はログに出さない
+- 定期の確かめ（tick）は機能のスレッドで 0.5 秒ごとに呼ぶ。走行の繰り返しからは呼ばない
+  （want は最長 2〜3 秒止まることがある）。使えなくなれば止めて返し、10 秒の交代で段を下げ、
+  見るだけの段を借り直し、首を持たない間は首のカメラを返す
+- 中断の後片付け（on_lost）は基盤の短いスレッドで呼ばれる。止める合図を出し、首のカメラを返すだけ。
+  話さない・待たない・リースの段を変えない（12.2）
 - ログには型の名前と決まった文言だけを出す。印・文字・言葉は出さない
 """
 
@@ -26,6 +35,7 @@ import random
 import re
 import threading
 from collections.abc import Mapping
+from dataclasses import dataclass
 from enum import Enum
 from typing import Final, Literal
 
@@ -61,8 +71,10 @@ __all__ = [
     "LOOK_STEP_DEG",
     "MAX_FAILURES",
     "MAX_TEXT",
+    "PhotoResult",
     "RemoteService",
     "Reply",
+    "Status",
     "clean_text",
 ]
 
@@ -87,6 +99,13 @@ _LOOK_STEPS: Final[Mapping[str, tuple[float, float]]] = {
 }
 _OVERLAY_DANCE: Final = "dance"
 _OVERLAY_TALK: Final = "talk"
+_OVERLAY_PHOTO: Final = "photo"
+_FACE_PHOTO: Final = texts.FACE_DRIVE  # 写真の LCD は笑顔
+# 写真を撮る順（首が先）と、保存の名前のカメラ
+_PHOTO_CAMERAS: Final[tuple[tuple[Camera, Literal["neck", "usb"]], ...]] = (
+    (Camera.NECK, "neck"),
+    (Camera.USB, "usb"),
+)
 
 _DRIVE_LCD: Final[Mapping[LcdState, str]] = {
     LcdState.STOPPED: texts.LCD_IDLE,
@@ -116,6 +135,25 @@ class Reply(Enum):
     EMPTY = "empty"
     IGNORED = "ignored"
     FAILED = "failed"
+
+
+@dataclass(frozen=True)
+class Status:
+    """端末ごとの状態。"""
+
+    message: str | None  # 端末に出す知らせ（使えるか・ほかの端末・ほかの機能・危険）
+    operator: Literal["me", "other", "none"]
+    fast: bool
+    cameras: Mapping[Camera, bool]  # カメラごとの使えるか（8.3）
+    dancing: bool
+
+
+@dataclass(frozen=True)
+class PhotoResult:
+    """写真の結果。"""
+
+    names: tuple[str, ...]  # 撮れた写真の名前（首が先）
+    reply: Reply
 
 
 def clean_text(text: str) -> str:
@@ -176,6 +214,11 @@ class RemoteService:
         self._lcd_lock = threading.Lock()
         self._overlays: list[tuple[str, str, Face]] = []  # 走行より先に出す表示（後が上）
         self._lcd_dirty = False  # 走行の表示を出し直す
+        # 写真（9.4）。撮っている途中の印と、止める合図
+        self._photo_lock = threading.Lock()
+        self._photo_abort = threading.Event()
+        # 段の決め方と借り方を 1 つずつにする（受け付けと定期の確かめが入れ違わない）
+        self._level_lock = threading.Lock()
 
     # --- 操作 ---
 
@@ -280,10 +323,98 @@ class RemoteService:
             self._fast = fast
         return Reply.OK
 
-    def close(self) -> None:
-        """走行の繰り返しを止めて待つ。何度呼んでもよい。"""
-        self._closing.set()
+    def take_photo(self, token: str) -> PhotoResult:
+        """走行を止め、「はい、チーズ！」を話し終えてから 1 枚ずつ撮って保存する（9.1〜9.4）。
+
+        要求のスレッドで待つ。撮っている途中の次の要求は IGNORED。
+        途中で止められたら（中断の知らせ・止め方・閉じる）、撮らず話さずに FAILED。
+        """
+        lease = self._accept(token)
+        if lease is None:
+            return PhotoResult((), Reply.NOT_NOW)
+        if not self._photo_lock.acquire(blocking=False):  # 9.4
+            return PhotoResult((), Reply.IGNORED)
+        try:
+            self._photo_abort.clear()
+            return self._photo(lease)
+        finally:
+            self._photo_lock.release()
+
+    def status(self, token: str) -> Status:
+        """その端末の状態。映像を見る・状態を聞くは操作に入らないので、席を取らない。"""
+        holder = self._slot.holder()
+        operator: Literal["me", "other", "none"]
+        if holder is None:
+            operator = "none"
+        elif holder == token:
+            operator = "me"
+        else:
+            operator = "other"
         with self._lock:
+            fast = self._fast
+            dancing = self._dancing
+        return Status(
+            message=self._status_message(token, operator),
+            operator=operator,
+            fast=fast,
+            cameras={camera: hub.available() for camera, hub in self._hubs.items()},
+            dancing=dancing,
+        )
+
+    def may_stream(self, token: str) -> bool:
+        """映像を続けてよいか。時間帯の外・おやすみ・時刻が確かでないなら偽（8.6）。
+
+        ログインが有効かは web が確かめる。印はここでは使わない。
+        """
+        del token
+        return self._availability() is Availability.OK
+
+    def neck_allowed(self) -> bool:
+        """首のカメラを借りてよいか（NeckSource の may_borrow）。
+
+        首のリースを持ち、中断の後でない。
+        """
+        lease = self._leases.lease
+        return lease is not None and Resource.NECK in lease.resources and not self._leases.lost
+
+    def tick(self) -> None:
+        """定期の確かめ。機能のスレッドから 0.5 秒ごとに呼ぶ（走行の繰り返しからは呼ばない）。
+
+        思わぬ失敗は型の名前だけ残し、走行を止める（12.6）。
+        """
+        try:
+            self._tick()
+        except Exception as e:
+            logger.warning("定期の確かめで失敗しました: %s", type(e).__name__)
+            self._stop_driving()
+
+    def halt(self) -> None:
+        """止め方（時間帯の終わり・おやすみ）。走行を止め、ダンスと写真に止める合図を出し、
+        首のカメラを返す。話している途中の言葉は、基盤の決まりで言い終える（11.4）。
+        """
+        self._signal_stop()
+        self._stop_driving()
+        self._release_neck_camera()
+
+    def on_lost(self) -> None:
+        """中断の後片付け（LeaseKeeper の on_lost。基盤の短いスレッド）。
+
+        止める合図を出し、走る命令を消し、首のカメラを返す。
+        話さない・待たない・リースの段を変えない（12.2）。走行は基盤が止める。
+        """
+        self._signal_stop()
+        with self._lock:
+            self._command = None
+        self._release_neck_camera()
+
+    def close(self) -> None:
+        """走行の繰り返し・ダンス・写真を止め、繰り返しを待つ。何度呼んでもよい。"""
+        self._closing.set()
+        self._photo_abort.set()
+        with self._lock:
+            self._command = None
+            if self._dancing:
+                self._dance_stop = True
             thread = self._thread
         if thread is not None and thread is not threading.current_thread():
             thread.join(JOIN_S)
@@ -295,23 +426,18 @@ class RemoteService:
 
         受け付けたら操作の段のリースを返す。断ったら None。
         """
-        clock = self._ctx.clock
-        availability = judge_availability(
-            synced=clock.is_synchronized(),
-            now=clock.now(),
-            quiet=self._ctx.is_quiet,
-            hours=self._config.hours,
-        )
+        availability = self._availability()
         if availability is not Availability.OK:  # 11.1〜11.3
             self._refuse(token, message_for(availability))
             return None
-        if self._slot.claim(token) is ClaimResult.OTHER:  # 3.2
-            self._refuse(token, message_for(Availability.OTHER_OPERATOR))
-            return None
-        # want はロックを持たずに呼ぶ（止まることがある）
-        if self._leases.want(Level.OPERATE) is not Level.OPERATE:  # 12.3
-            self._refuse(token, message_for(Availability.BUSY))
-            return None
+        # want は _lock を持たずに呼ぶ（止まることがある）
+        with self._level_lock:
+            if self._slot.claim(token) is ClaimResult.OTHER:  # 3.2
+                self._refuse(token, message_for(Availability.OTHER_OPERATOR))
+                return None
+            if self._leases.want(Level.OPERATE) is not Level.OPERATE:  # 12.3
+                self._refuse(token, message_for(Availability.BUSY))
+                return None
         lease = self._leases.lease
         if lease is None:
             self._refuse(token, message_for(Availability.BUSY))
@@ -330,6 +456,32 @@ class RemoteService:
                 self._thread = threading.Thread(target=self._run, name="remote-drive", daemon=True)
                 self._thread.start()
         return lease
+
+    def _availability(self) -> Availability:
+        clock = self._ctx.clock
+        return judge_availability(
+            synced=clock.is_synchronized(),
+            now=clock.now(),
+            quiet=self._ctx.is_quiet,
+            hours=self._config.hours,
+        )
+
+    def _status_message(self, token: str, operator: str) -> str | None:
+        """状態に出す知らせ。使えるか → ほかの端末 → ほかの機能 → 危険（操作する端末だけ）の順。"""
+        availability = self._availability()
+        if availability is not Availability.OK:
+            return message_for(availability)
+        if operator == "other":
+            return message_for(Availability.OTHER_OPERATOR)
+        busy = message_for(Availability.BUSY)
+        with self._lock:
+            notice = self._notices.get(token)
+            danger = self._danger_message
+        if self._leases.lost or notice == busy:
+            return busy
+        if operator == "me":
+            return danger
+        return None
 
     def _refuse(self, token: str, message: str | None) -> None:
         with self._lock:
@@ -519,6 +671,124 @@ class RemoteService:
         finally:
             with self._lock:
                 self._speaking = False
+
+    # --- 定期の確かめと止め方 ---
+
+    def _tick(self) -> None:
+        neck = self._hubs.get(Camera.NECK)
+        if self._availability() is not Availability.OK:
+            # 時間帯の終わり・おやすみ・時刻が確かでない（11.4）
+            self.halt()
+            with self._level_lock:
+                if self._level() is not Level.NONE:
+                    self._leases.want(Level.NONE)
+        else:
+            if self._slot.expire():  # 3.3、3.4
+                self._stop_driving()
+            with self._level_lock:
+                if self._slot.holder() is None:
+                    # 首の映像を見る端末がいれば見るだけ、いなければなし（12.4）。
+                    # 見るだけの借り直しは LeaseKeeper が 5 秒おく
+                    viewers = neck.viewers() if neck is not None else 0
+                    target = Level.VIEW if viewers > 0 else Level.NONE
+                    if self._level() is not target:
+                        self._leases.want(target)
+        # 首を持たない（取り上げ・下げた段）なら首のカメラを返す（4.3）
+        if self._level() is Level.NONE:
+            self._release_neck_camera()
+        for hub in self._hubs.values():
+            hub.tick()
+
+    def _level(self) -> Level:
+        """今持っているリースの段。"""
+        lease = self._leases.lease
+        if lease is None:
+            return Level.NONE
+        if Resource.DRIVE in lease.resources:
+            return Level.OPERATE
+        return Level.VIEW
+
+    def _signal_stop(self) -> None:
+        """ダンスと写真に止める合図を出す。"""
+        self._photo_abort.set()
+        with self._lock:
+            if self._dancing:
+                self._dance_stop = True
+
+    def _stop_driving(self) -> None:
+        """走る命令を STOP にして、すぐ止める。"""
+        with self._lock:
+            self._command = Command(Move.STOP, self._ctx.clock.monotonic())
+        self._stop_quietly(self._last_lease())
+
+    def _release_neck_camera(self) -> None:
+        neck = self._hubs.get(Camera.NECK)
+        if neck is not None:
+            neck.release_neck()
+
+    # --- 写真 ---
+
+    def _photo_go(self, lease: Lease) -> bool:
+        """写真を続けてよいか。"""
+        return (
+            lease.active
+            and not lease.preempt_requested.is_set()
+            and not self._photo_abort.is_set()
+            and not self._closing.is_set()
+        )
+
+    def _photo(self, lease: Lease) -> PhotoResult:
+        with self._lock:
+            self._command = Command(Move.STOP, self._ctx.clock.monotonic())  # 4.3
+        self._stop_quietly(lease)
+        try:
+            self._overlay_on(lease, _OVERLAY_PHOTO, texts.LCD_PHOTO, _FACE_PHOTO)
+            self._photo_say(lease, texts.SAY_PHOTO_CHEESE)
+            if not self._photo_go(lease):
+                return PhotoResult((), Reply.FAILED)
+            stills: list[tuple[Literal["neck", "usb"], bytes]] = []
+            for camera, name in _PHOTO_CAMERAS:
+                hub = self._hubs.get(camera)
+                if hub is None:
+                    continue
+                jpeg = hub.still()
+                if jpeg is not None:
+                    stills.append((name, jpeg))
+            taken_at = self._ctx.clock.now()
+            names: list[str] = []
+            for name, jpeg in stills:
+                try:
+                    names.append(self._photos.save(name, jpeg, taken_at=taken_at))
+                except Exception as e:
+                    logger.warning("写真を保存できませんでした: %s", type(e).__name__)
+            if not self._photo_go(lease):
+                # 止められた。撮れた写真は返すが、話さない
+                return PhotoResult(tuple(names), Reply.OK if names else Reply.FAILED)
+            self._photo_say(lease, texts.SAY_PHOTO_DONE if names else texts.SAY_PHOTO_FAILED)
+            return PhotoResult(tuple(names), Reply.OK if names else Reply.FAILED)
+        except LeaseRevoked:
+            return PhotoResult((), Reply.FAILED)
+        except Exception as e:
+            logger.warning("写真を撮れませんでした: %s", type(e).__name__)
+            return PhotoResult((), Reply.FAILED)
+        finally:
+            self._overlay_off(lease, _OVERLAY_PHOTO)
+
+    def _photo_say(self, lease: Lease, text: str) -> None:
+        """写真の決まった言葉を話し終えるまで待つ。ほかの発話の途中なら、その終わりを待つ。
+
+        話している印は、空いていたときだけ自分で立てて下ろす。
+        """
+        with self._lock:
+            mine = not self._speaking
+            if mine:
+                self._speaking = True
+        try:
+            lease.voice.say(text, keep=True)
+        finally:
+            if mine:
+                with self._lock:
+                    self._speaking = False
 
     # --- 首・ダンス・話させる ---
 
