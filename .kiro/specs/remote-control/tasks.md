@@ -225,3 +225,4 @@
 - 2.6: 写真の保存先は photos.default_photo_dir(paths)。名前は Clock.now() の壁の時刻で、prune にも Clock.now() を渡す
 - 3.1: HatSensors(clock=...) は clock が要る（feature と cli で渡す）。実機で確かめること: ADC の 1 回の i2c_rdwr の読み方、lgpio の gpio_trigger・gpio_read・gpio_get_chip_info・alert と callback（ns の時刻）、基盤が開いている gpiochip をもう一度開けるか、sysfs に label があるか。30 ms で下がらないときは gpio_read で echo がまだ高いときだけ far
 - 3.2: 実機の OpenCV 4.10 は CONVERT_RGB=0 で (1, N) の uint8 を返し、C270 の JPEG に DHT はない（実機で確かめた）
+- 3.1: 基盤が HAT の MCU を起こし直した直後（起動・止めるとき）の約 1 秒、ADC は 2 回とも同じでたらめの高い値（2571・3085・3599）を返した。bus を開いてから 2 秒は床を読めない（危険）とする

@@ -267,6 +267,12 @@ def _find(sys_root: Path, dev_root: Path | None = None, lg: FakeLgpio | None = N
     return find_gpiochip(sys_root=sys_root, dev_root=dev, lgpio_module=lg or FakeLgpio())
 
 
+def _warm_up(hat: HatSensors, clock: FakeClock) -> None:
+    """1 回読んで bus を開き、床の読み始めの待ちを過ごす。"""
+    hat.read()
+    clock.advance(sensors.FLOOR_WARMUP_S)
+
+
 def _echo(lg: FakeLgpio, width_ns: int) -> None:
     lg.edges = [(1, RISE_NS), (0, RISE_NS + width_ns)]
 
@@ -408,14 +414,16 @@ def test_口の型を満たす(tmp_path: Path) -> None:
 def test_床の値は上と下のバイトを組み立てる(tmp_path: Path) -> None:
     bus = FakeSmbus()
     bus.values = {(0x14, 0x17): (0x01, 0x2C), (0x14, 0x16): (0x0F, 0xFF), (0x14, 0x15): (0, 0)}
-    hat, lg, _, _ = _make(tmp_path, bus=bus)
+    hat, lg, _, clock = _make(tmp_path, bus=bus)
     _echo(lg, 1_000_000)
+    _warm_up(hat, clock)
     assert hat.read().floor == (300, 4095, 0)
 
 
 def test_書く転送と読む転送を分けて_2_回ずつ読む(tmp_path: Path) -> None:
-    hat, lg, bus, _ = _make(tmp_path)
+    hat, lg, bus, clock = _make(tmp_path)
     _echo(lg, 1_000_000)
+    _warm_up(hat, clock)
     hat.read()
     assert all(len(t) == 1 for t in bus.transfers)
     last = [(m.addr, m.data, m.length) for (m,) in bus.transfers[-12:]]
@@ -433,8 +441,9 @@ def test_2_回の読みが食いちがえばその床は読めない(tmp_path: P
         (0x14, 0x16): [(0x05, 0xD4), (0x00, 0x10)],
         (0x14, 0x15): (0x04, 0xD1),
     }
-    hat, lg, _, _ = _make(tmp_path, bus=bus)
+    hat, lg, _, clock = _make(tmp_path, bus=bus)
     _echo(lg, 1_000_000)
+    _warm_up(hat, clock)
     assert hat.read().floor == (1499, None, 1233)
 
 
@@ -448,16 +457,61 @@ def test_2_回の読みの差が許しの中なら後の値を使う(tmp_path: P
         (0x14, 0x16): [(0, 200), (0, 200 + tolerance + 1)],
         (0x14, 0x15): (0, 30),
     }
-    hat, lg, _, _ = _make(tmp_path, bus=bus)
+    hat, lg, _, clock = _make(tmp_path, bus=bus)
     _echo(lg, 1_000_000)
+    _warm_up(hat, clock)
     assert hat.read().floor == (100 + tolerance, None, 30)
+
+
+def test_bus_を開いてから_2_秒は床を読めないとする(tmp_path: Path) -> None:
+    assert sensors.FLOOR_WARMUP_S == 2.0
+    bus = FakeSmbus()
+    # MCU を起こし直した直後のでたらめ（2 回とも同じで、段差がないように見える）
+    bus.values = {
+        (0x14, 0x17): (0x0A, 0x0B),
+        (0x14, 0x16): (0x0C, 0x0D),
+        (0x14, 0x15): (0x0E, 0x0F),
+    }
+    hat, lg, _, clock = _make(tmp_path, bus=bus)
+    _echo(lg, 1_000_000)
+    reading = hat.read()
+    assert reading.floor == (None, None, None)
+    assert reading.distance_cm is not None
+    clock.advance(1.9)
+    assert hat.read().floor == (None, None, None)
+    clock.advance(0.1)
+    assert hat.read().floor == (2571, 3085, 3599)
+
+
+def test_開き直したときも床の読み始めを待つ(tmp_path: Path) -> None:
+    bus = FakeSmbus()
+    bus.dead = {0x14, 0x15}  # MCU が起き直している間は答えない
+    bus.values = {(0x14, 0x17): (0, 10), (0x14, 0x16): (0, 20), (0x14, 0x15): (0, 30)}
+    hat, lg, _, clock = _make(tmp_path, bus=bus)
+    _echo(lg, 1_000_000)
+    assert hat.read().floor == (None, None, None)
+    bus.dead = set()
+    clock.advance(sensors.REOPEN_INTERVAL_S)
+    assert hat.read().floor == (None, None, None)  # 開き直した直後
+    clock.advance(sensors.FLOOR_WARMUP_S)
+    assert hat.read().floor == (10, 20, 30)
+
+
+def test_床の読み始めの間は_ADC_を読まない(tmp_path: Path) -> None:
+    hat, lg, bus, _ = _make(tmp_path)
+    _echo(lg, 1_000_000)
+    hat.read()
+    hat.read()
+    # 開くときの確かめ（A0 を 1 回）のほかは読まない
+    assert len(bus.transfers) == 2
 
 
 def test_範囲の外の値は読めない(tmp_path: Path) -> None:
     bus = FakeSmbus()
     bus.values = {(0x14, 0x17): (0x10, 0x00), (0x14, 0x16): (0x0F, 0xFF), (0x14, 0x15): (0, 5)}
-    hat, lg, _, _ = _make(tmp_path, bus=bus)
+    hat, lg, _, clock = _make(tmp_path, bus=bus)
     _echo(lg, 1_000_000)
+    _warm_up(hat, clock)
     assert hat.read().floor == (None, 4095, 5)
 
 
@@ -465,8 +519,9 @@ def test_0x14_が答えなければ_0x15_を使う(tmp_path: Path) -> None:
     bus = FakeSmbus()
     bus.dead = {0x14}
     bus.values = {(0x15, 0x17): (0, 10), (0x15, 0x16): (0, 20), (0x15, 0x15): (0, 30)}
-    hat, lg, _, _ = _make(tmp_path, bus=bus)
+    hat, lg, _, clock = _make(tmp_path, bus=bus)
     _echo(lg, 1_000_000)
+    _warm_up(hat, clock)
     assert hat.read().floor == (10, 20, 30)
     assert bus.buses[0].bus == 1
 
@@ -484,9 +539,9 @@ def test_どのアドレスも答えなければ床は読めない(tmp_path: Pat
 def test_1_つの読みの失敗はその床だけ読めない(tmp_path: Path) -> None:
     bus = FakeSmbus()
     bus.values = {(0x14, 0x17): (0, 1), (0x14, 0x15): (0, 3)}
-    hat, lg, _, _ = _make(tmp_path, bus=bus)
+    hat, lg, _, clock = _make(tmp_path, bus=bus)
     _echo(lg, 1_000_000)
-    hat.read()
+    _warm_up(hat, clock)
     bus.broken = {(0x14, 0x16)}
     _echo(lg, 1_000_000)
     assert hat.read().floor == (1, None, 3)
@@ -495,8 +550,9 @@ def test_1_つの読みの失敗はその床だけ読めない(tmp_path: Path) -
 def test_bus_が開けなければ床は読めず例外を出さない(tmp_path: Path) -> None:
     bus = FakeSmbus()
     bus.fail_open = True
-    hat, lg, _, _ = _make(tmp_path, bus=bus)
+    hat, lg, _, clock = _make(tmp_path, bus=bus)
     _echo(lg, 1_000_000)
+    _warm_up(hat, clock)
     assert hat.read().floor == (None, None, None)
 
 
@@ -615,7 +671,9 @@ def test_読みの合間は_60_ms_あける(tmp_path: Path) -> None:
 def test_パルスの失敗は距離が読めず例外を出さない(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    hat, lg, _, _ = _make(tmp_path)
+    hat, lg, _, clock = _make(tmp_path)
+    _echo(lg, 1_000_000)
+    _warm_up(hat, clock)
     lg.fail_trigger = FakeLgpioError("trigger")
     with caplog.at_level(logging.WARNING):
         reading = hat.read()
@@ -647,6 +705,7 @@ def test_失敗のログは間をあけて型の名前だけ(
     bus.broken = {(0x14, 0x16)}
     hat, lg, _, clock = _make(tmp_path, bus=bus)
     _echo(lg, 1_000_000)
+    _warm_up(hat, clock)
     with caplog.at_level(logging.WARNING):
         for _ in range(5):
             hat.read()

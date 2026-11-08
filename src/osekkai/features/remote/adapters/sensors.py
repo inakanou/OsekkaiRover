@@ -8,6 +8,9 @@
   読み取りは別の転送にする（実機の HAT は、まとめた 1 回の転送に 0 を返す）。
   間に基盤の書き込みが入ることがあるので、チャンネルごとに 2 回読み、
   差が FLOOR_AGREE_TOLERANCE より大きければ読めない（危険）とする
+- bus を開いて（開き直して）から FLOOR_WARMUP_S の間は、床を読めない（危険）とする。
+  基盤は起動と止めるときに HAT の MCU を起こし直す（BCM 5）。その直後のしばらくは、
+  ADC が 2 回とも同じでたらめの高い値（段差がないように見える値）を返すため
 - 開けない・読めないときは例外を外に出さず、読めない値（None）で返す。危険として扱われる
 - smbus2 と lgpio は関数の中だけで読む。基盤が持つ GPIO（25・26・5 など）には触らない
 - ログに出すのは例外の型の名前だけ。同じ種類の失敗は間をあけて出す
@@ -39,6 +42,7 @@ GPIOCHIP_PREFIX: Final = "gpiochip"
 SOUND_M_PER_S: Final = 343.3
 TRIG_PULSE_S: Final = 20e-6  # trig を上げておく時間（HC-SR04 は 10 µs 以上）
 FLOOR_AGREE_TOLERANCE: Final = 64  # 2 回の読みの差の許し
+FLOOR_WARMUP_S: Final = 2.0  # bus を開いてから床を読み始めるまで
 ADC_MAX: Final = 4095
 REOPEN_INTERVAL_S: Final = 5.0  # 開けなかったとき、開き直すまでの間
 LOG_INTERVAL_S: Final = 60.0  # 同じ種類の読みの失敗をログに出す間
@@ -237,6 +241,7 @@ class HatSensors:
         self._bus: Any = None
         self._msg: Any = None
         self._address: int | None = None
+        self._floor_ready_at: float | None = None
         self._bus_retry_at: float | None = None
         # ログ
         self._logged_at: dict[str, float] = {}
@@ -390,6 +395,7 @@ class HatSensors:
             except Exception:  # 答えないアドレスは次を試す
                 continue
             self._address = address
+            self._floor_ready_at = now + FLOOR_WARMUP_S
             return True
         self._warn_once("adc", "答えません")
         self._close_bus()
@@ -416,6 +422,9 @@ class HatSensors:
     def _read_floor(self) -> tuple[int | None, int | None, int | None]:
         if not self._open_bus() or self._address is None:
             return (None, None, None)
+        ready_at = self._floor_ready_at
+        if ready_at is not None and self._clock.monotonic() < ready_at:
+            return (None, None, None)  # MCU が起き直した直後のでたらめを使わない
         values: list[int | None] = []
         for register in self.FLOOR_REGISTERS:
             try:
