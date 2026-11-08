@@ -68,7 +68,7 @@ Claude を使うには、Anthropic の API の鍵が要ります。鍵は、実�
 
 ## 3. 実機に入れる
 
-会話のライブラリ（`anthropic`）は、`rover-deploy deploy` の版の準備で入ります（extras の `pi,voice,conversation`）。自分で入れる必要はありません。
+会話のライブラリ（`anthropic`）は、`rover-deploy deploy` の版の準備で入ります（extras の `pi,voice,conversation,remote`）。自分で入れる必要はありません。
 開発 PC と CI には入れません。開発 PC で `pip install -e '.[dev]'` としたときも入りません。
 
 1. 上の 2 章のとおり、鍵を置きます

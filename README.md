@@ -31,8 +31,8 @@ Claude Code のスキル（`/kiro-*` コマンド）を使い、要件 → 設�
 | 音声の入口 `voice-gateway` | 完了。実機で確かめた（`src/osekkai/voice`、手順書は [`docs/voice.md`](docs/voice.md)） |
 | 見つけてあいさつ `presence` | 実装済み。実機の確認はこれから（`src/osekkai/features/presence`、手順書は [`docs/presence.md`](docs/presence.md)） |
 | おしゃべり `conversation` | 完了。実機で確かめた（`src/osekkai/features/conversation`、手順書は [`docs/conversation.md`](docs/conversation.md)） |
-| だるまさん `daruma-game` | 実装済み。実機の確認はこれから（`src/osekkai/features/daruma`、手順書は [`docs/daruma.md`](docs/daruma.md)） |
-| ほかのスペック | brief だけ（`remote-control`） |
+| だるまさん `daruma-game` | 完了。実機で確かめた（`src/osekkai/features/daruma`、手順書は [`docs/daruma.md`](docs/daruma.md)） |
+| ラジコン `remote-control` | 実装済み。実機の確認はこれから（`src/osekkai/features/remote`、手順書は [`docs/remote.md`](docs/remote.md)） |
 
 ## 機能
 
@@ -45,19 +45,20 @@ Claude Code のスキル（`/kiro-*` コマンド）を使い、要件 → 設�
 | 見つけてあいさつ | `presence` | 首のカメラで顔を見つけて首と目で追い、覚えた顔に呼び名であいさつする | [`docs/presence.md`](docs/presence.md) |
 | おしゃべり | `conversation` | どの機能の言葉にも当てはまらない言葉に、Claude で子ども向けの短い返事をする | [`docs/conversation.md`](docs/conversation.md) |
 | だるまさん | `daruma` | 「だるまさん しよう」と話しかけると、ロボットが鬼になって「だるまさんがころんだ」をする。走らない | [`docs/daruma.md`](docs/daruma.md) |
+| ラジコン | `remote` | 家の Wi-Fi の中のスマホやタブレットの画面から、ロボットを走らせる。首・ダンス・映像・写真・話させる | [`docs/remote.md`](docs/remote.md) |
 
 日課の設定は、設定ファイルの `routine:` の節に書きます。見本では全部コメントなので、書くまではタスクは 0 個です。
 音声の入口の設定は、設定ファイルの `voice:` の節に書きます。実機では `recognizer: whisper` にします。
 見つけてあいさつの設定は、設定ファイルの `presence:` の節に書きます。顔は、ロボットを止めてからコマンドで覚えさせます（手順書を見てください）。
 だるまさんの設定は、設定ファイルの `daruma:` の節に書きます。動いたかのしきい値は、ロボットを止めてから道具で確かめて合わせます（手順書を見てください）。
+ラジコンの設定は、設定ファイルの `remote:` の節に書きます。既定は無効です。pin は実機の設定ファイルだけに、引用符で囲んで書きます（手順書を見てください）。
 
 ## 今後の予定
 
 スペックを 1 つずつ、要件 → 設計 → タスク → 実装 → PR の順に進めます（[`roadmap.md`](.kiro/steering/roadmap.md)）。
 
 1. **見つけてあいさつ**（`presence`）: 顔を見つけて首を向け、覚えた顔ならあいさつする。実機で確かめる
-2. **あそび**（`daruma-game`）: だるまさんがころんだ。実機で確かめる
-3. **スマホのラジコン**（`remote-control`）: 家の Wi-Fi から操作する
+2. **スマホのラジコン**（`remote-control`）: 家の Wi-Fi から操作する。実機で確かめる
 
 ## ディレクトリ構成
 
@@ -72,11 +73,12 @@ Claude Code のスキル（`/kiro-*` コマンド）を使い、要件 → 設�
 │   ├── features/presence/    # 見つけてあいさつ
 │   ├── features/conversation/ # おしゃべり
 │   ├── features/daruma/      # だるまさん
+│   ├── features/remote/      # ラジコン
 │   └── voice/                # 音声の入口
 ├── tests/                    # テスト（src/osekkai と同じ構成。配置の道具は tests/deploy）
 ├── config/                   # 設定の見本（osekkai.example.yaml）。実際の設定はリポジトリの外
 ├── deploy/                   # 実機への配置の道具（rover-deploy）と systemd のユニット
-├── docs/                     # 手順書（deploy.md、routine.md、voice.md、presence.md、conversation.md、daruma.md）
+├── docs/                     # 手順書（deploy.md、routine.md、voice.md、presence.md、conversation.md、daruma.md、remote.md）
 ├── scripts/                  # 開発用スクリプト
 ├── .github/                  # CI（GitHub Actions）と PR テンプレート
 ├── .claude/
@@ -138,7 +140,7 @@ Claude Code のスキル（`/kiro-*` コマンド）を使い、要件 → 設�
    ```sh
    python3 -m venv .venv
    . .venv/bin/activate
-   pip install -e '.[dev]'
+   pip install -e '.[dev,remote]'
    ```
 
 2. **ハードなしで動かす**
