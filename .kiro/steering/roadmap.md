@@ -39,8 +39,8 @@ OsekkaiRover は、SunFounder PiCar-X（Raspberry Pi 5 + Robot HAT + I2C LCD 160
   - faster-whisper の速さは実機で測る（`base` int8 で 5 秒の音声に 1.5〜3 秒の見込み。日本語の精度が足りなければ `small`）。冷却ファン（GPIO のスペーサー付き）が要る
 
 ## Direct Implementation Candidates
-- [ ] LICENSE と第三者の表記 -- 公開リポジトリに LICENSE がない（今は「全権利留保」の扱い）。robot_hat が GPL-3.0 のため、GPL-3.0-or-later が最も安全。README に YuNet（MIT）・SFace（Apache-2.0）・tohoku-f01（CC BY 4.0）・robot_hat（GPL-3.0）の表記を足す。ライセンスの選択は人が決める
-- [ ] CI のアクションの更新 -- `gitleaks/gitleaks-action@v2` と `actions/checkout@v4` は Node 20 で、サポートが終わっている。v3 と v7 に上げる
+- [x] LICENSE と第三者の表記 -- 公開リポジトリに LICENSE がない（今は「全権利留保」の扱い）。robot_hat が GPL-3.0 のため、GPL-3.0-or-later が最も安全。README に YuNet（MIT）・SFace（Apache-2.0）・tohoku-f01（CC BY 4.0）・robot_hat（GPL-3.0）の表記を足す。ライセンスの選択は人が決める
+- [x] CI のアクションの更新 -- `gitleaks/gitleaks-action@v2` と `actions/checkout@v4` は Node 20 で、サポートが終わっている。v3 と v7 に上げる
 
 ## Boundary Strategy
 - **Why this split**:
@@ -54,12 +54,12 @@ OsekkaiRover は、SunFounder PiCar-X（Raspberry Pi 5 + Robot HAT + I2C LCD 160
   - 1 日の利用上限など、再起動をまたいで残す状態の保存先（`rover-core` の保存の仕組みを使う）
 
 ## Specs (dependency order)
-- [ ] rover-core -- ロボット本体の基盤。起動と安全な停止、設定と保存先、LCD・声・ボタン・サーボ・モーターの操作、資源の調停、機能を足す口、待機画面、PC と CI でのテスト。Dependencies: none
-- [ ] device-deployment -- 実機への配置。タグの版を入れる、動作確認、失敗時の切り戻し、実機の初期設定。Dependencies: rover-core
-- [ ] daily-routine -- 生活習慣の声かけ。時刻の声かけ、予告、催促、ほめる、星、おやすみモード。Dependencies: rover-core
-- [ ] voice-gateway -- 音声の入口。ボタンで聞き取り、言葉に合う機能へ渡す。Dependencies: rover-core
-- [ ] presence -- 見つけてあいさつ。顔の検出と追従、覚えた顔の認識とあいさつ、顔の登録と削除、カメラの機能の提供。Dependencies: rover-core
-- [ ] conversation -- おしゃべり。他の機能に当てはまらない言葉を Claude との会話で受ける。子ども向けの安全対策と利用上限。Dependencies: rover-core, voice-gateway
+- [x] rover-core -- ロボット本体の基盤。起動と安全な停止、設定と保存先、LCD・声・ボタン・サーボ・モーターの操作、資源の調停、機能を足す口、待機画面、PC と CI でのテスト。Dependencies: none
+- [x] device-deployment -- 実機への配置。タグの版を入れる、動作確認、失敗時の切り戻し、実機の初期設定。Dependencies: rover-core
+- [x] daily-routine -- 生活習慣の声かけ。時刻の声かけ、予告、催促、ほめる、星、おやすみモード。Dependencies: rover-core
+- [x] voice-gateway -- 音声の入口。ボタンで聞き取り、言葉に合う機能へ渡す。Dependencies: rover-core
+- [x] presence -- 見つけてあいさつ。顔の検出と追従、覚えた顔の認識とあいさつ、顔の登録と削除、カメラの機能の提供。Dependencies: rover-core
+- [x] conversation -- おしゃべり。他の機能に当てはまらない言葉を Claude との会話で受ける。子ども向けの安全対策と利用上限。Dependencies: rover-core, voice-gateway
 - [ ] daruma-game -- あそび「だるまさんがころんだ」。Dependencies: rover-core, voice-gateway, presence
 - [ ] remote-control -- スマホのラジコン。家の Wi-Fi からの操作、映像、写真、話させる。Dependencies: rover-core, presence
 
