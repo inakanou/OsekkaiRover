@@ -33,6 +33,10 @@ voice = [
 conversation = [
     "anthropic>=2.6,<3",
 ]
+# ラジコンの端末向けの画面（features/remote/web.py の中だけで読む）
+remote = [
+    "flask>=3.1,<3.2",
+]
 dev = [
     "pytest>=8",
     "ruff>=0.6",
@@ -41,7 +45,7 @@ dev = [
 ]
 
 # 機能を発見するエントリーポイントの群。機能を足したら、ここに 1 行足して入れ直す
-# （.venv/bin/pip install -e '.[dev]'）
+# （.venv/bin/pip install -e '.[dev,remote]'）
 [project.entry-points."osekkai.features"]
 conversation = "osekkai.features.conversation:ConversationFeature"
 daruma = "osekkai.features.daruma:DarumaFeature"

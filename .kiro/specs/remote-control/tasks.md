@@ -1,7 +1,7 @@
 # Implementation Plan
 
 - [ ] 1. 土台: 部品の入れ方・設定・言葉・口
-- [ ] 1.1 ラジコンの部品の入れ方と、読み込みの向きの決まりを用意する
+- [x] 1.1 ラジコンの部品の入れ方と、読み込みの向きの決まりを用意する
   - Web の部品（Flask）を extras `remote` として足し、CI がそれを入れて走るようにする
   - 空のラジコンのパッケージ（`osekkai.features.remote`、`adapters/`）を作る
   - ラジコンの読み込みの向きのテストを足す: 許す基盤の部品、`presence.api`、外のライブラリは決めた部品の関数の中だけ（センサーは `smbus2`・`lgpio`、USB カメラは `cv2`・`numpy`、Flask は Web の部品だけ）
@@ -215,3 +215,4 @@
   - _Requirements: 2.8, 5.2, 5.6, 6.2, 8.6, 10.5, 11.4, 12.2, 12.5, 13.6, 15.1, 15.2_
 
 ## Implementation Notes
+- 1.1: パッケージの中の向き（adapters/* は ports だけ、checks が読める部品）は、そのモジュールを作るタスクで test_remote_import_direction.py に足す
