@@ -49,10 +49,18 @@ HARDWARE_NAMES = ["core.lcd", "core.hat", "core.buttons", "core.servos"]
 # 機能の名前の順に並ぶ）。開発 PC と CI には faster-whisper がないので、見本の設定
 # （recognizer: auto）では音声の入口は打った文字の聞き取りになり、どちらも飛ばす
 CONVERSATION_NAMES = ["conversation.setup"]
+DARUMA_NAMES = ["daruma.camera"]
 PRESENCE_NAMES = ["presence.camera", "presence.models", "presence.faces"]
 ROUTINE_NAMES = ["routine.holidays", "routine.quiet_hours", "routine.records"]
 VOICE_NAMES = ["voice.mic", "voice.model"]
-ALL_NAMES = [*BASE_NAMES, *CONVERSATION_NAMES, *PRESENCE_NAMES, *ROUTINE_NAMES, *VOICE_NAMES]
+ALL_NAMES = [
+    *BASE_NAMES,
+    *CONVERSATION_NAMES,
+    *DARUMA_NAMES,
+    *PRESENCE_NAMES,
+    *ROUTINE_NAMES,
+    *VOICE_NAMES,
+]
 
 
 def _place_config() -> None:

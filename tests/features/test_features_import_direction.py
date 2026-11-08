@@ -31,6 +31,7 @@ ENTRY_ALLOWLIST = frozenset(
         "osekkai.features.routine.trial",
         "osekkai.features.routine.__main__",
         "osekkai.features.presence.cli",
+        "osekkai.features.daruma.cli",
     }
 )
 
@@ -257,6 +258,13 @@ def test_見つけてあいさつのコマンドは_osekkai___main___を読み�
     source = "from osekkai.__main__ import build_devices\n"
     assert _check(source, "osekkai.features.presence.cli") == []
     assert _check(source, "osekkai.features.presence.feature") != []
+
+
+def test_だるまさんの道具は_osekkai___main___を読み込める() -> None:
+    source = "from osekkai.__main__ import build_devices\n"
+    assert _check(source, "osekkai.features.daruma.cli") == []
+    assert _check(source, "osekkai.features.daruma.feature") != []
+    assert _check(source, "osekkai.features.daruma.__main__") != []
 
 
 CLAUDE_ADAPTER = "osekkai.features.conversation.adapters.claude"
