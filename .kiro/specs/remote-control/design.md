@@ -167,7 +167,8 @@ tests/features/remote/
 ├── test_remote_drive_rules.py / test_remote_dance.py / test_remote_photos.py
 ├── test_remote_operator_slot.py / test_remote_leases.py / test_remote_media.py
 ├── test_remote_service.py / test_remote_web.py
-├── test_remote_adapters.py   # DHT の差し込み、gpiochip の見つけ方、ADC の値の組み立て（偽の bus）
+├── test_remote_adapters_sensors.py     # gpiochip の見つけ方、ADC の値の組み立て（偽の bus）
+├── test_remote_adapters_usb_camera.py  # DHT の差し込み、C270 の見つけ方
 ├── test_remote_checks.py / test_remote_feature.py / test_remote_registration.py / test_remote_cli.py
 └── test_remote_journey.py    # 偽のハードの基盤＋見つけてあいさつ＋だるまさんと一緒に通しで
 ```
