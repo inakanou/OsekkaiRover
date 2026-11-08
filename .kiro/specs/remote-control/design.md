@@ -441,7 +441,7 @@ def judge_availability(
 ) -> Availability: ...  # 時刻 → おやすみ → 時間帯 の順
 ```
 - 1 日に使える時間の上限は持たない（11.6）。使った時間を数えない。
-- 端末への知らせの文は `texts.MESSAGES[Availability]`。`QUIET` の文は `OUT_OF_HOURS` と同じ（11.2）。
+- 端末への知らせの文は `availability.MESSAGES[Availability]`（文そのものは `texts` の定数。`texts` は `availability` を読まないので、表はこちらに置く）。`QUIET` の文は `OUT_OF_HOURS` と同じ（11.2）。
 
 #### drive_rules（`drive_rules.py`）
 
