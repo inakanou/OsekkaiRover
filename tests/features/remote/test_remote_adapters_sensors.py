@@ -2,6 +2,10 @@
 
 偽の lgpio（端の知らせを callback で起こす）、偽の smbus2（偽の bus）、
 tmp_path の偽の sysfs で確かめる。実機のライブラリは読まない。
+
+偽の lgpio は実機（lgpio 0.2.2）と同じく gpio_trigger を持たない。
+偽の bus は実機の HAT と同じく、書き込みでレジスタを決め、別の読み取りでその値を返す。
+書き込みと読み取りを 1 回の転送にまとめると、実機と同じく 0 を返す。
 """
 
 from __future__ import annotations
@@ -58,6 +62,7 @@ class FakeLgpio:
         self.callback_obj: FakeCallback | None = None
         self.chip_labels: dict[int, str] = {}  # gpio_get_chip_info の label
         self.echo_level: int | Exception = 1  # 待ちの後の gpio_read の echo
+        self._trig_high = False
 
     def gpiochip_open(self, chip: int) -> int:
         self.calls.append(("gpiochip_open", chip))
@@ -93,13 +98,17 @@ class FakeLgpio:
         self.callback_obj = FakeCallback(self)
         return self.callback_obj
 
-    def gpio_trigger(self, handle: int, gpio: int, pulse_us: int, level: int) -> None:
-        self.calls.append(("gpio_trigger", handle, gpio, pulse_us, level))
-        if self.fail_trigger is not None:
+    def gpio_write(self, handle: int, gpio: int, level: int) -> None:
+        """trig を上げてから下げたとき、台本の端を echo の callback に知らせる。"""
+        self.calls.append(("gpio_write", handle, gpio, level))
+        if level == 1 and self.fail_trigger is not None:
             raise self.fail_trigger
-        assert self.func is not None
-        for level_, ts in self.edges:
-            self.func(0, sensors.HatSensors.ECHO_BCM, level_, ts)
+        if gpio == sensors.HatSensors.TRIG_BCM and level == 0 and self._trig_high:
+            assert self.func is not None
+            for level_, ts in self.edges:
+                self.func(0, sensors.HatSensors.ECHO_BCM, level_, ts)
+        if gpio == sensors.HatSensors.TRIG_BCM:
+            self._trig_high = level == 1
 
     def gpio_free(self, handle: int, gpio: int) -> None:
         self.calls.append(("gpio_free", handle, gpio))
@@ -110,7 +119,7 @@ class FakeLgpio:
             if call[0] in {
                 "gpio_claim_output",
                 "gpio_claim_alert",
-                "gpio_trigger",
+                "gpio_write",
                 "gpio_free",
                 "gpio_read",
             }:
@@ -146,26 +155,45 @@ class FakeBus:
         self.closed = 0
 
     def i2c_rdwr(self, *msgs: FakeMsg) -> None:
-        self._owner.transfers.append(msgs)
-        write, read = msgs
-        assert write.data is not None
-        key = (write.addr, write.data[0])
-        if write.addr in self._owner.dead or key in self._owner.broken:
+        owner = self._owner
+        owner.transfers.append(msgs)
+        if len(msgs) != 1:  # 実機の HAT は、まとめた転送に 0 を返す
+            for msg in msgs:
+                if msg.data is None:
+                    msg.result = [0] * msg.length
+            return
+        msg = msgs[0]
+        if msg.addr in owner.dead:
             raise OSError("nack")
-        msb, lsb = self._owner.values.get(key, (0, 0))
-        read.result = [msb, lsb]
+        if msg.data is not None:
+            if (msg.addr, msg.data[0]) in owner.broken:
+                raise OSError("nack")
+            owner.register[msg.addr] = msg.data[0]
+            return
+        key = (msg.addr, owner.register.get(msg.addr, -1))
+        if key in owner.broken:
+            raise OSError("nack")
+        value = owner.values.get(key, (0, 0))
+        if isinstance(value, list):  # 読むたびに次の値（最後の値はくり返す）
+            value = value.pop(0) if len(value) > 1 else value[0]
+        msb, lsb = value
+        msg.result = [msb, lsb][: msg.length]
 
     def close(self) -> None:
         self.closed += 1
 
 
 class FakeSmbus:
-    """smbus2 の偽物。(アドレス, レジスタ) ごとの 2 バイトを返す。"""
+    """smbus2 の偽物。書いたレジスタの (アドレス, レジスタ) ごとの 2 バイトを返す。
+
+    値をリストにすると、読むたびに次の値を返す（基盤の書き込みが間に入った読み）。
+    """
 
     i2c_msg = FakeI2cMsg
 
     def __init__(self) -> None:
-        self.values: dict[tuple[int, int], tuple[int, int]] = {}
+        self.values: dict[tuple[int, int], tuple[int, int] | list[tuple[int, int]]] = {}
+        self.register: dict[int, int] = {}  # アドレスごとの、最後に書いたレジスタ
         self.dead: set[int] = set()
         self.broken: set[tuple[int, int]] = set()
         self.transfers: list[tuple[FakeMsg, ...]] = []
@@ -201,6 +229,7 @@ def _make(
     lg: FakeLgpio | None = None,
     bus: FakeSmbus | None = None,
     clock: FakeClock | None = None,
+    pulse_wait: Callable[[float], None] | None = None,
 ) -> tuple[HatSensors, FakeLgpio, FakeSmbus, FakeClock]:
     lg = lg or FakeLgpio()
     bus = bus or FakeSmbus()
@@ -210,7 +239,19 @@ def _make(
         _sysfs(root, {4: {"of_node/compatible": RP1_COMPATIBLE}})
     dev = tmp_path / "dev"
     dev.mkdir(exist_ok=True)
-    hat = HatSensors(clock=clock, lgpio_module=lg, smbus_module=bus, sys_root=root, dev_root=dev)
+    fake = lg
+
+    def record_pulse(seconds: float) -> None:
+        fake.calls.append(("pulse_wait", seconds))
+
+    hat = HatSensors(
+        clock=clock,
+        lgpio_module=lg,
+        smbus_module=bus,
+        sys_root=root,
+        dev_root=dev,
+        pulse_wait=pulse_wait or record_pulse,
+    )
     return hat, lg, bus, clock
 
 
@@ -372,17 +413,44 @@ def test_床の値は上と下のバイトを組み立てる(tmp_path: Path) -> 
     assert hat.read().floor == (300, 4095, 0)
 
 
-def test_1_回の_i2c_rdwr_で書いてから_2_バイト読む(tmp_path: Path) -> None:
+def test_書く転送と読む転送を分けて_2_回ずつ読む(tmp_path: Path) -> None:
     hat, lg, bus, _ = _make(tmp_path)
     _echo(lg, 1_000_000)
     hat.read()
-    reads = [t for t in bus.transfers if t[0].data and t[0].data[0] in {0x17, 0x16, 0x15}]
-    last = reads[-3:]
-    assert [(w.addr, w.data, r.addr, r.length) for w, r in last] == [
-        (0x14, [0x17, 0, 0], 0x14, 2),
-        (0x14, [0x16, 0, 0], 0x14, 2),
-        (0x14, [0x15, 0, 0], 0x14, 2),
-    ]
+    assert all(len(t) == 1 for t in bus.transfers)
+    last = [(m.addr, m.data, m.length) for (m,) in bus.transfers[-12:]]
+    expected: list[tuple[int, list[int] | None, int]] = []
+    for reg in (0x17, 0x16, 0x15):
+        expected += [(0x14, [reg, 0, 0], 3), (0x14, None, 2)] * 2
+    assert last == expected
+
+
+def test_2_回の読みが食いちがえばその床は読めない(tmp_path: Path) -> None:
+    bus = FakeSmbus()
+    bus.values = {
+        (0x14, 0x17): (0x05, 0xDB),
+        # 基盤の書き込みが間に入り、ちがう値が返った
+        (0x14, 0x16): [(0x05, 0xD4), (0x00, 0x10)],
+        (0x14, 0x15): (0x04, 0xD1),
+    }
+    hat, lg, _, _ = _make(tmp_path, bus=bus)
+    _echo(lg, 1_000_000)
+    assert hat.read().floor == (1499, None, 1233)
+
+
+def test_2_回の読みの差が許しの中なら後の値を使う(tmp_path: Path) -> None:
+    tolerance = sensors.FLOOR_AGREE_TOLERANCE
+    assert tolerance == 64
+    bus = FakeSmbus()
+    bus.values = {
+        # A0 は開くときの確かめでも 1 回読む
+        (0x14, 0x17): [(0, 100), (0, 100), (0, 100 + tolerance)],
+        (0x14, 0x16): [(0, 200), (0, 200 + tolerance + 1)],
+        (0x14, 0x15): (0, 30),
+    }
+    hat, lg, _, _ = _make(tmp_path, bus=bus)
+    _echo(lg, 1_000_000)
+    assert hat.read().floor == (100 + tolerance, None, 30)
 
 
 def test_範囲の外の値は読めない(tmp_path: Path) -> None:
@@ -452,8 +520,33 @@ def test_trig_と_echo_のピンだけを使う(tmp_path: Path) -> None:
     assert ("gpio_claim_output", 7, 27, 0) in lg.calls
     assert ("gpio_claim_alert", 7, 22, lg.BOTH_EDGES, lg.SET_PULL_DOWN) in lg.calls
     assert ("callback", 7, 22, lg.BOTH_EDGES) in lg.calls
-    assert ("gpio_trigger", 7, 27, 10, 1) in lg.calls
     assert lg.pins() == {27, 22}
+
+
+def test_trig_を上げて_10_µs_より長く待ってから下げる(tmp_path: Path) -> None:
+    hat, lg, _, _ = _make(tmp_path)
+    _echo(lg, 1_000_000)
+    hat.read()
+    pulse = [c for c in lg.calls if c[0] in {"gpio_write", "pulse_wait"}]
+    assert pulse[0] == ("gpio_write", 7, 27, 1)
+    assert pulse[1][0] == "pulse_wait"
+    assert 10e-6 <= pulse[1][1] <= 100e-6
+    assert pulse[2] == ("gpio_write", 7, 27, 0)
+    assert not hasattr(lg, "gpio_trigger")
+
+
+def test_パルスの途中で失敗しても_trig_を下げる(tmp_path: Path) -> None:
+    def boom(seconds: float) -> None:
+        raise RuntimeError("hidden")
+
+    hat, lg, _, _ = _make(tmp_path, pulse_wait=boom)
+    assert hat.read().distance_cm is None
+    up = lg.calls.index(("gpio_write", 7, 27, 1))
+    assert ("gpio_write", 7, 27, 0) in lg.calls[up + 1 :]
+
+
+def test_既定のパルスの待ちは短く戻る() -> None:
+    sensors._busy_wait(20e-6)
 
 
 def test_echo_が上がらなければ距離は読めない(tmp_path: Path) -> None:

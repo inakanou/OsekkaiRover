@@ -2,8 +2,12 @@
 
 - 超音波は lgpio で読む。trig は D2（BCM 27）、echo は D3（BCM 22）。
   echo の上がりと下がりの端の時刻（ns）の差 × 343.3 m/s ÷ 2 で距離を出す
-- 床センサーは smbus2 で HAT の ADC（A0〜A2）を読む。書き込みと 2 バイトの読み取りを
-  1 回の `i2c_rdwr` で行う（基盤の LCD や PWM の書き込みと混ざらない）
+- trig のパルスは gpio_write で上げ、20 µs 回って待ってから下げる
+  （実機の lgpio には gpio_trigger がない）
+- 床センサーは smbus2 で HAT の ADC（A0〜A2）を読む。レジスタの書き込みと 2 バイトの
+  読み取りは別の転送にする（実機の HAT は、まとめた 1 回の転送に 0 を返す）。
+  間に基盤の書き込みが入ることがあるので、チャンネルごとに 2 回読み、
+  差が FLOOR_AGREE_TOLERANCE より大きければ読めない（危険）とする
 - 開けない・読めないときは例外を外に出さず、読めない値（None）で返す。危険として扱われる
 - smbus2 と lgpio は関数の中だけで読む。基盤が持つ GPIO（25・26・5 など）には触らない
 - ログに出すのは例外の型の名前だけ。同じ種類の失敗は間をあけて出す
@@ -15,6 +19,8 @@ import importlib.util
 import logging
 import sys
 import threading
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Final
 
@@ -31,7 +37,8 @@ GPIOCHIP_LABEL: Final = "pinctrl-rp1"
 GPIOCHIP_PREFIX: Final = "gpiochip"
 
 SOUND_M_PER_S: Final = 343.3
-TRIG_PULSE_US: Final = 10
+TRIG_PULSE_S: Final = 20e-6  # trig を上げておく時間（HC-SR04 は 10 µs 以上）
+FLOOR_AGREE_TOLERANCE: Final = 64  # 2 回の読みの差の許し
 ADC_MAX: Final = 4095
 REOPEN_INTERVAL_S: Final = 5.0  # 開けなかったとき、開き直すまでの間
 LOG_INTERVAL_S: Final = 60.0  # 同じ種類の読みの失敗をログに出す間
@@ -148,6 +155,13 @@ def _import_smbus2() -> Any:
     return smbus2
 
 
+def _busy_wait(seconds: float) -> None:
+    """ごく短い時間だけ待つ。time.sleep は 10 µs には粗すぎるので回って待つ。"""
+    end = time.perf_counter() + seconds
+    while time.perf_counter() < end:
+        pass
+
+
 class _Echo:
     """1 回の測りの echo の端。lgpio の callback のスレッドから書かれる。"""
 
@@ -200,6 +214,7 @@ class HatSensors:
         smbus_module: Any = None,
         sys_root: Path = SYS_ROOT,
         dev_root: Path = DEV_ROOT,
+        pulse_wait: Callable[[float], None] = _busy_wait,
     ) -> None:
         self._clock = clock
         self._bus_number = bus_number
@@ -207,6 +222,7 @@ class HatSensors:
         self._smbus_module = smbus_module
         self._sys_root = sys_root
         self._dev_root = dev_root
+        self._pulse_wait = pulse_wait
         self._lock = threading.Lock()
         self._closed = False
         self._echo = _Echo()
@@ -291,7 +307,7 @@ class HatSensors:
         self._keep_interval()
         self._echo.arm()
         try:
-            self._lg.gpio_trigger(self._handle, self.TRIG_BCM, TRIG_PULSE_US, 1)
+            self._pulse()
             self._echo.done.wait(self.ECHO_TIMEOUT_S)
         finally:
             rise, fall = self._echo.disarm()
@@ -320,6 +336,14 @@ class HatSensors:
         if level == 1:
             return None, True  # 待ちの中で下がらない＝前に物がない
         return None, False
+
+    def _pulse(self) -> None:
+        """trig に短いパルスを出す。途中で失敗しても trig を下げる。"""
+        self._lg.gpio_write(self._handle, self.TRIG_BCM, 1)
+        try:
+            self._pulse_wait(TRIG_PULSE_S)
+        finally:
+            self._lg.gpio_write(self._handle, self.TRIG_BCM, 0)
 
     def _keep_interval(self) -> None:
         now = self._clock.monotonic()
@@ -372,11 +396,22 @@ class HatSensors:
         return False
 
     def _read_register(self, address: int, register: int) -> int:
-        write = self._msg.write(address, [register, 0, 0])
+        """レジスタを書く転送と、2 バイトを読む転送を分けて 1 回読む。"""
+        self._bus.i2c_rdwr(self._msg.write(address, [register, 0, 0]))
         read = self._msg.read(address, 2)
-        self._bus.i2c_rdwr(write, read)
+        self._bus.i2c_rdwr(read)
         data = [int(b) for b in read]
         return (data[0] << 8) | data[1]
+
+    def _read_channel(self, address: int, register: int) -> int | None:
+        """2 回読み、どちらも範囲の中で差が許しの中なら後の値。ほかは None。"""
+        first = self._read_register(address, register)
+        second = self._read_register(address, register)
+        if not (0 <= first <= ADC_MAX and 0 <= second <= ADC_MAX):
+            return None
+        if abs(first - second) > FLOOR_AGREE_TOLERANCE:
+            return None
+        return second
 
     def _read_floor(self) -> tuple[int | None, int | None, int | None]:
         if not self._open_bus() or self._address is None:
@@ -384,12 +419,10 @@ class HatSensors:
         values: list[int | None] = []
         for register in self.FLOOR_REGISTERS:
             try:
-                value = self._read_register(self._address, register)
+                values.append(self._read_channel(self._address, register))
             except Exception as e:
                 self._warn("floor", e)
                 values.append(None)
-                continue
-            values.append(value if 0 <= value <= ADC_MAX else None)
         return (values[0], values[1], values[2])
 
     def _close_bus(self) -> None:
