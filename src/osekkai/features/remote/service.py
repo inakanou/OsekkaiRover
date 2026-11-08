@@ -1,5 +1,5 @@
-"""操作の受け付けと、0.1 秒ごとの走行の繰り返し（要件 3.2、3.4、4.2〜4.8、5.1〜5.6、6.1〜6.3、
-11.1〜11.3、12.3）。
+"""操作の受け付けと、0.1 秒ごとの走行の繰り返し、首・ブッブー・ダンス・話させる
+（要件 3.2、3.4、4.2〜4.8、5.1〜5.6、6.1〜6.3、7.1〜7.6、10.1〜10.5、11.1〜11.3、12.3）。
 
 - どの操作も「使えるか → 操作する端末か → 操作の段のリース」の順で確かめる。
   だめなら NOT_NOW を返し、その端末への知らせの文を覚える
@@ -8,6 +8,14 @@
 - 繰り返しは操作の段のリースの間だけ動く。リースの段を変える（want）のは繰り返しの外だけ
   （want は最長 2〜3 秒止まることがある）
 - 危険で止めたときの声は補助のスレッド（remote-say）で話し、繰り返しを止めない
+- 首は今の向きを覚えて 15 度ずつ動かす。右と上が正（pan は右、tilt は上）。
+  基盤も範囲に収めるが、覚える向きも基盤の既定の範囲に収める（押した分を貯めない）
+- ダンスは補助のスレッド（remote-dance）で首だけで踊る。踊っている間の走る命令は無視し、
+  STOP の命令はダンスを止める合図にする
+- 話させる文字と決まった言葉は補助のスレッド（remote-say）で話す。話させる文字は keep=False で、
+  ログにも、このオブジェクトにも残さない
+- ダンスと話す間の LCD は、走行の LCD より先に出す（危険の「ｽﾄｯﾌﾟ!」だけはさらに先）。
+  終われば繰り返しが走行の表示に戻す
 - ログには型の名前と決まった文言だけを出す。印・文字・言葉は出さない
 """
 
@@ -15,10 +23,11 @@ from __future__ import annotations
 
 import logging
 import random
+import re
 import threading
 from collections.abc import Mapping
 from enum import Enum
-from typing import Final
+from typing import Final, Literal
 
 from osekkai.core.arbiter import Lease
 from osekkai.core.feature import FeatureContext
@@ -28,6 +37,7 @@ from osekkai.core.types import Face, LeaseRevoked, Resource
 from . import texts
 from .availability import Availability, judge_availability, message_for
 from .config import RemoteConfig
+from .dance import run_dance
 from .drive_rules import (
     COMMAND_TIMEOUT_S,
     FORWARD_MOVES,
@@ -46,13 +56,37 @@ from .operator_slot import ClaimResult, OperatorSlot
 from .photos import PhotoStore
 from .ports import SensorPort, SensorReading
 
-__all__ = ["DRIVE_PERIOD_S", "MAX_FAILURES", "RemoteService", "Reply"]
+__all__ = [
+    "DRIVE_PERIOD_S",
+    "LOOK_STEP_DEG",
+    "MAX_FAILURES",
+    "MAX_TEXT",
+    "RemoteService",
+    "Reply",
+    "clean_text",
+]
 
 logger = logging.getLogger(__name__)
 
 DRIVE_PERIOD_S: Final = 0.1  # 走行の繰り返しの間隔（5.1）
 MAX_FAILURES: Final = 10  # 続けてこれだけ失敗したらリースを返す（12.6）
 JOIN_S: Final = 1.0  # 閉じるときに繰り返しを待つ上限
+LOOK_STEP_DEG: Final = 15.0  # 首を 1 回で動かす角度（7.1）
+PAN_RANGE: Final = (-80.0, 80.0)  # 基盤の既定の首の左右の範囲（基盤も収める）
+TILT_RANGE: Final = (-30.0, 60.0)  # 基盤の既定の首の上下の範囲
+MAX_TEXT: Final = 120  # 話させる文字の長さの上限（10.1）
+_CONTROL: Final = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+Way = Literal["up", "down", "left", "right", "center"]
+# 向きごとの (pan, tilt) の増え方。右と上が正
+_LOOK_STEPS: Final[Mapping[str, tuple[float, float]]] = {
+    "up": (0.0, LOOK_STEP_DEG),
+    "down": (0.0, -LOOK_STEP_DEG),
+    "left": (-LOOK_STEP_DEG, 0.0),
+    "right": (LOOK_STEP_DEG, 0.0),
+}
+_OVERLAY_DANCE: Final = "dance"
+_OVERLAY_TALK: Final = "talk"
 
 _DRIVE_LCD: Final[Mapping[LcdState, str]] = {
     LcdState.STOPPED: texts.LCD_IDLE,
@@ -82,6 +116,11 @@ class Reply(Enum):
     EMPTY = "empty"
     IGNORED = "ignored"
     FAILED = "failed"
+
+
+def clean_text(text: str) -> str:
+    """制御文字（C0・DEL・C1）を空白に変え、前後の空白を除き、120 文字までに切る（10.1）。"""
+    return _CONTROL.sub(" ", text).strip()[:MAX_TEXT]
 
 
 class RemoteService:
@@ -127,20 +166,115 @@ class RemoteService:
         self._notices: dict[str, str] = {}  # 端末ごとの断りの知らせ
         self._danger_message: str | None = None  # 危険で止めた知らせ（操作する端末に出す）
         self._speaking = False  # 自分が話している途中（1 つ）
+        # 首とダンス（_lock の中で読み書きする）
+        self._pan = 0.0
+        self._tilt = 0.0
+        self._neck_lease: Lease | None = None  # 向きを覚えたリース（借り直したら正面）
+        self._dancing = False
+        self._dance_stop = False  # STOP の命令が来た（7.6）
+        # LCD（_lcd_lock の中で読み書きする。走行の LCD もこのロックの中で出す）
+        self._lcd_lock = threading.Lock()
+        self._overlays: list[tuple[str, str, Face]] = []  # 走行より先に出す表示（後が上）
+        self._lcd_dirty = False  # 走行の表示を出し直す
 
     # --- 操作 ---
 
     def drive(self, token: str, move: Move) -> Reply:
-        """走る命令を時刻つきで置く。止めるのも同じ（次の繰り返しで止まる）。"""
-        if not self._accept(token):
+        """走る命令を時刻つきで置く。止めるのも同じ（次の繰り返しで止まる）。
+
+        踊っている間は STOP だけを受け、ダンスを止める合図にする（7.5、7.6）。
+        """
+        if self._accept(token) is None:
             return Reply.NOT_NOW
         with self._lock:
+            if self._dancing:
+                if move is not Move.STOP:
+                    return Reply.IGNORED
+                self._dance_stop = True
             self._command = Command(move, self._ctx.clock.monotonic())
+        return Reply.OK
+
+    def look(self, token: str, way: Way) -> Reply:
+        """首を 15 度動かす。「まんなか」は正面に戻す（7.1、7.2）。踊っている間は無視する。"""
+        lease = self._accept(token)
+        if lease is None:
+            return Reply.NOT_NOW
+        with self._lock:
+            if self._dancing:
+                return Reply.IGNORED
+            pan, tilt = self._angles(lease)
+            if way != "center":
+                d_pan, d_tilt = _LOOK_STEPS[way]
+                pan = _clamp(pan + d_pan, PAN_RANGE)
+                tilt = _clamp(tilt + d_tilt, TILT_RANGE)
+        try:
+            if way == "center":
+                lease.neck.home()
+                pan = tilt = 0.0
+            else:
+                lease.neck.look(pan, tilt)
+        except LeaseRevoked:
+            return Reply.NOT_NOW
+        except Exception as e:
+            logger.warning("首を動かせませんでした: %s", type(e).__name__)
+            return Reply.FAILED
+        with self._lock:
+            if self._neck_lease is lease:
+                self._pan, self._tilt = pan, tilt
+        return Reply.OK
+
+    def horn(self, token: str) -> Reply:
+        """4 つから 1 つを選んで話す。話している途中なら話さずに IGNORED（7.3）。"""
+        lease = self._accept(token)
+        if lease is None:
+            return Reply.NOT_NOW
+        with self._lock:
+            if self._speaking:
+                return Reply.IGNORED
+            self._speaking = True
+            words = self._rng.choice(texts.SAY_HORNS)
+        threading.Thread(
+            target=self._say, args=(lease, words), name="remote-say", daemon=True
+        ).start()
+        return Reply.OK
+
+    def dance(self, token: str) -> Reply:
+        """走行を止め、補助のスレッドで首だけで踊る（7.4）。踊っている間は無視する（7.5）。"""
+        lease = self._accept(token)
+        if lease is None:
+            return Reply.NOT_NOW
+        with self._lock:
+            if self._dancing:
+                return Reply.IGNORED
+            self._dancing = True
+            self._dance_stop = False
+            self._command = Command(Move.STOP, self._ctx.clock.monotonic())  # 4.3
+            back_to = self._angles(lease)
+        threading.Thread(
+            target=self._dance, args=(lease, token, back_to), name="remote-dance", daemon=True
+        ).start()
+        return Reply.OK
+
+    def say_text(self, token: str, text: str) -> Reply:
+        """送られた文字を整えて話す（10.1〜10.4）。文字はログにもここにも残さない（10.5）。"""
+        lease = self._accept(token)
+        if lease is None:
+            return Reply.NOT_NOW
+        words = clean_text(text)
+        if not words:
+            return Reply.EMPTY
+        with self._lock:
+            if self._speaking:
+                return Reply.BUSY_SPEAKING
+            self._speaking = True
+        threading.Thread(
+            target=self._talk, args=(lease, words), name="remote-say", daemon=True
+        ).start()
         return Reply.OK
 
     def set_fast(self, token: str, fast: bool) -> Reply:
         """速さを選ぶ。次の繰り返しから使う（4.5、4.6）。"""
-        if not self._accept(token):
+        if self._accept(token) is None:
             return Reply.NOT_NOW
         with self._lock:
             self._fast = fast
@@ -156,8 +290,11 @@ class RemoteService:
 
     # --- 受け付けの順 ---
 
-    def _accept(self, token: str) -> bool:
-        """使えるか → 操作する端末か → 操作の段のリース、の順に確かめる。"""
+    def _accept(self, token: str) -> Lease | None:
+        """使えるか → 操作する端末か → 操作の段のリース、の順に確かめる。
+
+        受け付けたら操作の段のリースを返す。断ったら None。
+        """
         clock = self._ctx.clock
         availability = judge_availability(
             synced=clock.is_synchronized(),
@@ -166,13 +303,19 @@ class RemoteService:
             hours=self._config.hours,
         )
         if availability is not Availability.OK:  # 11.1〜11.3
-            return self._refuse(token, message_for(availability))
+            self._refuse(token, message_for(availability))
+            return None
         if self._slot.claim(token) is ClaimResult.OTHER:  # 3.2
-            return self._refuse(token, message_for(Availability.OTHER_OPERATOR))
+            self._refuse(token, message_for(Availability.OTHER_OPERATOR))
+            return None
         # want はロックを持たずに呼ぶ（止まることがある）
         if self._leases.want(Level.OPERATE) is not Level.OPERATE:  # 12.3
-            return self._refuse(token, message_for(Availability.BUSY))
+            self._refuse(token, message_for(Availability.BUSY))
+            return None
         lease = self._leases.lease
+        if lease is None:
+            self._refuse(token, message_for(Availability.BUSY))
+            return None
         with self._lock:
             self._notices.pop(token, None)
             if lease is not self._accepted_lease:
@@ -180,21 +323,20 @@ class RemoteService:
                 self._accepted_lease = lease
                 self._command = None
             if self._closing.is_set():
-                return False
+                return None
             if self._thread is None and self._threaded:
                 self._give_up = False
                 self._failures = 0
                 self._thread = threading.Thread(target=self._run, name="remote-drive", daemon=True)
                 self._thread.start()
-        return True
+        return lease
 
-    def _refuse(self, token: str, message: str | None) -> bool:
+    def _refuse(self, token: str, message: str | None) -> None:
         with self._lock:
             if message is None:
                 self._notices.pop(token, None)
             else:
                 self._notices[token] = message
-        return False
 
     def _message_for(self, token: str) -> str | None:
         """その端末に出す知らせ。断りの知らせが先、次に危険の知らせ（操作する端末だけ）。"""
@@ -335,10 +477,22 @@ class RemoteService:
             shown, line1, face = _SHOWN_STOP, texts.LCD_STOP, texts.FACE_STOP
         else:
             shown, line1, face = decision.lcd, _DRIVE_LCD[decision.lcd], texts.FACE_DRIVE
-        if shown == self._shown:
-            return
-        _display(lease, line1, face)
-        self._shown = shown
+        with self._lcd_lock:
+            if self._lcd_dirty:
+                self._lcd_dirty = False
+                self._shown = None
+            # ダンスと話す間は、その表示のまま（7.4、10.2）。危険の表示だけは先に出す（5.5）
+            if self._overlays and decision.stopped_by is None:
+                # 危険が消えたら、ダンスと話す表示に戻す
+                if self._shown == _SHOWN_STOP:
+                    _, top, top_face = self._overlays[-1]
+                    _display(lease, top, top_face)
+                    self._shown = None
+                return
+            if shown == self._shown:
+                return
+            _display(lease, line1, face)
+            self._shown = shown
 
     def _on_danger(self, lease: Lease, danger: Danger, now: float) -> None:
         """危険の知らせは毎回、声は 10 秒に 1 回（5.5、5.6）。"""
@@ -366,6 +520,91 @@ class RemoteService:
             with self._lock:
                 self._speaking = False
 
+    # --- 首・ダンス・話させる ---
+
+    def _angles(self, lease: Lease) -> tuple[float, float]:
+        """覚えている首の向き。借り直したリースなら正面から数える（_lock の中で呼ぶ）。"""
+        if lease is not self._neck_lease:
+            self._neck_lease = lease
+            self._pan = self._tilt = 0.0
+        return self._pan, self._tilt
+
+    def _dance_go(self, lease: Lease, token: str) -> bool:
+        """ダンスを続けてよいか（7.6）。"""
+        if not lease.active or lease.preempt_requested.is_set():
+            return False
+        if self._closing.is_set():
+            return False
+        with self._lock:
+            if self._dance_stop:
+                return False
+        return self._slot.holder() == token
+
+    def _dance(self, lease: Lease, token: str, back_to: tuple[float, float]) -> None:
+        """首だけで踊る（補助のスレッド）。走行の口は渡さない（7.4）。"""
+
+        def look(pan: float, tilt: float) -> None:
+            # 動かした向きを覚える（止めたダンスの後も、その向きから数える。7.1）
+            lease.neck.look(pan, tilt)
+            with self._lock:
+                if self._neck_lease is lease:
+                    self._pan, self._tilt = pan, tilt
+
+        try:
+            self._overlay_on(lease, _OVERLAY_DANCE, texts.LCD_DANCE, texts.FACE_DANCE)
+            run_dance(
+                look=look,
+                go=lambda: self._dance_go(lease, token),
+                sleep=self._ctx.clock.sleep,
+                back_to=back_to,
+            )
+        except LeaseRevoked:
+            pass
+        except Exception as e:
+            logger.warning("踊れませんでした: %s", type(e).__name__)
+        finally:
+            self._overlay_off(lease, _OVERLAY_DANCE)
+            with self._lock:
+                self._dancing = False
+                self._dance_stop = False
+
+    def _talk(self, lease: Lease, words: str) -> None:
+        """話させる文字を話す（補助のスレッド）。文字は keep=False で残さない（10.2、10.5）。"""
+        try:
+            self._overlay_on(lease, _OVERLAY_TALK, texts.LCD_TALK, texts.FACE_TALK)
+            lease.voice.say(words, keep=False)
+        except LeaseRevoked:
+            pass
+        except Exception as e:
+            logger.warning("話せませんでした: %s", type(e).__name__)
+        finally:
+            self._overlay_off(lease, _OVERLAY_TALK)
+            with self._lock:
+                self._speaking = False
+
+    def _overlay_on(self, lease: Lease, name: str, line1: str, face: Face) -> None:
+        """走行より先に出す表示を足して出す。"""
+        with self._lcd_lock:
+            self._overlays = [o for o in self._overlays if o[0] != name]
+            self._overlays.append((name, line1, face))
+            self._lcd_dirty = True
+            _display(lease, line1, face)
+
+    def _overlay_off(self, lease: Lease, name: str) -> None:
+        """表示を除く。残りがあればそれを出し、なければ繰り返しが走行の表示に戻す。"""
+        with self._lcd_lock:
+            self._overlays = [o for o in self._overlays if o[0] != name]
+            self._lcd_dirty = True
+            if not self._overlays:
+                return
+            _, line1, face = self._overlays[-1]
+            try:
+                _display(lease, line1, face)
+            except LeaseRevoked:
+                pass
+            except Exception as e:
+                logger.warning("LCD に出せませんでした: %s", type(e).__name__)
+
     def _stop_quietly(self, lease: Lease | None) -> None:
         """止めるのを試す。失敗は型の名前だけ残す。"""
         if lease is None or not lease.active or Resource.DRIVE not in lease.resources:
@@ -381,6 +620,11 @@ class RemoteService:
         """走行の状態を空にする。LCD は次の歩で出し直す。"""
         self._state = DriveState()
         self._shown = None
+
+
+def _clamp(value: float, bounds: tuple[float, float]) -> float:
+    low, high = bounds
+    return max(low, min(high, value))
 
 
 def _display(lease: Lease, line1: str, face: Face) -> None:

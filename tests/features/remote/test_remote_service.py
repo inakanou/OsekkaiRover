@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
-from remote_fakes import FakeClock, FakeContext, FakeDrive, ScriptedSensors
+from remote_fakes import FakeClock, FakeContext, FakeDrive, FakeNeck, ScriptedSensors
 
 from osekkai.adapters.fake.clock import JST
 from osekkai.core.lcd_text import center
@@ -452,3 +452,369 @@ def test_繰り返しが思わぬ形で止まっても走行を止めてから�
         assert rig.moves() == [("stop",)]
     finally:
         rig.service.close()
+
+
+# --- 首（7.1、7.2） ---
+
+
+def _looks(rig: _Rig) -> list[tuple[object, ...]]:
+    return [c for c in rig.ctx.calls if c[0] in ("look", "home")]
+
+
+def test_首は上下左右に15度ずつ動く(rig: _Rig) -> None:
+    for way in ("right", "up", "left", "down"):
+        assert rig.service.look(ME, way) is Reply.OK
+    assert _looks(rig) == [
+        ("look", 15.0, 0.0),
+        ("look", 15.0, 15.0),
+        ("look", 0.0, 15.0),
+        ("look", 0.0, 0.0),
+    ]
+
+
+def test_首は範囲の端でそれ以上動かない(rig: _Rig) -> None:
+    for _ in range(7):
+        rig.service.look(ME, "right")
+    for _ in range(3):
+        rig.service.look(ME, "down")
+    looks = _looks(rig)
+    assert looks[4:7] == [("look", 75.0, 0.0), ("look", 80.0, 0.0), ("look", 80.0, 0.0)]
+    assert looks[7:] == [("look", 80.0, -15.0), ("look", 80.0, -30.0), ("look", 80.0, -30.0)]
+    # 端から戻るときは 1 回で戻る（押した分を貯めない）
+    rig.service.look(ME, "left")
+    assert _looks(rig)[-1] == ("look", 65.0, -30.0)
+
+
+def test_首は左と上の端でも止まる(rig: _Rig) -> None:
+    for _ in range(7):
+        rig.service.look(ME, "left")
+        rig.service.look(ME, "up")
+    assert _looks(rig)[-1] == ("look", -80.0, 60.0)
+
+
+def test_まんなかで正面に戻り_そこから数え直す(rig: _Rig) -> None:
+    rig.service.look(ME, "right")
+    assert rig.service.look(ME, "center") is Reply.OK
+    rig.service.look(ME, "up")
+    assert _looks(rig) == [("look", 15.0, 0.0), ("home",), ("look", 0.0, 15.0)]
+
+
+def test_借り直したら首は正面から数える(rig: _Rig) -> None:
+    rig.service.look(ME, "right")
+    rig.ctx.preempt_latest()
+    rig.service.look(ME, "right")
+    assert _looks(rig) == [("look", 15.0, 0.0), ("look", 15.0, 0.0)]
+
+
+# --- ブッブー（7.3） ---
+
+
+def test_ブッブーは4つから選んで話す(rig: _Rig) -> None:
+    for _ in range(20):
+        assert rig.service.horn(ME) is Reply.OK
+        _wait(lambda: not rig.service._speaking)
+    said = {c[1] for c in rig.says()}
+    assert said <= set(texts.SAY_HORNS)
+    assert len(said) > 1
+    assert all(c[2] is True for c in rig.ctx.calls if c[0] == "say")
+
+
+def test_話している途中のブッブーは話さない(rig: _Rig) -> None:
+    rig.ctx.speech.hold()
+    rig.service.horn(ME)
+    _wait(rig.ctx.speech.speaking.is_set)
+    assert rig.service.horn(ME) is Reply.IGNORED
+    rig.ctx.speech.release()
+    _wait(lambda: not rig.service._speaking)
+    assert len(rig.says()) == 1
+
+
+# --- ダンス（7.4〜7.6） ---
+
+
+class _Gate:
+    """最初の sleep で止める。`open()` まで、ダンスは 1 段目のまま待つ。"""
+
+    def __init__(self, rig: _Rig, monkeypatch: pytest.MonkeyPatch) -> None:
+        self.waiting = threading.Event()
+        self._open = threading.Event()
+        original = rig.clock.sleep
+
+        def sleep(seconds: float) -> None:
+            self.waiting.set()
+            if not self._open.wait(WAIT_S):
+                raise AssertionError("門が開きませんでした")
+            original(seconds)
+
+        monkeypatch.setattr(rig.clock, "sleep", sleep)
+
+    def open(self) -> None:
+        self._open.set()
+
+
+def _dance_looks(rig: _Rig) -> list[tuple[object, ...]]:
+    return [c for c in rig.ctx.calls if c[0] == "look"]
+
+
+def test_ダンスは走行を止めLCDを出し_首だけで踊って元の向きに戻る(rig: _Rig) -> None:
+    rig.service.look(ME, "right")
+    rig.service.drive(ME, Move.FWD)
+    rig.step()
+    assert rig.service.dance(ME) is Reply.OK
+    _wait(lambda: not rig.service._dancing)
+    calls = rig.ctx.calls
+    start = calls.index(_show(texts.LCD_DANCE, texts.FACE_DANCE.text()))
+    looks = [c for c in calls[start:] if c[0] == "look"]
+    assert looks == [("look", 30.0, 15.0), ("look", -30.0, 15.0)] * 3 + [("look", 15.0, 0.0)]
+    assert not [c for c in calls[start:] if c[0] in ("drive", "dance")]
+    # 走る命令は STOP になっている
+    rig.step()
+    assert rig.moves()[-1] == ("stop",)
+
+
+def test_ダンスはremote_danceのスレッドで踊る(rig: _Rig, monkeypatch: pytest.MonkeyPatch) -> None:
+    gate = _Gate(rig, monkeypatch)
+    rig.service.dance(ME)
+    assert gate.waiting.wait(WAIT_S)
+    names = {t.name: t for t in threading.enumerate()}
+    assert "remote-dance" in names
+    assert names["remote-dance"].daemon
+    gate.open()
+    _wait(lambda: not rig.service._dancing)
+
+
+def test_踊っている間は走る命令とダンスの命令と首を受け付けない(
+    rig: _Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    gate = _Gate(rig, monkeypatch)
+    rig.service.dance(ME)
+    assert gate.waiting.wait(WAIT_S)
+    assert rig.service.drive(ME, Move.FWD) is Reply.IGNORED
+    assert rig.service.drive(ME, Move.BACK) is Reply.IGNORED
+    assert rig.service.dance(ME) is Reply.IGNORED
+    assert rig.service.look(ME, "up") is Reply.IGNORED
+    rig.step()
+    assert rig.moves() == [("stop",)]
+    gate.open()
+    _wait(lambda: not rig.service._dancing)
+
+
+@pytest.mark.parametrize(
+    "interrupt",
+    [
+        lambda r: r.service.drive(ME, Move.STOP),
+        lambda r: r.slot.drop(ME),
+        lambda r: r.ctx.preempt_latest(),
+        lambda r: r.service.close(),
+    ],
+    ids=["止める命令", "操作する端末がいない", "中断の知らせ", "閉じる"],
+)
+def test_ダンスは次の段に進まずに止まる(
+    rig: _Rig, monkeypatch: pytest.MonkeyPatch, interrupt: Callable[[_Rig], object]
+) -> None:
+    gate = _Gate(rig, monkeypatch)
+    rig.service.dance(ME)
+    assert gate.waiting.wait(WAIT_S)
+    lease = rig.leases.lease
+    assert lease is not None
+    assert rig.service._dance_go(lease, ME)
+    interrupt(rig)
+    assert not rig.service._dance_go(lease, ME)
+    gate.open()
+    _wait(lambda: not rig.service._dancing)
+    # 1 段目のあと進まず、元の向きにも戻さない
+    assert _dance_looks(rig) == [("look", 30.0, 15.0)]
+
+
+def test_止める命令で止めたダンスの後は_また踊れる(
+    rig: _Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    gate = _Gate(rig, monkeypatch)
+    rig.service.dance(ME)
+    assert gate.waiting.wait(WAIT_S)
+    assert rig.service.drive(ME, Move.STOP) is Reply.OK
+    gate.open()
+    _wait(lambda: not rig.service._dancing)
+    assert rig.service.dance(ME) is Reply.OK
+    _wait(lambda: not rig.service._dancing)
+    assert len(_dance_looks(rig)) == 1 + 7
+
+
+def test_止めたダンスの後の首は_止めたときの向きから数える(
+    rig: _Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    gate = _Gate(rig, monkeypatch)
+    rig.service.dance(ME)
+    assert gate.waiting.wait(WAIT_S)
+    rig.service.drive(ME, Move.STOP)
+    gate.open()
+    _wait(lambda: not rig.service._dancing)
+    assert rig.service.look(ME, "right") is Reply.OK
+    assert _dance_looks(rig) == [("look", 30.0, 15.0), ("look", 45.0, 15.0)]
+
+
+def test_ダンスの途中で取り上げられたら静かに終わる(
+    rig: _Rig, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    def look(self: FakeNeck, pan: float, tilt: float) -> None:
+        raise LeaseRevoked("remote")
+
+    caplog.set_level(logging.DEBUG)
+    monkeypatch.setattr(FakeNeck, "look", look)
+    rig.service.dance(ME)
+    _wait(lambda: not rig.service._dancing)
+    assert not caplog.records
+
+
+def test_ダンスが終われば走行の表示に戻る(rig: _Rig) -> None:
+    rig.service.drive(ME, Move.STOP)
+    rig.step()
+    rig.service.dance(ME)
+    _wait(lambda: not rig.service._dancing)
+    rig.step()
+    face = texts.FACE_DRIVE.text()
+    assert rig.shows() == [
+        _show(texts.LCD_IDLE, face),
+        _show(texts.LCD_DANCE, texts.FACE_DANCE.text()),
+        _show(texts.LCD_IDLE, face),
+    ]
+
+
+# --- 話させる（10.1〜10.5） ---
+
+
+@pytest.mark.parametrize(
+    ("given", "spoken"),
+    [
+        ("  こんにちは  ", "こんにちは"),
+        ("a\nb\x7fc\x00d", "a b c d"),
+        ("a\x85b\x9fc", "a b c"),
+        ("\t\x1fやあ\r\n", "やあ"),
+        ("あ" * 130, "あ" * 120),
+        ("   " + "い" * 125, "い" * 120),
+    ],
+    ids=[
+        "前後の空白",
+        "制御文字",
+        "C1の制御文字",
+        "前後の制御文字",
+        "120文字に切る",
+        "空白を除いてから切る",
+    ],
+)
+def test_話させる文字は整えてから話す(rig: _Rig, given: str, spoken: str) -> None:
+    assert rig.service.say_text(ME, given) is Reply.OK
+    _wait(lambda: not rig.service._speaking)
+    assert ("say", spoken, False) in rig.ctx.calls
+
+
+@pytest.mark.parametrize("given", ["", "   ", "\n\t\x00"], ids=["空", "空白", "制御文字"])
+def test_空の文字は話さずに断る(rig: _Rig, given: str) -> None:
+    assert rig.service.say_text(ME, given) is Reply.EMPTY
+    assert not [c for c in rig.ctx.calls if c[0] in ("say", "show")]
+
+
+def test_話している途中なら話させるを断る(rig: _Rig) -> None:
+    rig.ctx.speech.hold()
+    rig.service.horn(ME)
+    _wait(rig.ctx.speech.speaking.is_set)
+    assert rig.service.say_text(ME, "やあ") is Reply.BUSY_SPEAKING
+    rig.ctx.speech.release()
+    _wait(lambda: not rig.service._speaking)
+    rig.ctx.speech.hold()
+    rig.service.say_text(ME, "やあ")
+    _wait(rig.ctx.speech.speaking.is_set)
+    assert rig.service.say_text(ME, "やあ") is Reply.BUSY_SPEAKING
+    assert rig.service.horn(ME) is Reply.IGNORED
+    rig.ctx.speech.release()
+    _wait(lambda: not rig.service._speaking)
+    assert len(rig.says()) == 2
+
+
+def test_話す間はLCDを出し_話し終えたら走行の表示に戻る(rig: _Rig) -> None:
+    rig.ctx.speech.hold()
+    assert rig.service.say_text(ME, "やあ") is Reply.OK
+    _wait(rig.ctx.speech.speaking.is_set)
+    talk = _show(texts.LCD_TALK, texts.FACE_TALK.text())
+    assert rig.shows() == [talk]
+    # 話している間も走れるが、LCD は話す表示のまま
+    rig.service.drive(ME, Move.FWD)
+    rig.step()
+    assert rig.moves() == [("drive", 0.0, 20)]
+    assert rig.shows() == [talk]
+    rig.ctx.speech.release()
+    _wait(lambda: not rig.service._speaking)
+    rig.step()
+    assert rig.shows() == [talk, _show(texts.LCD_FORWARD, texts.FACE_DRIVE.text())]
+
+
+def test_話している間も危険のLCDを先に出し_危険が消えれば話す表示に戻る(rig: _Rig) -> None:
+    rig.ctx.speech.hold()
+    rig.service.say_text(ME, "やあ")
+    _wait(rig.ctx.speech.speaking.is_set)
+    talk = _show(texts.LCD_TALK, texts.FACE_TALK.text())
+    stop = _show(texts.LCD_STOP, texts.FACE_STOP.text())
+    rig.sensors.set(NEAR)
+    rig.service.drive(ME, Move.FWD)
+    rig.step()
+    assert rig.moves() == [("stop",)]
+    assert rig.shows() == [talk, stop]
+    rig.step()
+    assert rig.shows() == [talk, stop]  # 変わらなければ出し直さない
+    rig.sensors.set(SensorReading(distance_cm=100.0, floor=(1000, 1000, 1000)))
+    rig.service.drive(ME, Move.FWD)
+    rig.step()
+    assert rig.moves()[-1] == ("drive", 0.0, 20)
+    assert rig.shows() == [talk, stop, talk]
+    rig.ctx.speech.release()
+    _wait(lambda: not rig.service._speaking)
+    rig.step()
+    assert rig.shows() == [talk, stop, talk, _show(texts.LCD_FORWARD, texts.FACE_DRIVE.text())]
+
+
+def test_話させた文字をログにも記録にも残さない(
+    rig: _Rig, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.DEBUG)
+    word = "ないしょの"
+    rig.service.say_text(ME, word)
+    _wait(lambda: not rig.service._speaking)
+    rig.ctx.speech.error = RuntimeError("boom")
+    rig.service.say_text(ME, word)
+    _wait(lambda: not rig.service._speaking)
+    assert caplog.records
+    for text in (word, ME, "boom"):
+        assert text not in caplog.text
+    for value in vars(rig.service).values():
+        assert word not in repr(value)
+
+
+# --- 受け付けの順 ---
+
+
+@pytest.mark.parametrize(
+    "act",
+    [
+        lambda s: s.look(OTHER, "up"),
+        lambda s: s.horn(OTHER),
+        lambda s: s.dance(OTHER),
+        lambda s: s.say_text(OTHER, "やあ"),
+    ],
+    ids=["首", "ブッブー", "ダンス", "話させる"],
+)
+def test_ほかの端末の首とブッブーとダンスと話させるは断る(
+    rig: _Rig, act: Callable[[RemoteService], Reply]
+) -> None:
+    rig.service.drive(ME, Move.STOP)
+    assert act(rig.service) is Reply.NOT_NOW
+    assert rig.service._message_for(OTHER) == texts.MSG_OTHER_OPERATOR
+    assert not [c for c in rig.ctx.calls if c[0] in ("look", "say", "show")]
+
+
+def test_おやすみの間は首とブッブーとダンスと話させるを断る(rig: _Rig) -> None:
+    rig.ctx.request_quiet()
+    assert rig.service.look(ME, "up") is Reply.NOT_NOW
+    assert rig.service.horn(ME) is Reply.NOT_NOW
+    assert rig.service.dance(ME) is Reply.NOT_NOW
+    assert rig.service.say_text(ME, "やあ") is Reply.NOT_NOW
+    assert rig.ctx.calls == []
