@@ -41,6 +41,11 @@ ENTRY_ONLY = (
 CLI = f"{REMOTE}.cli"
 ENTRY_MODULES: frozenset[str] = frozenset({CLI})
 
+# アダプタは、自分のパッケージの中では口（ports）とアダプタどうしだけを読む
+ADAPTERS = f"{REMOTE}.adapters"
+PORTS = f"{REMOTE}.ports"
+FAKE = f"{ADAPTERS}.fake"
+
 # 決まったアダプタだけが、関数の中でハードのライブラリを読んでよい
 SENSORS = f"{REMOTE}.adapters.sensors"
 USB_CAMERA = f"{REMOTE}.adapters.usb_camera"
@@ -135,6 +140,8 @@ def _violation(module: str, ref: ImportRef) -> bool:
         return not (module == FEATURE and ref.in_function)
     if any(_matches(name, entry) for entry in ENTRY_ONLY):
         return module not in ENTRY_MODULES
+    if _matches(module, ADAPTERS) and _matches(name, REMOTE):
+        return not (_matches(name, PORTS) or _matches(name, ADAPTERS))
     if _matches(name, OSEKKAI):
         return not any(_matches(name, allowed) for allowed in ALLOWED)
     return False
@@ -149,7 +156,7 @@ REMOTE_FILES = sorted(REMOTE_DIR.rglob("*.py"))
 
 def test_remote_のモジュールが見つかる() -> None:
     names = {_module_name(p) for p in REMOTE_FILES}
-    assert {REMOTE, f"{REMOTE}.adapters"} <= names
+    assert {REMOTE, ADAPTERS, PORTS, FAKE} <= names
 
 
 @pytest.mark.parametrize("path", REMOTE_FILES, ids=_module_name)
@@ -176,6 +183,33 @@ def test_自分のパッケージは読んでよい() -> None:
     assert _check(source) == []
     assert _check("from .feature import X\n", REMOTE, is_package=True) == []
     assert _check("from ..ports import Ports\n", SENSORS) == []
+
+
+def test_アダプタは口とアダプタどうしだけを読める() -> None:
+    for module in (SENSORS, USB_CAMERA, FAKE):
+        assert _check("from ..ports import SensorReading\n", module) == []
+        assert _check("from .. import ports\n", module) == []
+        assert _check("from osekkai.features.remote.ports import SensorPort\n", module) == []
+        assert _check("from . import fake\n", module) == []
+    assert _check("from ..ports import SensorPort\n", ADAPTERS, is_package=True) == []
+    assert _check("from ..config import RemoteConfig\n", ADAPTERS, is_package=True) != []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from ..config import RemoteConfig\n",
+        "from .. import texts\n",
+        "from ..service import RemoteService\n",
+        "from osekkai.features.remote.drive_rules import decide\n",
+        "from osekkai.features.remote import config\n",
+        "import osekkai.features.remote\n",
+        "def f():\n    from ..media import FrameHub\n",
+    ],
+)
+def test_アダプタは口のほかの自分の部品を読まない(source: str) -> None:
+    for module in (SENSORS, USB_CAMERA, FAKE):
+        assert _check(source, module) != [], module
 
 
 def test_基盤の決まった口は読んでよい() -> None:
