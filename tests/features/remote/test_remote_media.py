@@ -528,6 +528,30 @@ def test_返す合図で首のカメラをすぐ返し使えない印にする()
         assert hub.available()
 
 
+class _ReleasedWhileReading(FakeFrameSource):
+    """読んでいる途中に、首のカメラを返す合図が来る元。"""
+
+    hub: FrameHub | None = None
+
+    def read(self) -> bytes | None:
+        frame = super().read()
+        if self.hub is not None:
+            self.hub.release_neck()
+        return frame
+
+
+def test_読んでいる途中に返す合図が来たら_その1枚は配らない() -> None:
+    source = _ReleasedWhileReading([A])
+    hub, _ = _hub(source, Camera.NECK)
+    source.hub = hub
+    with hub.viewer() as v:
+        assert v is not None
+        hub._step()
+        assert hub.latest() is None
+        assert not hub.available()
+        assert v.next_frame(timeout=0.01) is None
+
+
 def test_USBのハブは返す合図で閉じない() -> None:
     source = FakeFrameSource([A])
     hub, _ = _hub(source, Camera.USB)

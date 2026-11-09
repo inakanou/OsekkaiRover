@@ -340,6 +340,13 @@ class RemoteService:
         finally:
             self._photo_lock.release()
 
+    def cancel_photo(self) -> None:
+        """撮っている途中の写真に止める合図を出す（web の待ちの上限を過ぎたとき）。
+
+        まだ撮っていなければ撮らず、話さずに終える。走行・首・ダンスは変えない。
+        """
+        self._photo_abort.set()
+
     def status(self, token: str) -> Status:
         """その端末の状態。映像を見る・状態を聞くは操作に入らないので、席を取らない。"""
         holder = self._slot.holder()
