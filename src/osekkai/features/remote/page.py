@@ -398,6 +398,8 @@ _JS_TEMPLATE: Final = """\
   function setupDrive(button) {
     const move = button.dataset.move;
     button.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+    // 長押しで、ブラウザの選択やメニューが働いて押しが切れないようにする
+    button.addEventListener("touchstart", function (e) { e.preventDefault(); }, { passive: false });
     if (move === "stop") {
       button.addEventListener("pointerdown", function (e) {
         e.preventDefault();
@@ -612,6 +614,11 @@ input {
   font-size: 16px;
 }
 section { margin-top: 16px; }
+.drive-pad, .look-pad {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
 .drive-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .drive { min-height: 80px; touch-action: none; }
 .drive-pad .guide { grid-column: 1 / -1; margin: 0; font-size: 16px; text-align: center; }

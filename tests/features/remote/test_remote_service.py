@@ -1127,6 +1127,32 @@ def test_首を見る端末が来れば見るだけの段を借り_いなくな�
     assert not cams.neck_hub.available()
 
 
+def test_操作する端末がいても_取り上げの後に首を見る端末がいれば見るだけの段を借り直す(
+    cams: _CamRig,
+) -> None:
+    cams.service.drive(ME, Move.FWD)
+    cams.step()
+    with cams.neck_hub.viewer():
+        cams.ctx.preempt_latest()
+        assert cams.slot.holder() == ME
+        cams.service.tick()
+        assert cams.level() is None
+        cams.clock.advance(LeaseKeeper.RETRY_SECONDS)
+        cams.service.tick()
+        assert cams.level() == frozenset({Resource.NECK})
+        assert cams.service.neck_allowed()
+    assert not cams.step()
+
+
+def test_操作する端末がいて首を見る端末がいなければ_取り上げの後は借りない(cams: _CamRig) -> None:
+    cams.service.drive(ME, Move.FWD)
+    cams.step()
+    cams.ctx.preempt_latest()
+    cams.clock.advance(LeaseKeeper.RETRY_SECONDS)
+    cams.service.tick()
+    assert cams.level() is None
+
+
 def test_見るだけの段を借りられなければ5秒おいて借り直す(cams: _CamRig) -> None:
     cams.ctx.busy = {Resource.NECK}
     with cams.neck_hub.viewer():

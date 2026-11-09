@@ -680,13 +680,18 @@ class RemoteService:
             if self._slot.expire():  # 3.3、3.4
                 self._stop_driving()
             with self._level_lock:
+                # 首の映像を見る端末がいれば見るだけ、いなければなし（12.4）。
+                # 見るだけの借り直しは LeaseKeeper が 5 秒おく
+                viewers = neck.viewers() if neck is not None else 0
+                level = self._level()
                 if self._slot.holder() is None:
-                    # 首の映像を見る端末がいれば見るだけ、いなければなし（12.4）。
-                    # 見るだけの借り直しは LeaseKeeper が 5 秒おく
-                    viewers = neck.viewers() if neck is not None else 0
                     target = Level.VIEW if viewers > 0 else Level.NONE
-                    if self._level() is not target:
+                    if level is not target:
                         self._leases.want(target)
+                elif level is Level.NONE and viewers > 0:
+                    # 操作する端末がいても、取り上げの後は見るだけを借り直す。
+                    # 走る段は、次の操作で借り直す
+                    self._leases.want(Level.VIEW)
         # 首を持たない（取り上げ・下げた段）なら首のカメラを返す（4.3）
         if self._level() is Level.NONE:
             self._release_neck_camera()

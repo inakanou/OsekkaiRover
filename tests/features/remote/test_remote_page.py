@@ -274,6 +274,14 @@ def test_ボタンは_touch_action_を決める() -> None:
     assert "touch-action: none" in css
 
 
+def test_走るボタンは長押しでブラウザの操作を出さない() -> None:
+    js = page.APP_JS
+    assert 'button.addEventListener("touchstart"' in js
+    assert "passive: false" in js
+    css = page.APP_CSS
+    assert ".drive-pad, .look-pad {" in css
+
+
 def test_ページのどこで離しても止める() -> None:
     js = page.APP_JS
     assert 'document.addEventListener("pointerup"' in js
