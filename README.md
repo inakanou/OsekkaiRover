@@ -32,7 +32,7 @@ Claude Code のスキル（`/kiro-*` コマンド）を使い、要件 → 設�
 | 見つけてあいさつ `presence` | 実装済み。実機の確認はこれから（`src/osekkai/features/presence`、手順書は [`docs/presence.md`](docs/presence.md)） |
 | おしゃべり `conversation` | 完了。実機で確かめた（`src/osekkai/features/conversation`、手順書は [`docs/conversation.md`](docs/conversation.md)） |
 | だるまさん `daruma-game` | 完了。実機で確かめた（`src/osekkai/features/daruma`、手順書は [`docs/daruma.md`](docs/daruma.md)） |
-| ラジコン `remote-control` | 実装済み。実機の確認はこれから（`src/osekkai/features/remote`、手順書は [`docs/remote.md`](docs/remote.md)） |
+| ラジコン `remote-control` | 完了。実機で確かめた（`src/osekkai/features/remote`、手順書は [`docs/remote.md`](docs/remote.md)） |
 
 ## 機能
 
@@ -58,7 +58,7 @@ Claude Code のスキル（`/kiro-*` コマンド）を使い、要件 → 設�
 スペックを 1 つずつ、要件 → 設計 → タスク → 実装 → PR の順に進めます（[`roadmap.md`](.kiro/steering/roadmap.md)）。
 
 1. **見つけてあいさつ**（`presence`）: 顔を見つけて首を向け、覚えた顔ならあいさつする。実機で確かめる
-2. **スマホのラジコン**（`remote-control`）: 家の Wi-Fi から操作する。実機で確かめる
+2. **スマホのラジコン**（`remote-control`）: 家の Wi-Fi から操作する。実機で確かめた
 
 ## ディレクトリ構成
 

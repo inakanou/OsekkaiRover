@@ -237,3 +237,6 @@
 - 6.3: feature は同じ stop_event を create_app と WebServer に渡す。WebServer は 0.0.0.0（IPv4 だけ）で待つ。送る待ちの上限は 10 秒（読まない端末の配信を終えて席を返す）。iPhone の Safari の映像は実機で確かめる
 - 6.3: tests の conversation の登録のテストが osekkai のロガーに閉じた出力先の StreamHandler を残す（core の logging_setup）。webserver のテストは raiseExceptions を monkeypatch で切って避けた。後で conftest か logging_setup で直す
 - 7.1: self-check の理由の文は checks.REASON_*（feature のログにも使える）。checks は SystemClock(_NotSynced()) で床の待ちを待つ（cli と同じ作り）
+- 実機の確かめ（2026-11-09、試しの版）: 12 章の項目はすべてよい。首の向き（右と上が +）・Android の Chrome の映像・映像を見ながらのだるまさん・机の端で止まるのを確かめた。iPhone の Safari は未確認
+- 実機の確かめで直した: 走るボタンの長押しで押しが切れる（touchstart を止める）。取り上げの後に操作する端末がいると首の見るだけの段を借り直さない。画面がカメラの「使えない」で映像を外し、見る端末がいなくなって開き直さない。センサーを初めの読みで開くので、初めての出発が床の準備の 2 秒で止まる（起動のときに 1 回読む）。知らせの出し入れでボタンが動く（場所をいつも取る）
+- 子ども用（ファミリーリンク）のスマホの Chrome は、家のアドレスでも ERR_TOO_MANY_RETRIES で届かなかった（実機に接続が来ない）。保護者のスマホで使う。手順書の困ったときに書いた
