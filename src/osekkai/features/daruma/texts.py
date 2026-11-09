@@ -9,7 +9,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Final
 
 from osekkai.core.types import Face, Glyph
@@ -18,6 +20,7 @@ from osekkai.core.types import Face, Glyph
 START_PHRASES: Final = ("だるま", "転んだ")
 
 NAME_SLOT: Final = "{name}"  # 呼び名の場所
+ROUNDS_SLOT: Final = "{rounds}"  # 回数の場所（1.3）
 DEFAULT_CALL_NAME: Final = "きみ"  # 呼び名がないときの代わり（3.4）
 
 # 話す言葉（要件の文のとおり）
@@ -25,17 +28,29 @@ SAY_INTRO: Final = (
     "だるまさんが ころんだ、しよう！ローバーが おにだよ。"
     "ローバーから はなれて、スタートの ところに いってね"
 )  # 1.2
-SAY_GO: Final = f"ローバーに タッチ できたら {NAME_SLOT}の かち。いくよー！"  # 1.3
+SAY_GO: Final = (
+    f"{ROUNDS_SLOT}かいの うちに ローバーに タッチ できたら {NAME_SLOT}の かち。いくよー！"  # 1.3
+)
 SAY_NO_CAMERA: Final = "ごめんね、カメラが ないと あそべないんだ"  # 1.4
 # 始める前の次の予定（1.5）。途中の 4.3 とは「あとで」の有無が違う
 SAY_NEXT_TASK_BEFORE: Final = "あ、つぎの よていの じかんが ちかいね。また あとで あそぼうね"
 SAY_KORONDA: Final = "ころんだ！"  # 2.4
 SAY_MOVED: Final = "あっ、うごいた！スタートに もどってね"  # 2.7
 SAY_WIN: Final = f"タッチ されちゃった！{NAME_SLOT}の かち！やったね！"  # 3.3
-SAY_MAX_ROUNDS: Final = "きょうは ここまで！たのしかったね。また あそぼうね"  # 4.1
-SAY_NOBODY: Final = "あれ、だれも いないのかな。また あそぼうね"  # 4.2
+SAY_MAX_ROUNDS: Final = "おしまい！こんどは ローバーの かち。また あそぼうね"  # 4.1
 SAY_NEXT_TASK: Final = "あ、つぎの よていの じかんが ちかいね。また あそぼうね"  # 4.3
 SAY_CAMERA_LOST: Final = "ごめんね、カメラが うまく うごかないみたい。また あそぼうね"  # 4.6
+
+
+# 残りの回数（この回を含む）と、唱える前に話す言葉。最後の 3 回だけ（4.2）。
+# 声が正しく読むように、数はかなで書く
+SAY_ROUNDS_LEFT: Final[Mapping[int, str]] = MappingProxyType(
+    {
+        3: "あと さんかい",
+        2: "あと にかい",
+        1: "さいごの いっかい",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -74,6 +89,14 @@ POSE_FACING: Final = (0.0, 10.0)  # 正面（2.4）
 INTRO_WAIT_S: Final = 5.0  # 始めの言葉の後（1.3）
 MOVED_WAIT_S: Final = 5.0  # 動いたの言葉の後（2.8）
 PAUSE_MAX_S: Final = 1.2  # 唱えた後の間の最大（2.3）
+
+
+def say_go(max_rounds: int) -> str:
+    """始めの言葉の `{rounds}` を設定の回数（数字）にする。`{name}` は残す（1.3）。
+
+    回数を先に入れるので、呼び名の中の `{rounds}` は置き換わらない。
+    """
+    return SAY_GO.replace(ROUNDS_SLOT, str(max_rounds))
 
 
 def say_with_name(template: str, call_name: str) -> str:

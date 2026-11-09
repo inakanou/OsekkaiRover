@@ -46,8 +46,7 @@ def test_節がなければ既定値で読める(xdg_dirs: dict[str, Path]) -> N
     assert config.call_name == ""
     assert config.threshold == 0.01
     assert config.watch_seconds == 2.5
-    assert config.max_rounds == 15
-    assert config.nobody_rounds == 5
+    assert config.max_rounds == 10  # 4.1
     assert config.end_before_task_min == 10
 
 
@@ -57,8 +56,7 @@ def test_書いた値で読める(xdg_dirs: dict[str, Path]) -> None:
         "  call_name: ゆう\n"
         "  threshold: 0.05\n"
         "  watch_seconds: 3\n"
-        "  max_rounds: 10\n"
-        "  nobody_rounds: 3\n"
+        "  max_rounds: 7\n"
         "  end_before_task_min: 15\n"
     )
     report = _load(xdg_dirs, text)
@@ -68,9 +66,17 @@ def test_書いた値で読める(xdg_dirs: dict[str, Path]) -> None:
     assert config.call_name == "ゆう"
     assert config.threshold == 0.05
     assert config.watch_seconds == 3.0
-    assert config.max_rounds == 10
-    assert config.nobody_rounds == 3
+    assert config.max_rounds == 7
     assert config.end_before_task_min == 15
+
+
+def test_前の版のだれもいないの回数が残っていても読める(xdg_dirs: dict[str, Path]) -> None:
+    # やめた項目は知らない項目として注意を出すだけで、遊びは始められる
+    report = _load(xdg_dirs, "daruma:\n  max_rounds: 8\n  nobody_rounds: 5\n")
+    assert _errors(report) == []
+    assert report.warnings == ["daruma.nobody_rounds: 知らない項目です"]
+    assert _daruma(report).max_rounds == 8
+    assert "nobody_rounds" not in DarumaConfig.model_fields
 
 
 @pytest.mark.parametrize(
@@ -82,8 +88,6 @@ def test_書いた値で読める(xdg_dirs: dict[str, Path]) -> None:
         ("watch_seconds: 10", "watch_seconds", 10.0),
         ("max_rounds: 1", "max_rounds", 1),
         ("max_rounds: 50", "max_rounds", 50),
-        ("nobody_rounds: 1", "nobody_rounds", 1),
-        ("nobody_rounds: 50", "nobody_rounds", 50),
         ("end_before_task_min: 0", "end_before_task_min", 0),
         ("end_before_task_min: 120", "end_before_task_min", 120),
     ],
@@ -107,8 +111,6 @@ def test_範囲の端は読める(xdg_dirs: dict[str, Path], line: str, attr: st
         ("watch_seconds: 10.5", "daruma.watch_seconds"),
         ("max_rounds: 0", "daruma.max_rounds"),
         ("max_rounds: 51", "daruma.max_rounds"),
-        ("nobody_rounds: 0", "daruma.nobody_rounds"),
-        ("nobody_rounds: 51", "daruma.nobody_rounds"),
         ("end_before_task_min: -1", "daruma.end_before_task_min"),
         ("end_before_task_min: 121", "daruma.end_before_task_min"),
     ],

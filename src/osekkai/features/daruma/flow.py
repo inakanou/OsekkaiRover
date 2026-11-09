@@ -28,6 +28,7 @@ from osekkai.features.daruma.rules import (
     judge_watch,
     pick_chant,
     pick_pause,
+    rounds_left,
     schedule_blocks,
 )
 from osekkai.features.routine.api import RoutineStatus
@@ -37,8 +38,7 @@ from osekkai.features.routine.api import RoutineStatus
 # SAY_NEXT_TASK_BEFORE を始めの確かめが直接話す（1.5）
 END_SAYS: Final[Mapping[EndReason, str]] = MappingProxyType(
     {
-        EndReason.MAX_ROUNDS: texts.SAY_MAX_ROUNDS,  # 4.1
-        EndReason.NOBODY: texts.SAY_NOBODY,  # 4.2
+        EndReason.MAX_ROUNDS: texts.SAY_MAX_ROUNDS,  # 4.1（ローバーの勝ち）
         EndReason.NEXT_TASK: texts.SAY_NEXT_TASK,  # 4.3
         EndReason.NO_CAMERA: texts.SAY_NO_CAMERA,  # 1.4
         EndReason.CAMERA_LOST: texts.SAY_CAMERA_LOST,  # 4.6
@@ -166,7 +166,7 @@ class GameFlow:
                 if kind is RoundKind.WIN:
                     return EndReason.WIN
                 self._tally, reason = advance(self._tally, kind, self._rules)
-                if reason is not None:  # 4.1、4.2
+                if reason is not None:  # 4.1
                     break
                 # 動いていなければ、待たずに次の回へ（2.9）
         except CameraLost:
@@ -186,13 +186,17 @@ class GameFlow:
         io.show(*texts.LCD_INTRO)  # 1.2
         self._say(io, texts.SAY_INTRO)
         io.rest(texts.INTRO_WAIT_S)  # 1.3
-        self._say(io, texts.SAY_GO)
+        self._say(io, texts.say_go(self._rules.max_rounds))
         # 「いくよー！」までの押下は数えない（1.3）
         io.clear_presses()
         return None
 
     def _round(self, io: GameIO) -> RoundKind:
         """1 回を進めて、回の結果を返す。"""
+        # 最後の 3 回は、唱える前に残りの回数を話す（4.2）
+        left = texts.SAY_ROUNDS_LEFT.get(rounds_left(self._tally, self._rules))
+        if left is not None:
+            self._say(io, left)
         chant = pick_chant(self._rng)  # 2.1
         io.show(chant.lcd, texts.FACE_CHANT.text())
         io.look(*texts.POSE_AWAY)  # 2.2

@@ -90,12 +90,12 @@ DARUMA_SPEECHES = frozenset(
         texts.SAY_KORONDA,
         texts.SAY_MOVED,
         texts.SAY_MAX_ROUNDS,
-        texts.SAY_NOBODY,
+        *texts.SAY_ROUNDS_LEFT.values(),
         texts.SAY_NEXT_TASK,
         texts.SAY_NEXT_TASK_BEFORE,
         texts.SAY_NO_CAMERA,
         texts.SAY_CAMERA_LOST,
-        texts.say_with_name(texts.SAY_GO, CALL_NAME),
+        texts.say_with_name(texts.say_go(3), CALL_NAME),
         texts.say_with_name(texts.SAY_WIN, CALL_NAME),
         *CHANT_SPEECHES,
     }
@@ -478,7 +478,7 @@ def test_言葉から勝ちまで通し_日課に譲って_入口と見つけて
         # 入口は「なあに？」の後、何も話さずに資源を返した（取り消し）
         assert said[:2] == [SAY_CALL, SAY_CALL]
         assert game_said[0] == texts.SAY_INTRO
-        assert game_said[1] == texts.say_with_name(texts.SAY_GO, CALL_NAME)
+        assert game_said[1] == texts.say_with_name(texts.say_go(3), CALL_NAME)
         assert game_said[-1] == texts.say_with_name(texts.SAY_WIN, CALL_NAME)  # 3.3
         assert all(text in DARUMA_SPEECHES for text in game_said)
         assert game_said.count(texts.SAY_KORONDA) == 1
