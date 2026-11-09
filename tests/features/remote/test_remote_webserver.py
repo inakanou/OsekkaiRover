@@ -211,8 +211,6 @@ def test_要求の処理の思わぬ誤りでも端末のアドレスを出さ�
         raise RuntimeError("hidden")
 
     monkeypatch.setattr(QuietHandler, "handle", broken)
-    # ほかのテストが残した閉じた出力先へのログの失敗の案内は、ここでは見ない
-    monkeypatch.setattr(logging, "raiseExceptions", False)
     with socket.create_connection((LOOPBACK, served.server.port), timeout=WAIT_S) as sock:
         sock.sendall(f"GET /app.css HTTP/1.1\r\nHost: {LOOPBACK}\r\n\r\n".encode("ascii"))
         assert sock.recv(64) == b""  # 応えずに閉じる

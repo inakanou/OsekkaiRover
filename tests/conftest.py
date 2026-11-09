@@ -1,11 +1,14 @@
 """テストで共通に使う準備。"""
 
+import logging
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
 from osekkai.adapters.fake import FakeDeviceSet
 from osekkai.adapters.fake.clock import FakeClock
+from osekkai.core.logging_setup import LOGGER_NAME
 from osekkai.core.ports import Devices
 
 XDG_VARS = {
@@ -15,6 +18,23 @@ XDG_VARS = {
     "XDG_DATA_HOME": "data-home",
     "XDG_RUNTIME_DIR": "runtime",
 }
+
+
+@pytest.fixture(autouse=True)
+def _restore_osekkai_logger() -> Iterator[None]:
+    """テストが `osekkai` のロガーに付けた手渡し先を、終わったら外して閉じる。
+
+    `main()` を呼ぶテストは、そのときの標準エラー（pytest の受け口）への手渡し先を付ける。
+    残すと、受け口が閉じた後のログが失敗し、ほかのテストに案内が混ざる。
+    """
+    logger = logging.getLogger(LOGGER_NAME)
+    handlers = list(logger.handlers)
+    level = logger.level
+    yield
+    for handler in [h for h in logger.handlers if h not in handlers]:
+        logger.removeHandler(handler)
+        handler.close()
+    logger.setLevel(level)
 
 
 @pytest.fixture

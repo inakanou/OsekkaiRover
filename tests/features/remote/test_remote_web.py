@@ -20,7 +20,7 @@ from pydantic import SecretStr
 from remote_fakes import FakeClock, FakeFrameSource
 from werkzeug.test import TestResponse
 
-from osekkai.features.remote import page, texts
+from osekkai.features.remote import page, texts, web
 from osekkai.features.remote.drive_rules import Move
 from osekkai.features.remote.login import LoginGuard, Sessions
 from osekkai.features.remote.media import Camera, FrameHub
@@ -43,6 +43,7 @@ SAME_ORIGIN: Final = {"Origin": "http://localhost"}
 JPEG: Final = b"\xff\xd8\xff\xe0jpeg\xff\xd9"
 JPEG2: Final = b"\xff\xd8\xff\xe0two\xff\xd9"
 PHOTO_NAME: Final = "20261108-102030-00-neck.jpg"
+WAIT_S: Final = 5.0
 
 
 class FakeService:
@@ -54,6 +55,7 @@ class FakeService:
         self.message: str | None = None
         self.photo = PhotoResult((), Reply.OK)
         self.streaming = True
+        self.photo_gate: threading.Event | None = None
 
     def drive(self, token: str, move: Move) -> Reply:
         self.calls.append(("drive", move))
@@ -81,7 +83,12 @@ class FakeService:
 
     def take_photo(self, token: str) -> PhotoResult:
         self.calls.append(("photo",))
+        if self.photo_gate is not None:
+            self.photo_gate.wait(WAIT_S)
         return self.photo
+
+    def cancel_photo(self) -> None:
+        self.calls.append(("cancel_photo",))
 
     def status(self, token: str) -> Status:
         operator: Literal["me", "other", "none"] = "me"
@@ -636,6 +643,26 @@ def test_1_枚も撮れなかったときは撮れなかったことを出す(lo
     logged_in.service.photo = PhotoResult((), Reply.FAILED)
     body = logged_in.post("/api/photo", {}).get_json()
     assert body == {"reply": "failed", "message": texts.MSG_PHOTO_FAILED, "photos": []}  # 9.3
+
+
+def test_写真の待ちが上限を過ぎたら止める合図を出し_撮れなかったと返す(
+    logged_in: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(web, "PHOTO_WAIT_S", 0.05)
+    logged_in.service.photo_gate = threading.Event()  # ほかの声が終わらないなど
+    try:
+        body = logged_in.post("/api/photo", {}).get_json()
+    finally:
+        logged_in.service.photo_gate.set()
+    assert body == {"reply": "failed", "message": texts.MSG_PHOTO_FAILED, "photos": []}
+    assert ("cancel_photo",) in logged_in.service.calls
+
+
+def test_写真の待ちは上限の中なら止めない(logged_in: Rig) -> None:
+    logged_in.service.photo = PhotoResult((PHOTO_NAME,), Reply.OK)
+    body = logged_in.post("/api/photo", {}).get_json()
+    assert body["photos"] == ["/photos/" + PHOTO_NAME]
+    assert ("cancel_photo",) not in logged_in.service.calls
 
 
 def test_首の失敗では写真の撮れなかった文を出さない(logged_in: Rig) -> None:

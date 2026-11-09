@@ -963,8 +963,12 @@ def test_撮っている途中の次の写真の要求は無視する(cams: _Cam
 
 @pytest.mark.parametrize(
     "interrupt",
-    [lambda r: r.ctx.preempt_latest(), lambda r: r.service.halt()],
-    ids=["中断の知らせ", "止め方"],
+    [
+        lambda r: r.ctx.preempt_latest(),
+        lambda r: r.service.halt(),
+        lambda r: r.service.cancel_photo(),
+    ],
+    ids=["中断の知らせ", "止め方", "写真の待ちの上限"],
 )
 def test_写真の途中で止められたら撮らずに話さない(
     cams: _CamRig, interrupt: Callable[[_Rig], object]

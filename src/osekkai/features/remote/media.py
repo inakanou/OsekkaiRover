@@ -225,6 +225,7 @@ class FrameHub:
         self._thread: threading.Thread | None = None
         self._frame: bytes | None = None
         self._seq = 0
+        self._released = 0  # 首のカメラを返した回数。読み途中に返されたら、その 1 枚を捨てる
         self._available = True
         self._opened = False
         self._retry_at: float | None = None
@@ -295,6 +296,7 @@ class FrameHub:
             self._available = False
             self._frame = None
             self._retry_at = self._clock.monotonic() + RETRY_S
+            self._released += 1
         self._call(self._source.close)
 
     def close(self) -> None:
@@ -376,6 +378,7 @@ class FrameHub:
                 opened = self._opened
                 retry_at = self._retry_at
                 next_at = self._next_at
+                released = self._released
             if not opened:
                 if retry_at is not None and now + EPSILON_S < retry_at:
                     return retry_at - now
@@ -383,6 +386,8 @@ class FrameHub:
                     self._fail(now, close=False)
                     return RETRY_S
                 with self._cond:
+                    if self._released != released:
+                        return RETRY_S  # 開いている途中に返された
                     self._opened = True
                     self._retry_at = None
             elif next_at is not None and now + EPSILON_S < next_at:
@@ -393,6 +398,8 @@ class FrameHub:
                 return RETRY_S
             period = 1.0 / self.MAX_FPS
             with self._cond:
+                if self._released != released:
+                    return RETRY_S  # 読んでいる途中に返された。前の 1 枚を配らない
                 self._next_at = now + period
                 self._frame = frame
                 self._seq += 1

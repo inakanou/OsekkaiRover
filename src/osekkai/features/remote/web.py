@@ -76,6 +76,7 @@ MAX_PAGES_PER_TOKEN: Final = 4  # 印ごとに seq を覚える画面の数（�
 MAX_TOKENS: Final = 64  # seq を覚える印の数（古く使った印から忘れる）
 STREAM_MIMETYPE: Final = "multipart/x-mixed-replace; boundary=frame"
 FRAME_WAIT_S: Final = 0.5  # 新しい 1 枚を待つ上限。この間ごとに続けてよいかを確かめる
+PHOTO_WAIT_S: Final = 30.0  # 写真を待つ上限。ほかの機能の声が長く続いても、端末を待たせ続けない
 SOCKET_TIMEOUT_S: Final = 10.0  # 送る・受ける待ちの上限。読まない端末の配信を終える
 JOIN_S: Final = 3.0  # 待ち受けのスレッドの終わりを待つ上限
 _CAMERAS: Final[Mapping[str, Camera]] = {camera.value: camera for camera in Camera}
@@ -126,6 +127,8 @@ class OperatorService(Protocol):
     def set_fast(self, token: str, fast: bool) -> Reply: ...
 
     def take_photo(self, token: str) -> PhotoResult: ...
+
+    def cancel_photo(self) -> None: ...
 
     def status(self, token: str) -> Status: ...
 
@@ -377,7 +380,7 @@ def create_app(
     @app.post("/api/photo")
     def api_photo() -> Response:
         token: str = g.token
-        result = service.take_photo(token)  # 話し終えて撮るまで、このスレッドで待つ
+        result = _photo_within_limit(service, token)
         body = status_json(token, result.reply)
         if result.reply is Reply.FAILED:  # 9.3。FAILED は首の失敗にも使うので、写真だけここで
             body["message"] = texts.MSG_PHOTO_FAILED
@@ -429,6 +432,30 @@ def create_app(
         return response
 
     return app
+
+
+def _photo_within_limit(service: OperatorService, token: str) -> PhotoResult:
+    """写真を補助のスレッドで撮り、PHOTO_WAIT_S まで待つ。
+
+    過ぎたら止める合図を出し、撮れなかったとして返す。補助のスレッドは、
+    話している途中の声が終わってから、撮らずに終える。
+    """
+    results: list[PhotoResult] = []
+
+    def run() -> None:
+        try:
+            results.append(service.take_photo(token))
+        except Exception as error:  # 補助のスレッドの中の誤りは型の名前だけ
+            logger.warning("写真を撮れませんでした: %s", type(error).__name__)
+
+    thread = threading.Thread(target=run, name="remote-photo", daemon=True)
+    thread.start()
+    thread.join(PHOTO_WAIT_S)
+    if thread.is_alive() or not results:
+        if thread.is_alive():
+            service.cancel_photo()
+        return PhotoResult((), Reply.FAILED)
+    return results[0]
 
 
 def _part(jpeg: bytes) -> bytes:
