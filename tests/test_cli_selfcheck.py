@@ -51,6 +51,7 @@ HARDWARE_NAMES = ["core.lcd", "core.hat", "core.buttons", "core.servos"]
 CONVERSATION_NAMES = ["conversation.setup"]
 DARUMA_NAMES = ["daruma.camera"]
 PRESENCE_NAMES = ["presence.camera", "presence.models", "presence.faces"]
+REMOTE_NAMES = ["remote.setup", "remote.sensors", "remote.usb_camera"]
 ROUTINE_NAMES = ["routine.holidays", "routine.quiet_hours", "routine.records"]
 VOICE_NAMES = ["voice.mic", "voice.model"]
 ALL_NAMES = [
@@ -58,6 +59,7 @@ ALL_NAMES = [
     *CONVERSATION_NAMES,
     *DARUMA_NAMES,
     *PRESENCE_NAMES,
+    *REMOTE_NAMES,
     *ROUTINE_NAMES,
     *VOICE_NAMES,
 ]

@@ -45,6 +45,9 @@ FEATURE_ADAPTER_LIBS = {
     "osekkai.features.presence.adapters.picamera": frozenset({"picamera2"}),
     # おしゃべりの Claude のアダプタだけが、関数の中で anthropic を読む（conversation の設計）
     "osekkai.features.conversation.adapters.claude": frozenset({"anthropic"}),
+    # ラジコンのセンサーと USB のカメラのアダプタ（remote-control の設計）
+    "osekkai.features.remote.adapters.sensors": frozenset({"smbus2", "lgpio"}),
+    "osekkai.features.remote.adapters.usb_camera": frozenset({"cv2", "numpy"}),
 }
 
 # 基盤のアダプタのうち、決まったモジュールだけが読んでよいもの（狭い許し）。
@@ -284,6 +287,18 @@ def test_Claude_のアダプタだけは関数の中で_anthropic_を読み込�
         "osekkai.features.presence.adapters.opencv",
     ):
         assert _check(lazy, module) == ["anthropic"], module
+
+
+def test_ラジコンのアダプタだけは関数の中でハードのライブラリを読み込める() -> None:
+    sensors = "osekkai.features.remote.adapters.sensors"
+    camera = "osekkai.features.remote.adapters.usb_camera"
+    assert _check("def f():\n    import smbus2\n    import lgpio\n", sensors) == []
+    assert _check("def f():\n    import cv2\n    import numpy\n", camera) == []
+    # 一番上での読み込み・取り違え・ほかのモジュールは断る
+    assert _check("import lgpio\n", sensors) == ["lgpio"]
+    assert _check("def f():\n    import cv2\n", sensors) == ["cv2"]
+    assert _check("def f():\n    import smbus2\n", camera) == ["smbus2"]
+    assert _check("def f():\n    import cv2\n", "osekkai.features.remote.service") == ["cv2"]
 
 
 def test_Claude_のアダプタでもほかのハードのライブラリは断る() -> None:

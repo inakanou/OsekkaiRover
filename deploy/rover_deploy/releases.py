@@ -32,7 +32,8 @@ UNIT_SOURCE = Path("deploy/systemd") / CORE_UNIT_NAME
 VENV_PYTHON = "python3"
 # voice は音声の入口の聞き取りの依存（faster-whisper など）
 # conversation はおしゃべりの依存（anthropic）
-PIP_EXTRAS = "pi,voice,conversation"
+# remote はラジコンの端末向けの画面の依存（flask）
+PIP_EXTRAS = "pi,voice,conversation,remote"
 
 # 時間切れ（秒）。pip は Pi で依存をビルドすることがあるので長くとる
 GIT_TIMEOUT_S = 60.0
