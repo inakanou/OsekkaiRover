@@ -243,6 +243,22 @@ def test_設定したポートで待ち受け_止めればすぐ戻って閉じ�
     assert PIN not in caplog.text
 
 
+def test_待ち受けの前にセンサーを1回読んで準備を始めておく(make: Callable[..., _Rig]) -> None:
+    # 実機のセンサーは初めの読みで開き、床は開いてから 2 秒は読めない。
+    # 初めて走ろうとしたときに、その 2 秒で止まらないようにする
+    rig = make()
+    rig.start()
+    _wait(lambda: _serving(rig.config.port))
+    assert rig.sensors.reads >= 1
+
+
+def test_準備の読みで誤りが出ても待ち受ける(make: Callable[..., _Rig]) -> None:
+    rig = make()
+    rig.sensors.set(OSError("boom"))
+    rig.start()
+    _wait(lambda: _serving(rig.config.port))
+
+
 def test_止めるとリースを返す(make: Callable[..., _Rig], fast_tick: None) -> None:
     rig = make()
     rig.start()

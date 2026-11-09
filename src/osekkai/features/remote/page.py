@@ -135,7 +135,7 @@ def control_html() -> str:
         + '<script src="/app.js" defer></script>\n'
         + "</head>\n"
         + '<body class="control">\n'
-        + '<p class="message" id="message" role="status" hidden></p>\n'
+        + '<p class="message empty" id="message" role="status"></p>\n'
         + '<section class="videos">\n'
         + _video("neck", LABEL_NECK)
         + _video("usb", LABEL_USB)
@@ -243,9 +243,10 @@ _JS_TEMPLATE: Final = """\
   }
 
   function showMessage(text) {
+    // 場所はいつも取っておく。出し入れでボタンの位置が動かないように
     const el = byId("message");
     el.textContent = text || "";
-    el.hidden = !text;
+    el.classList.toggle("empty", !text);
   }
 
   function setOverlay(cam, text) {
@@ -281,11 +282,14 @@ _JS_TEMPLATE: Final = """\
           return;
         }
         cameraOk[cam] = ok;
-        if (ok) {
-          attach(cam);
-        } else {
-          detach(cam);
+        // 使えない間も映像は受け取り続ける。外すと見る端末がいなくなり、
+        // ロボットがカメラを開き直さない
+        if (!ok) {
           setOverlay(cam, T.cameraUnavailable);
+        } else if (live[cam]) {
+          setOverlay(cam, "");
+        } else {
+          attach(cam);
         }
       });
     }
@@ -297,12 +301,8 @@ _JS_TEMPLATE: Final = """\
     if (hidden) {
       return;
     }
-    if (!cameraOk[cam]) {
-      setOverlay(cam, T.cameraUnavailable);
-      return;
-    }
     failed[cam] = false;
-    setOverlay(cam, "");
+    setOverlay(cam, cameraOk[cam] ? "" : T.cameraUnavailable);
     live[cam] = true;
     byId("video-" + cam).src = "/stream/" + cam + "?t=" + Date.now();
   }
@@ -325,7 +325,7 @@ _JS_TEMPLATE: Final = """\
   function retryVideos() {
     const now = Date.now();
     CAMERAS.forEach(function (cam) {
-      if (failed[cam] && cameraOk[cam] && now >= retryAt[cam]) {
+      if (failed[cam] && now >= retryAt[cam]) {
         attach(cam);
       }
     });
@@ -595,7 +595,17 @@ input {
   padding: 12px;
   text-align: center;
 }
-.control .message { position: sticky; top: 0; z-index: 2; }
+.control .message {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: 0 0 8px;
+  min-height: 3.2em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.control .message.empty { visibility: hidden; }
 .videos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .video { position: relative; margin: 0; background: #333; border-radius: 12px; overflow: hidden; }
 .video img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }

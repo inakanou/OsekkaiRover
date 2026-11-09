@@ -282,6 +282,24 @@ def test_走るボタンは長押しでブラウザの操作を出さない() ->
     assert ".drive-pad, .look-pad {" in css
 
 
+def test_知らせの場所はいつも取っておき_ボタンの位置が動かない() -> None:
+    html = page.control_html()
+    assert '<p class="message" id="message" role="status" hidden>' not in html
+    js = page.APP_JS
+    assert "el.hidden = !text;\n  }\n\n  function setOverlay" not in js
+    assert 'el.classList.toggle("empty", !text);' in js
+    css = page.APP_CSS
+    assert ".control .message.empty { visibility: hidden; }" in css
+    assert "min-height: 3.2em;" in css
+
+
+def test_カメラが使えない間も映像を受け取り続ける() -> None:
+    js = page.APP_JS
+    # 使えないと知らされても外さない。外すと見る端末がいなくなり、カメラが開き直されない
+    assert "detach(cam);\n          setOverlay(cam, T.cameraUnavailable);" not in js
+    assert "if (failed[cam] && now >= retryAt[cam])" in js
+
+
 def test_ページのどこで離しても止める() -> None:
     js = page.APP_JS
     assert 'document.addEventListener("pointerup"' in js
@@ -299,6 +317,7 @@ const vm = require("node:vm");
 function makeEl(id) {
   return {
     id: id, dataset: {}, hidden: false, textContent: "", src: "", value: "", attrs: {},
+    classList: { toggle() {} },
     handlers: {},
     addEventListener(name, fn) { (this.handlers[name] = this.handlers[name] || []).push(fn); },
     fire(name, ev) { (this.handlers[name] || []).forEach((fn) => fn(ev || fakeEvent())); },

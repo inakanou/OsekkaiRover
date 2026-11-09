@@ -123,6 +123,7 @@ class RemoteFeature:
         try:
             try:
                 sensors = self._make_sensors()
+                _warm_up(sensors)
                 parts = self._build(sensors)
                 self._prune_if_due()  # 起動のとき（9.6）
                 stop_web = self._start_web(parts)
@@ -272,3 +273,15 @@ class RemoteFeature:
                 step()
             except Exception as e:  # 残りの後始末を続ける
                 logger.warning("後始末で失敗しました: %s", type(e).__name__)
+
+
+def _warm_up(sensors: SensorPort) -> None:
+    """センサーを 1 回読んで開いておく。
+
+    実機の床センサーは開いてから 2 秒は読めない（危険とする）。初めて走ろうとしたときに、
+    その 2 秒で止まらないように、待ち受けの前に開いておく。読みの値は使わない。
+    """
+    try:
+        sensors.read()
+    except Exception as e:
+        logger.warning("センサーの準備の読みに失敗しました: %s", type(e).__name__)
