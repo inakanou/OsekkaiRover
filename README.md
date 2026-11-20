@@ -33,6 +33,7 @@ Claude Code のスキル（`/kiro-*` コマンド）を使い、要件 → 設�
 | おしゃべり `conversation` | 完了。実機で確かめた（`src/osekkai/features/conversation`、手順書は [`docs/conversation.md`](docs/conversation.md)） |
 | だるまさん `daruma-game` | 完了。実機で確かめた（`src/osekkai/features/daruma`、手順書は [`docs/daruma.md`](docs/daruma.md)） |
 | ラジコン `remote-control` | 完了。実機で確かめた（`src/osekkai/features/remote`、手順書は [`docs/remote.md`](docs/remote.md)） |
+| 朝と夜のお話 `morning-night-talk` | 実装済み。実機の確認はこれから（`src/osekkai/features/talk`、手順書は [`docs/talk.md`](docs/talk.md)） |
 
 ## 機能
 
@@ -46,12 +47,14 @@ Claude Code のスキル（`/kiro-*` コマンド）を使い、要件 → 設�
 | おしゃべり | `conversation` | どの機能の言葉にも当てはまらない言葉に、Claude で子ども向けの短い返事をする | [`docs/conversation.md`](docs/conversation.md) |
 | だるまさん | `daruma` | 「だるまさん しよう」と話しかけると、ロボットが鬼になって「だるまさんがころんだ」をする。走らない | [`docs/daruma.md`](docs/daruma.md) |
 | ラジコン | `remote` | 家の Wi-Fi の中のスマホやタブレットの画面から、ロボットを走らせる。首・ダンス・映像・写真・話させる | [`docs/remote.md`](docs/remote.md) |
+| 朝と夜のお話 | `talk` | 日課の予告に続けて、夜はあしたの、朝は今日の天気と、好きなものの短い豆知識を話す | [`docs/talk.md`](docs/talk.md) |
 
 日課の設定は、設定ファイルの `routine:` の節に書きます。見本では全部コメントなので、書くまではタスクは 0 個です。
 音声の入口の設定は、設定ファイルの `voice:` の節に書きます。実機では `recognizer: whisper` にします。
 見つけてあいさつの設定は、設定ファイルの `presence:` の節に書きます。顔は、ロボットを止めてからコマンドで覚えさせます（手順書を見てください）。
 だるまさんの設定は、設定ファイルの `daruma:` の節に書きます。動いたかのしきい値は、ロボットを止めてから道具で確かめて合わせます（手順書を見てください）。
 ラジコンの設定は、設定ファイルの `remote:` の節に書きます。既定は無効です。pin は実機の設定ファイルだけに、引用符で囲んで書きます（手順書を見てください）。
+朝と夜のお話の設定は、設定ファイルの `talk:` の節に書きます。既定は無効です。現在地と好きなものは実機の設定ファイルだけに書き、気象庁のコードは引用符で囲みます（手順書を見てください）。
 
 ## 今後の予定
 
@@ -74,11 +77,12 @@ Claude Code のスキル（`/kiro-*` コマンド）を使い、要件 → 設�
 │   ├── features/conversation/ # おしゃべり
 │   ├── features/daruma/      # だるまさん
 │   ├── features/remote/      # ラジコン
+│   ├── features/talk/        # 朝と夜のお話
 │   └── voice/                # 音声の入口
 ├── tests/                    # テスト（src/osekkai と同じ構成。配置の道具は tests/deploy）
 ├── config/                   # 設定の見本（osekkai.example.yaml）。実際の設定はリポジトリの外
 ├── deploy/                   # 実機への配置の道具（rover-deploy）と systemd のユニット
-├── docs/                     # 手順書（deploy.md、routine.md、voice.md、presence.md、conversation.md、daruma.md、remote.md）
+├── docs/                     # 手順書（deploy.md、routine.md、voice.md、presence.md、conversation.md、daruma.md、remote.md、talk.md）
 ├── scripts/                  # 開発用スクリプト
 ├── .github/                  # CI（GitHub Actions）と PR テンプレート
 ├── .claude/
@@ -225,3 +229,10 @@ deploy/rover-deploy status                  # 版の確認
 | [Open JTalk](https://open-jtalk.sourceforge.net/) | 音声合成 | Modified BSD |
 | [YuNet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet)（OpenCV Zoo） | 顔検出のモデル | MIT |
 | [SFace](https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface)（OpenCV Zoo） | 顔認識のモデル | Apache-2.0 |
+
+朝と夜のお話は、次のデータを動いている間に問い合わせて使います（リポジトリには、テストの見本の応答だけを `tests/features/talk/fixtures/` に置きます）。くわしくは [`docs/talk.md`](docs/talk.md) の 8 章を見てください。
+
+| 名前 | 用途 | 条件と出典の表記 |
+| --- | --- | --- |
+| [Open-Meteo](https://open-meteo.com/) | 天気の予報（天気・いちばん高い気温と低い気温・降る確率） | Weather data by [Open-Meteo.com](https://open-meteo.com/)（[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)）。非商用で使う（[利用の条件](https://open-meteo.com/en/terms)） |
+| [気象庁](https://www.jma.go.jp/bosai/warning/) | 注意報・警報 | 出典：気象庁ホームページ（<https://www.jma.go.jp/bosai/warning/>）。注意報・警報のデータを加工して利用（[公共データ利用規約](https://www.jma.go.jp/jma/kishou/info/coment.html)） |
