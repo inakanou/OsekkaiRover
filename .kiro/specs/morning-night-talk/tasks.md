@@ -101,7 +101,7 @@
   - _Requirements: 12.1, 12.2_
 
 - [ ] 5. 流れ
-- [ ] 5.1 前もっての用意と、会話の AI の豆知識の出どころを作る
+- [x] 5.1 前もっての用意と、会話の AI の豆知識の出どころを作る
   - 会話の AI の口を包み、豆知識の頼み方で問い合わせ、返事を整えて返す出どころを作る。空・拒否・失敗は豆知識なしの結果にする
   - 用意を始めるときに、記録の直前の好きなものを見て好きなものを選び、出どころに渡す。豆知識が取れたら好きなものの hash を用意したものに入れる
   - 天気・注意報・豆知識を、別々のスレッドで並べて取る。各問い合わせは設定の時間切れで止める。どれも例外を外へ出さない
@@ -165,3 +165,4 @@
 - 3.4: `TalkRecord` は日付を引数で受ける（`plan.decide` には `lambda k: record.done(now.date(), k)` を渡す）。`mark` は書けなければ元に戻して `OSError` を上げる。6.1 は書けない間に毎秒やり直して警告を出し続けないよう、その日の分は控えめにやり直すこと。`set_last_topic` は話した後（`mark` の後）に呼ぶ。`TalkOutcome` と `TalkRecordPort` は `record.py` にある
 - 4.2: 新しい報のどれにも設定の市区町村がなければ BAD_RESPONSE（コードの誤りを「注意報なし」と言い切らないため）。`now` はタイムゾーン付きの時刻を返すこと
 - 5.2: `TalkFlow.speak` の結果は SPOKEN・QUIET・BUSY・RECORD_FAILED・INTERRUPTED・FAILED。QUIET・BUSY・RECORD_FAILED は記録を付けていない（次の秒にやり直す）。INTERRUPTED・FAILED は記録済み。`on_started` の OSError 以外の例外は資源を返してから外へ出る（6.1 が受ける）
+- 5.1: `Preparer(*, weather, alerts, facts, record, config, rng, monotonic)`。現在地がなければ `weather=None`（注意報も取らない）、注意報の地域がなければ `alerts=None`、鍵やライブラリがなければ `facts=None` を呼ぶ側が渡す。`take(kind, weather_day, today, wait_s=5.0)` は設計より `today` が多い。好きなものの hash の保存（`set_last_topic`）は話した後に 6.1 が行う
