@@ -45,7 +45,9 @@ def _section(**fields: Any) -> dict[str, Any]:
 def _write_config(**fields: Any) -> None:
     paths = Paths()
     paths.config_dir.mkdir(parents=True, exist_ok=True)
-    text = yaml.safe_dump({"talk": _section(**fields)}, allow_unicode=True, sort_keys=False)
+    # 起動の声は実際の時刻で出たり出なかったりするので、空の時間帯で出さない
+    data = {"core": {"startup_voice_hours": ["00:00", "00:00"]}, "talk": _section(**fields)}
+    text = yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
     paths.config_file.write_text(text, encoding="utf-8")
 
 
