@@ -38,6 +38,7 @@ from osekkai.features.talk import plan
 from osekkai.features.talk.adapters.canned import CannedAlerts, CannedFacts, CannedWeather
 from osekkai.features.talk.adapters.jma_alerts import JmaAlerts
 from osekkai.features.talk.adapters.open_meteo import OpenMeteoWeather
+from osekkai.features.talk.checks import TALK_CHECKS
 from osekkai.features.talk.config import TalkConfig
 from osekkai.features.talk.flow import RESOURCES, FlowOutcome, TalkFlow
 from osekkai.features.talk.model import AlertPort, FactSource, Prepared, TalkKind, WeatherPort
@@ -108,7 +109,7 @@ class TalkFeature:
         priority=Priority.BACKGROUND + 5,
         resources=RESOURCES,  # 声と画面だけ（8.6）
         config_model=TalkConfig,
-        checks=(),
+        checks=TALK_CHECKS,
     )
 
     def __init__(

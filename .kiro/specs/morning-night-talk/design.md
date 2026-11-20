@@ -44,7 +44,7 @@
 - `osekkai.adapters.fake.console.typed_input_active`（PC で偽の天気と偽の豆知識を選ぶときだけ。`talk.feature` だけ）
 - `osekkai.__main__`（試しのコマンド `talk.trial` だけ。日課の試しと同じ）
 - 標準ライブラリの `urllib.request`・`json`: `features/talk/adapters/` の中だけ
-- 依存の向き: `config`・`texts`・`model` → `weather_talk`・`plan`・`topics`・`record` → `prepare`・`flow` → `feature`・`trial`。`adapters/*` は `model` だけを読む。`checks` は `config`・`adapters`・`conversation.api` だけを読む
+- 依存の向き: `config`・`texts`・`model` → `weather_talk`・`plan`・`topics`・`record` → `prepare`・`flow` → `feature`・`trial`。`adapters/*` は `model` だけを読む。`checks` は `config`・`model`・`adapters`・`conversation.api` だけを読む
 
 ### Revalidation Triggers
 - `RoutineStatus` の新しい項目の意味（特に `notice_said` と `ended_at`）や、日課の 1 秒ごとの更新の間隔が変わる

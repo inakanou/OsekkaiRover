@@ -21,6 +21,7 @@ from osekkai.core.registry import ENTRY_POINT_GROUP, FeatureRegistry
 from osekkai.core.runtime import Runtime
 from osekkai.core.types import Priority, Resource
 from osekkai.features.talk import TalkFeature
+from osekkai.features.talk.checks import TALK_CHECKS
 from osekkai.features.talk.config import TalkConfig
 from osekkai.features.talk.flow import RESOURCES
 
@@ -70,7 +71,7 @@ def test_申告は声と画面だけで_見守りより少し上の優先度() -
     assert Resource.DRIVE not in spec.resources  # 8.6
     assert Resource.NECK not in spec.resources
     assert spec.config_model is TalkConfig
-    assert spec.checks == ()
+    assert spec.checks == TALK_CHECKS
 
 
 def test_優先度は見つけてあいさつより上で_ほかの機能より下() -> None:
