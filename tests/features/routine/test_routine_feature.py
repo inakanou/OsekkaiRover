@@ -215,6 +215,64 @@ def test_状況の口が次の予定とタスクの最中を返す(kit: Kit, clo
     assert after.next_task_at is None  # 今日のこの後の時刻のタスクはない
 
 
+def test_状況の口が今日の起床時刻と寝るタスクと朝の最初のタスクを返す(
+    kit: Kit, clock: FakeClock
+) -> None:
+    config = build_config(
+        [
+            task_dict("wash", notice="もうすぐ"),
+            task_dict("bed", at="21:00", sleep=True),
+        ],
+        wake={"weekday": "06:00", "holiday": "08:00"},
+        call_name=CALL_NAME,
+    )
+    feature = kit.feature(config)
+    feature.tick()
+    status = api.current_status()
+    assert status is not None
+    assert status.wake_at == datetime(2026, 4, 6, 6, 0, tzinfo=TOKYO)
+    assert status.first_task is not None
+    assert status.first_task.start == AT_7
+    assert status.first_task.has_notice and not status.first_task.notice_said
+    assert status.bedtime is not None
+    assert status.bedtime.start == datetime(2026, 4, 6, 21, 0, tzinfo=TOKYO)
+    assert not status.bedtime.has_notice
+
+    # 予告を言い終えた後の確かめで notice_said が真になる
+    move_to(clock, AT_7 - timedelta(minutes=10))
+    feature.tick()
+    said = api.current_status()
+    assert said is not None and said.first_task is not None
+    assert said.first_task.notice_said and said.first_task.ended_at is None
+
+    kit.prepare = lambda io: io.press_at(1)
+    move_to(clock, AT_7)
+    feature.tick()
+    ended = api.current_status()
+    assert ended is not None and ended.first_task is not None
+    assert ended.first_task.ended_at is not None
+
+
+def test_時刻が確かでない間は今日の時刻を出さない(kit: Kit, clock: FakeClock) -> None:
+    config = build_config(
+        [task_dict("wash", notice="もうすぐ"), task_dict("bed", at="21:00", sleep=True)],
+        wake={"weekday": "06:00", "holiday": "08:00"},
+        call_name=CALL_NAME,
+    )
+    feature = kit.feature(config)
+    clock.set_synchronized(False)
+    feature.tick()
+    status = api.current_status()
+    assert status is not None
+    assert status.next_task_at is None
+    assert (status.wake_at, status.bedtime, status.first_task) == (None, None, None)
+
+
+def test_足した項目は既定値を持ち_今までの作り方で作れる() -> None:
+    status = api.RoutineStatus(None, False, False, AT_7)
+    assert (status.wake_at, status.bedtime, status.first_task) == (None, None, None)
+
+
 def test_状況は時刻と真偽値だけを持ち_変えられない() -> None:
     status = api.RoutineStatus(None, False, False, AT_7)
     with pytest.raises(AttributeError):
