@@ -286,7 +286,7 @@ stateDiagram-v2
 | 11.2 | 値を出さない | checks | 固定の理由 | — |
 | 11.3 | 試しのお話 | trial | `--try night｜morning` | — |
 | 11.4 | 試しは記録を変えない | trial | `NullTalkRecord` | — |
-| 11.5 | おやすみ中は試しも話さない | trial | `ctx.is_quiet` | — |
+| 11.5 | おやすみ中は試しも話さない | trial | `ctx.is_quiet` と `ctx.was_quiet_before_restart`（試しは別のプロセスなので、保存した静かな状態も見る） | — |
 | 12.1 | 偽物に差し替えて PC で | ports, adapters.canned | `WeatherPort`・`AlertPort`・`ChatModelPort` | — |
 | 12.2 | 偽物なら外へ問い合わせない | adapters.canned, TalkFeature | `typed_input_active` | — |
 | 12.3 | CI で確かめる | tests | 下の Testing Strategy | — |

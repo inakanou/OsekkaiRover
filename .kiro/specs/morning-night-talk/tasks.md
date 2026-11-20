@@ -137,7 +137,7 @@
   - 完了の状態: 各場合の理由、`--no-hardware` で天気の項目が飛ばされる、値が出ないテストが通り、全体の self-check のテストが新しい名前を期待して通る
   - _Requirements: 1.7, 1.8, 10.4, 11.1, 11.2_
 
-- [ ] 6.3 試しのお話のコマンドを作る
+- [x] 6.3 試しのお話のコマンドを作る
   - 夜か朝を選んで、時刻と日課の状況を見ずに、その場で用意して 1 回話すコマンドを作る。日課の試しと同じく別のプロセスで動き、サービスが動いていれば機器に触らずに終わる
   - 試し用の記録を使い、その日の記録と直前の好きなものを変えない。静かな状態なら話さず、話さなかったことを表示する
   - 完了の状態: 偽のハードで夜と朝のお話が話され、記録のファイルが変わらず、静かな状態で話さずに表示し、ロックを取れないと決まった終了コードで終わるテストが通る
@@ -167,3 +167,4 @@
 - 5.2: `TalkFlow.speak` の結果は SPOKEN・QUIET・BUSY・RECORD_FAILED・INTERRUPTED・FAILED。QUIET・BUSY・RECORD_FAILED は記録を付けていない（次の秒にやり直す）。INTERRUPTED・FAILED は記録済み。`on_started` の OSError 以外の例外は資源を返してから外へ出る（6.1 が受ける）
 - 5.1: `Preparer(*, weather, alerts, facts, record, config, rng, monotonic)`。現在地がなければ `weather=None`（注意報も取らない）、注意報の地域がなければ `alerts=None`、鍵やライブラリがなければ `facts=None` を呼ぶ側が渡す。`take(kind, weather_day, today, wait_s=5.0)` は設計より `today` が多い。好きなものの hash の保存（`set_last_topic`）は話した後に 6.1 が行う
 - 6.1: 取った用意は BUSY・QUIET の間は持ち越して使い回す（毎秒問い合わせない）。1 回の判定で始める用意は 1 つだけ（夜が先）。諦めは自分の種類の用意だけを捨てる。予期しない例外は種類だけを記録して外へ出し、基盤がこの機能だけを止める
+- 6.3: 試しは `enabled: false` なら 1 で終わる（日課の試しと同じ）。静かかは `was_quiet_before_restart` も見る（静かな状態のまま止めたロボットは、起床時刻を過ぎて動かすまで試しも話さない）。用意は `fetch_timeout_seconds` まで待つ。`--fake-hardware` では必ず偽の出どころ（`trial.fake_sources`）
