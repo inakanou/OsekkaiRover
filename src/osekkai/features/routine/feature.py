@@ -327,10 +327,27 @@ class RoutineFeature:
             self._shown_stars = stars
 
     def _publish(self, *, in_task: bool, known_time: bool = True) -> None:
-        """ほかの機能が読む状況を新しくする（9.4、9.5）。"""
+        """ほかの機能が読む状況を新しくする（9.4、9.5）。
+
+        今日の起床時刻・寝るタスク・朝の最初のタスクは、時刻が確かなときだけ詰める。
+        """
         now = self._clock.now()
-        next_at = self._scheduler.next_task_at(now, self._book) if known_time else None
-        api._publish(api.RoutineStatus(next_at, in_task, self._asleep, now))
+        if not known_time:
+            api._publish(api.RoutineStatus(None, in_task, self._asleep, now))
+            return
+        next_at = self._scheduler.next_task_at(now, self._book)
+        moments = self._scheduler.moments(now, self._book)
+        api._publish(
+            api.RoutineStatus(
+                next_at,
+                in_task,
+                self._asleep,
+                now,
+                wake_at=moments.wake_at,
+                bedtime=moments.bedtime,
+                first_task=moments.first_task,
+            )
+        )
 
     def _guarded(self, action: Callable[[], None]) -> None:
         try:

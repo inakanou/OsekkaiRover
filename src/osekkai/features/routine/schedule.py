@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, tzinfo
 from enum import Enum
 
+from osekkai.features.routine.api import TaskMoment
 from osekkai.features.routine.calendar import DayKind, DayKinds
 from osekkai.features.routine.config import RoutineConfig, TaskConfig, WakeKind
 from osekkai.features.routine.records import DayRecordView, TaskResult
@@ -44,6 +45,15 @@ class DueNotice:
 
     task: TaskConfig
     day: date  # 予告するタスクの日（予告を言う日と違うことがある）
+
+
+@dataclass(frozen=True)
+class DayMoments:
+    """今日の起床時刻・寝るタスク・朝の最初のタスク（公開の状況に詰める）。"""
+
+    wake_at: datetime | None
+    bedtime: TaskMoment | None
+    first_task: TaskMoment | None
 
 
 class _State(Enum):
@@ -208,6 +218,45 @@ class Scheduler:
             and records.outcome(today, task.id) is None
         ]
         return min((moment for moment in times if moment > now), default=None)
+
+    def moments(self, now: datetime, records: DayRecordView) -> DayMoments:
+        """今日（`now` の日付）の起床時刻、寝るタスク、朝の最初のタスク。
+
+        寝るタスクは、今日の種類の日になければ None。朝の最初のタスクは、寝るタスクを除く、
+        今日に当てはまる時刻のタスクのうち最も早いもの（同じ時刻なら設定の順で先のもの）。
+        起床時刻より前で始めないタスクは除く。なければ None。
+        """
+        tz = _zone(now)
+        today = now.date()
+        sleep = self.sleep_task(today)
+        bedtime = self._task_moment(sleep, today, tz, records) if sleep is not None else None
+        mornings = [
+            task
+            for task in self._config.tasks
+            if task.at is not None
+            and not task.sleep
+            and self._kinds.applies(task, today)
+            and not self._before_wake(task, today, tz)
+        ]
+        # 上で時刻のないタスクは除いた。min は同じ時刻なら先のもの（設定の順）を返す
+        first = min(mornings, key=lambda task: task.at or time.max, default=None)
+        first_task = self._task_moment(first, today, tz, records) if first is not None else None
+        return DayMoments(self.wake_time(today, tz), bedtime, first_task)
+
+    @staticmethod
+    def _task_moment(
+        task: TaskConfig, day: date, tz: tzinfo, records: DayRecordView
+    ) -> TaskMoment | None:
+        if task.at is None:
+            return None
+        start = _moment(day, task.at, tz)
+        return TaskMoment(
+            start=start,
+            notice_at=start - timedelta(minutes=task.notice_min),
+            has_notice=task.notice is not None,
+            notice_said=records.notice_said(day, task.id),
+            ended_at=records.ended_at(day, task.id),
+        )
 
     def _due_tasks(self, now: datetime, records: DayRecordView) -> list[DueTask]:
         """今日の、今始められるタスクの全部（設定の順）。"""

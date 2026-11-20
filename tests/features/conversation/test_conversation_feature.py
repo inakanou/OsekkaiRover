@@ -20,6 +20,7 @@ from osekkai.adapters.fake.clock import FakeClock
 from osekkai.core.arbiter import Lease
 from osekkai.core.paths import Paths
 from osekkai.core.types import Priority, Resource
+from osekkai.features.conversation import api as api_module
 from osekkai.features.conversation import feature as feature_module
 from osekkai.features.conversation import texts
 from osekkai.features.conversation.adapters.claude import ClaudeChatModel
@@ -422,7 +423,7 @@ def paths(tmp_path: Path) -> Paths:
 
 
 def _setup(monkeypatch: pytest.MonkeyPatch, *, library: bool, typed: bool) -> None:
-    monkeypatch.setattr(feature_module, "anthropic_available", lambda: library)
+    monkeypatch.setattr(api_module, "library_available", lambda: library)
     monkeypatch.setattr(feature_module, "typed_input_active", lambda: typed)
 
 

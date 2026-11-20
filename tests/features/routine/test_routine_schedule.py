@@ -8,12 +8,14 @@ from typing import Any
 import pytest
 from routine_fixtures import TOKYO, build_config, task_dict
 
+from osekkai.features.routine.api import TaskMoment
 from osekkai.features.routine.calendar import DayKinds
 from osekkai.features.routine.records import TaskResult
 from osekkai.features.routine.schedule import (
     FOLLOW_WINDOW,
     LATER_WINDOW,
     START_WINDOW,
+    DayMoments,
     DueNotice,
     DueTask,
     Phase,
@@ -809,3 +811,139 @@ def test_待つ長さを過ぎたら続きのタスクより寝るタスクを�
     records.put(MONDAY, "bath", TaskResult.DONE, at(MONDAY, 20, 30))
     records.put(MONDAY, "pajamas", TaskResult.DONE, at(MONDAY, 21, 31))
     assert due_id(s, at(MONDAY, 21, 31), records) == "bed"
+
+
+# --- 今日の時刻（朝と夜のお話のため） ---
+
+
+def test_今日の起床時刻_寝るタスク_朝の最初のタスクを求める() -> None:
+    s = _sleepy()
+    moments = s.moments(at(MONDAY, 6, 0), FakeRecords())
+    assert moments.wake_at == at(MONDAY, 6, 30)
+    assert moments.bedtime == TaskMoment(
+        start=at(MONDAY, 21, 0),
+        notice_at=at(MONDAY, 20, 50),
+        has_notice=True,
+        notice_said=False,
+        ended_at=None,
+    )
+    assert moments.first_task == TaskMoment(
+        start=at(MONDAY, 7, 0),
+        notice_at=at(MONDAY, 6, 50),
+        has_notice=True,
+        notice_said=False,
+        ended_at=None,
+    )
+
+
+def test_時刻はnowのタイムゾーンで今日の値() -> None:
+    moments = _sleepy().moments(at(SATURDAY, 12, 0), FakeRecords())
+    assert moments.wake_at == at(SATURDAY, 8, 0)
+    assert moments.bedtime is not None and moments.bedtime.start == at(SATURDAY, 21, 0)
+    assert moments.bedtime.start.tzinfo is TOKYO
+    # 休日は 07:00 が起床時刻 08:00 より前なので、朝の最初のタスクは 23:00 のもの
+    assert moments.first_task is not None and moments.first_task.start == at(SATURDAY, 23, 0)
+
+
+def test_予告の言葉がなければhas_noticeは偽で予告の時刻はnotice_minから() -> None:
+    s = scheduler([task_dict("wash", at="07:00", notice_min=25)])
+    first = s.moments(at(MONDAY, 6, 0), FakeRecords()).first_task
+    assert first is not None
+    assert not first.has_notice
+    assert first.notice_at == at(MONDAY, 6, 35)
+
+
+def test_寝るタスクのない日はbedtimeがNone() -> None:
+    s = scheduler(
+        [
+            task_dict("wash", at="07:00"),
+            task_dict("bed", at="21:00", days="weekday", sleep=True),
+        ],
+        wake={"weekday": "06:30", "holiday": "06:30"},
+    )
+    assert s.moments(at(MONDAY, 12, 0), FakeRecords()).bedtime is not None
+    holiday = s.moments(at(SATURDAY, 12, 0), FakeRecords())
+    assert holiday.bedtime is None
+    assert holiday.first_task is not None
+
+
+def test_寝るタスクのほかに時刻のタスクのない日はfirst_taskがNone() -> None:
+    s = scheduler(
+        [
+            task_dict("wash", at="07:00", days="weekday"),
+            task_dict("teeth", at=None, after="bed"),
+            task_dict("bed", at="21:00", sleep=True),
+        ],
+        wake={"weekday": "06:30", "holiday": "08:00"},
+    )
+    holiday = s.moments(at(SATURDAY, 12, 0), FakeRecords())
+    assert holiday.first_task is None  # 続きのタスクも寝るタスクも数えない
+    assert holiday.bedtime is not None
+
+
+def test_タスクが1つもない日はどれもNone() -> None:
+    s = scheduler([task_dict("wash", at="07:00", days="weekday")])
+    moments = s.moments(at(SATURDAY, 12, 0), FakeRecords())
+    assert moments == DayMoments(None, None, None)
+
+
+def test_起床時刻より前のタスクは朝の最初のタスクにしない() -> None:
+    s = scheduler(
+        [
+            task_dict("early", at="06:00"),
+            task_dict("wash", at="07:00"),
+            task_dict("bed", at="21:00", sleep=True),
+        ],
+        wake={"weekday": "06:30", "holiday": "06:30"},
+    )
+    first = s.moments(at(MONDAY, 12, 0), FakeRecords()).first_task
+    assert first is not None and first.start == at(MONDAY, 7, 0)
+
+
+def test_朝の最初のタスクは設定の順でなく時刻の早いもの_同じ時刻なら設定の順() -> None:
+    s = scheduler(
+        [
+            task_dict("late", at="08:00"),
+            task_dict("a", at="07:00", notice="もうすぐ"),
+            task_dict("b", at="07:00"),
+        ]
+    )
+    first = s.moments(at(MONDAY, 12, 0), FakeRecords()).first_task
+    assert first is not None and first.start == at(MONDAY, 7, 0)
+    assert first.has_notice  # 先に書いた a
+
+
+def test_予告を言った後と結果の後で値が変わる() -> None:
+    s = _sleepy()
+    records = FakeRecords()
+    before = s.moments(at(MONDAY, 6, 50), records)
+    assert before.first_task is not None
+    assert not before.first_task.notice_said and before.first_task.ended_at is None
+
+    records.notices.add((MONDAY, "wash"))
+    said = s.moments(at(MONDAY, 6, 51), records).first_task
+    assert said is not None and said.notice_said and said.ended_at is None
+
+    records.put(MONDAY, "wash", TaskResult.INTERRUPTED, at(MONDAY, 7, 5))
+    ended = s.moments(at(MONDAY, 7, 5), records).first_task
+    assert ended is not None and ended.ended_at == at(MONDAY, 7, 5)
+
+    records.notices.add((MONDAY, "bed"))
+    records.put(MONDAY, "bed", TaskResult.DONE, at(MONDAY, 21, 10))
+    bed = s.moments(at(MONDAY, 21, 10), records).bedtime
+    assert bed is not None and bed.notice_said and bed.ended_at == at(MONDAY, 21, 10)
+
+
+def test_前の日の記録は今日の値に入らない() -> None:
+    s = _sleepy()
+    records = FakeRecords()
+    records.notices.add((MONDAY, "wash"))
+    records.put(MONDAY, "wash", TaskResult.DONE, at(MONDAY, 7, 5))
+    first = s.moments(at(TUESDAY, 6, 40), records).first_task
+    assert first is not None and first.start == at(TUESDAY, 7, 0)
+    assert not first.notice_said and first.ended_at is None
+
+
+def test_今日の時刻はタイムゾーンのない時刻を受け付けない() -> None:
+    with pytest.raises(ValueError):
+        _sleepy().moments(datetime(2026, 4, 6, 7, 0), FakeRecords())

@@ -1,0 +1,51 @@
+[
+ {
+  "controlDatetime": "2026-11-20T01:00:00Z",
+  "reportDatetime": "2026-11-20T10:00:00+09:00",
+  "infoType": "発表",
+  "publishingOffice": "気象庁",
+  "headlineText": "見本の報です。",
+  "warning": {
+   "class10Items": [
+    {"areaCode": "130010", "kinds": [{"code": "10", "status": "発表"}]}
+   ],
+   "class20Items": [
+    {"areaCode": "1310100", "kinds": [{"status": "発表警報・注意報はなし"}]},
+    {
+     "areaCode": "1311300",
+     "kinds": [
+      {"code": "10", "status": "発表"},
+      {"code": "21", "status": "発表"},
+      {"code": "20", "status": "継続"}
+     ]
+    }
+   ]
+  },
+  "dataTypeCode": "VPWW58"
+ },
+ {
+  "controlDatetime": "2026-11-20T02:00:00Z",
+  "reportDatetime": "2026-11-20T11:00:00+09:00",
+  "infoType": "発表",
+  "publishingOffice": "気象庁",
+  "headlineText": "見本の報です。",
+  "warning": {
+   "class10Items": [
+    {"areaCode": "130010", "kinds": [{"code": "12", "status": "継続"}]}
+   ],
+   "class20Items": [
+    {"areaCode": "1310100", "kinds": [{"status": "発表警報・注意報はなし"}]},
+    {
+     "areaCode": "1311300",
+     "kinds": [
+      {"code": "12", "status": "継続"},
+      {"code": "05", "status": "警報から注意報"},
+      {"code": "14", "status": "発表"},
+      {"code": "38", "status": "特別警報から警報"}
+     ]
+    }
+   ]
+  },
+  "dataTypeCode": "VPWW59"
+ }
+]
