@@ -20,11 +20,10 @@ from osekkai.core.config import FeatureConfig
 from osekkai.core.feature import FeatureContext, FeatureSpec
 from osekkai.core.paths import Paths
 from osekkai.core.types import Priority
-from osekkai.features.conversation.adapters.claude import ClaudeChatModel, anthropic_available
+from osekkai.features.conversation import api
 from osekkai.features.conversation.adapters.scripted import ScriptedChatModel
 from osekkai.features.conversation.checks import CONVERSATION_CHECKS
 from osekkai.features.conversation.config import ConversationConfig
-from osekkai.features.conversation.envfile import SetupProblem, read_setup
 from osekkai.features.conversation.flow import (
     RESOURCES,
     IoFactory,
@@ -51,17 +50,21 @@ ModelChooser = Callable[[], ChatModelPort | None]
 def choose_chat_model(paths: Paths) -> ChatModelPort | None:
     """会話の AI を選ぶ（10.2）。どれも使えなければ None（門は鍵なしになる。9.2）。
 
-    鍵を読め、ライブラリがあれば Claude。そうでなく端末の偽物が動いていれば台本の返事。
+    鍵を読め、ライブラリがあれば Claude（`api.claude_chat_model` で作る）。
+    そうでなく端末の偽物が動いていれば台本の返事。
     ログには SetupProblem の名前か決まった文言だけを出す（鍵の値は出さない）。
     """
-    found = read_setup(paths)
-    if isinstance(found, SetupProblem):
-        logger.info("鍵を使えません: %s", found.name)
-    elif anthropic_available():
-        logger.info("会話の AI に Claude を使います")
-        return ClaudeChatModel(found)
-    else:
+    problem = api.setup_problem(paths)
+    if problem is not None:
+        logger.info("鍵を使えません: %s", problem.name)
+    elif not api.library_available():
         logger.info("会話のライブラリがないので Claude を使いません")
+    else:
+        # Claude のアダプタは公開の口から作る（鍵の値はこの中に出てこない）
+        model = api.claude_chat_model(paths)
+        if model is not None:
+            logger.info("会話の AI に Claude を使います")
+            return model
     if typed_input_active():
         logger.info("端末の偽物が動いているので、台本の返事を使います")
         return ScriptedChatModel()
