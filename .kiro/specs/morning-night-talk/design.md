@@ -252,7 +252,7 @@ stateDiagram-v2
 | 5.11 | 注意報だけ取れなければ触れない | JmaAlerts, Preparer | `AlertsResult.unavailable` | — |
 | 6.1 | 1 つ選んで豆知識 | topics | `choose_topic` | — |
 | 6.2 | 直前と同じを続けない | topics, TalkRecord | `last_topic` | — |
-| 6.3 | 4 歳向け、2 文以内、本当のこと | topics, texts | `FACT_SYSTEM` | — |
+| 6.3 | 4 歳向け、2 文以内、本当のこと | topics, texts | `fact_system(kind)` | — |
 | 6.4 | 会話と同じ子ども向けの決まり | texts, ConversationApi | `KID_RULES` | — |
 | 6.5 | 夜は落ち着いた豆知識 | topics | `fact_request(kind)` | — |
 | 6.6 | 120 文字、絵文字や記号なし | ConversationApi | `shape_reply` | — |
