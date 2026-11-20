@@ -66,9 +66,11 @@ def decide(
     """夜と朝の判定のうち、何かするものだけを夜・朝の順に返す。
 
     時刻が確かでない（8.5）・静かな状態（8.2）・日課が動いていないときは空。
+    日課の状況が今日のものでない（日付が変わった直後で、前の日の状況が残っている）ときも空
+    （前の日の時刻で今日のお話を諦めにしないため。3.6、4.1）。
     使わないと設定した方（1.3）と記録で済んだ方（4.1）は返さない。済んだかは、使う方だけ問う。
     """
-    if not synced or quiet or status is None:
+    if not synced or quiet or status is None or status.updated_at.date() != now.date():
         return []
     decisions: list[Decision] = []
     for kind, used in ((TalkKind.NIGHT, config.night), (TalkKind.MORNING, config.morning)):
@@ -81,7 +83,10 @@ def decide(
 
 
 def decide_kind(kind: TalkKind, now: datetime, status: RoutineStatus) -> Decision:
-    """1 つの種類の判定。設定・記録・時刻の確かさ・静かさは見ない（`decide` が見る）。"""
+    """1 つの種類の判定。設定・記録・時刻の確かさ・静かさは見ない（`decide` が見る）。
+
+    今日でない時刻のタスク（前の日の状況の残り）は、ないものとして扱う。
+    """
     if kind is TalkKind.NIGHT:
         return _night(now, status)
     return _morning(now, status)
@@ -89,7 +94,7 @@ def decide_kind(kind: TalkKind, now: datetime, status: RoutineStatus) -> Decisio
 
 def _night(now: datetime, status: RoutineStatus) -> Decision:
     """夜: 予告に続けて話し、寝るタスクの時刻で諦める（2.1〜2.6）。天気はあした。"""
-    bedtime = status.bedtime
+    bedtime = _today_only(status.bedtime, now)
     if bedtime is None or status.asleep:
         return Idle()
     if now >= bedtime.start:
@@ -104,7 +109,7 @@ def _morning(now: datetime, status: RoutineStatus) -> Decision:
 
     起床時刻そのものは契機にしない（3.8）。予告の時刻が起床時刻より前なら後の道になる。
     """
-    first = status.first_task
+    first = _today_only(status.first_task, now)
     if first is None or status.asleep:
         return Idle()
     today = now.date()
@@ -121,6 +126,13 @@ def _morning(now: datetime, status: RoutineStatus) -> Decision:
     if status.in_task:
         return Prepare(TalkKind.MORNING, today)
     return Speak(TalkKind.MORNING, today)
+
+
+def _today_only(moment: TaskMoment | None, now: datetime) -> TaskMoment | None:
+    """今日の時刻のタスクだけを返す。前の日の時刻なら None（3.6、4.1）。"""
+    if moment is None or moment.start.date() != now.date():
+        return None
+    return moment
 
 
 def _after_notice(

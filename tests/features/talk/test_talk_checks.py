@@ -240,11 +240,13 @@ class TestSetup:
             CheckStatus.OK, REASON_NO_KEY_WEATHER_ONLY
         )
 
-    def test_好きなものだけで鍵がなければ話すことがない(
+    def test_好きなものだけで鍵がなければ決まった言葉だけ(
         self, paths: Paths, key: dict[str, Any]
     ) -> None:
         key["problem"] = SetupProblem.NO_FILE
         assert _setup(paths, _talk(TOPICS)) == CheckResult(CheckStatus.OK, REASON_NO_KEY_NOTHING)
+        # 決まった短い言葉は話すので「話すことがない」とは言わない（7.6、10.4）
+        assert REASON_NO_KEY_NOTHING == "鍵がないので決まった言葉だけ"
 
     def test_現在地だけなら鍵を見ない(self, paths: Paths, key: dict[str, Any]) -> None:
         key["problem"] = SetupProblem.NO_FILE

@@ -145,9 +145,14 @@ class TalkKit:
             cache=self.cache,
         )
         self.started: list[int] = []
+        self.stop = threading.Event()  # 機能を止める旗（基盤が立てる）
 
     def flow(self, config: TalkConfig | None = None) -> TalkFlow:
-        return TalkFlow(self.ctx, config or TalkConfig(enabled=True, call_name=HIDDEN_NAME))
+        return TalkFlow(
+            self.ctx,
+            config or TalkConfig(enabled=True, call_name=HIDDEN_NAME),
+            stopped=self.stop.is_set,
+        )
 
     def on_started(self) -> None:
         self.started.append(len(self.events))
@@ -386,6 +391,30 @@ def test_途中で静かな状態になったら言い終えた文の切れ目�
 
     assert outcome is FlowOutcome.INTERRUPTED
     assert kit.said == [lines[0].text]  # 8.3
+    kit.assert_released()
+
+
+def test_止める旗が立ったら言い終えた文の切れ目でやめる(kit: TalkKit) -> None:
+    kit.voice.before = lambda _text: kit.stop.set()
+    prepared = _full()
+    lines = compose_lines(prepared, TalkConfig(call_name=HIDDEN_NAME))
+
+    outcome = kit.flow().speak(prepared, kit.on_started)
+
+    assert outcome is FlowOutcome.INTERRUPTED
+    assert kit.said == [lines[0].text]  # 1 文目を言い終えてやめた
+    assert kit.started == [0]  # 話した扱いの記録は付いている（4.4）
+    kit.assert_released()
+
+
+def test_止める旗が立っていれば借りずに記録もしない(kit: TalkKit) -> None:
+    kit.stop.set()
+
+    outcome = kit.flow().speak(_full(), kit.on_started)
+
+    assert outcome is FlowOutcome.BUSY
+    assert kit.said == []
+    assert kit.started == []
     kit.assert_released()
 
 

@@ -13,6 +13,8 @@
 - 思いがけない例外では、用意を捨て、種類だけをログに出して外へ出す。基盤が資源を取り上げ、
   この機能だけを止める（10.3）
 - おしゃべりの回数の記録を読まず、書かない（8.7）
+- 止める旗が立ったら、新しい用意もお話も始めず、話している途中なら文の切れ目でやめる。
+  用意を待っている間に立ったときは、待ち終えて（最大 5 秒）話さずに戻る
 
 ログには決まった文言と種類の名前・例外の型の名前だけを出す（1.8）。
 """
@@ -126,7 +128,8 @@ class TalkFeature:
         self._config = config
         self._clock = ctx.clock
         self._record = TalkRecord(ctx.store)
-        self._flow = TalkFlow(ctx, config)
+        self._stop: threading.Event | None = None  # `run` で受け取る止める旗
+        self._flow = TalkFlow(ctx, config, stopped=self._stopping)
         self._sources = sources
         self._rng = rng or Random()
         self._preparer: Preparer | None = None
@@ -139,7 +142,12 @@ class TalkFeature:
     # --- 基盤から呼ぶ口 ---
 
     def run(self, stop: threading.Event) -> None:
-        """止める旗が立つまで、1 秒ごとに判定する。思いがけない例外は種類だけ記録して外へ出す。"""
+        """止める旗が立つまで、1 秒ごとに判定する。思いがけない例外は種類だけ記録して外へ出す。
+
+        旗が立ったら、新しい用意もお話も始めず、話している途中なら文の切れ目でやめて戻る
+        （基盤が止めるまでの持ち時間の中で戻るため）。
+        """
+        self._stop = stop
         if not self._has_content:
             logger.info("現在地も好きなものもないので、お話をしません")
             stop.wait()
@@ -171,6 +179,8 @@ class TalkFeature:
         speaking = any(isinstance(d, plan.Speak) for d in decisions)
         prepared_once = False
         for decision in decisions:
+            if self._stopping():
+                return  # 止めるので、新しい用意もお話も始めない
             if isinstance(decision, plan.Miss):
                 self._miss(decision.kind, today)
             elif isinstance(decision, plan.Speak):
@@ -194,6 +204,8 @@ class TalkFeature:
         if self._waiting_retry(today, kind):
             return
         prepared = self._take(decision, today)
+        if self._stopping():
+            return  # 用意を待つ間に止める旗が立った。用意を持ったまま戻る
         outcome = self._flow.speak(
             prepared, on_started=lambda: self._record.mark(today, kind, TalkOutcome.SPOKEN)
         )
@@ -240,6 +252,11 @@ class TalkFeature:
             self._retry_at[(today, kind)] = self._clock.monotonic() + RECORD_RETRY_S
             return
         logger.info("お話の時刻を過ぎたので、話さないことにしました: %s", kind.name)
+
+    def _stopping(self) -> bool:
+        """止める旗が立ったか（`run` の外から `step` を呼ぶときは立たない）。"""
+        stop = self._stop
+        return stop is not None and stop.is_set()
 
     def _waiting_retry(self, today: date, kind: TalkKind) -> bool:
         retry_at = self._retry_at.get((today, kind))

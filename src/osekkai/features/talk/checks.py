@@ -17,7 +17,7 @@
 1. 日課が無効（または設定を使えない）: 「日課がないので話さない」（お話は日課の予告に続くため）
 2. 現在地も好きなものもない: 「話すことがない」（1.7）
 3. 好きなものがあるが、鍵かライブラリがない（10.4）: 現在地があれば「鍵がないので天気だけ」、
-   なければ「鍵がないので話すことがない」
+   なければ「鍵がないので決まった言葉だけ」（決まった短い言葉だけを話す。7.6）
 4. 片方だけ: 「天気だけ」「豆知識だけ」
 5. どちらもあり、鍵も使える: 理由なしの よい
 """
@@ -62,7 +62,7 @@ REASON_CONFIG_UNUSABLE: Final = "設定を使えない"
 REASON_NO_ROUTINE: Final = "日課がないので話さない"
 REASON_NOTHING_TO_TALK: Final = "話すことがない"
 REASON_NO_KEY_WEATHER_ONLY: Final = "鍵がないので天気だけ"
-REASON_NO_KEY_NOTHING: Final = "鍵がないので話すことがない"
+REASON_NO_KEY_NOTHING: Final = "鍵がないので決まった言葉だけ"
 REASON_WEATHER_ONLY: Final = "天気だけ"
 REASON_FACTS_ONLY: Final = "豆知識だけ"
 REASON_NO_LOCATION: Final = "現在地がない"

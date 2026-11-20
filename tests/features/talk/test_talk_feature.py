@@ -467,6 +467,65 @@ def test_現在地も好きなものもなければ_止めるまで待って戻�
     assert not thread.is_alive()
 
 
+# --- 止める旗にすぐ応える（基盤が止めるまでの持ち時間の中で戻る） ---
+
+STOP_RETURN_S = 1.0  # 止める旗が立ってから戻るまでの上限（実際の秒）
+
+
+def test_話している間に止める旗が立ったら_次の文の切れ目でやめてすぐに戻る(
+    kit: Kit, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    feature = kit.feature()
+    _go(kit, _at(20, 51))
+    _night(_at(20, 51), notice_said=True)
+    stop = threading.Event()
+    stopped_at: list[float] = []
+    synthesize = kit.fakes.synth.synthesize
+
+    def synthesize_then_stop(line: str, settings: VoiceSettings, out: Path) -> None:
+        synthesize(line, settings, out)
+        if not stop.is_set():  # 1 文目を話している間に止める
+            stopped_at.append(time.monotonic())
+            stop.set()
+
+    monkeypatch.setattr(kit.fakes.synth, "synthesize", synthesize_then_stop)
+    thread = threading.Thread(target=feature.run, args=(stop,), daemon=True)
+    thread.start()
+
+    assert stop.wait(WAIT_S)
+    thread.join(WAIT_S)
+    assert not thread.is_alive()
+    assert time.monotonic() - stopped_at[0] < STOP_RETURN_S
+    assert kit.said == [texts.fill_name(texts.OPENERS[TalkKind.NIGHT], HIDDEN_NAME)]
+    assert kit.record().done(DAY, TalkKind.NIGHT)  # 話し始めていたので話した扱い（4.4）
+    kit.assert_released()
+
+
+def test_用意の間に止める旗が立ったら_話さず記録もせずに戻る(
+    kit: Kit, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    feature = kit.feature()
+    _go(kit, _at(20, 51))
+    _night(_at(20, 51), notice_said=True)
+    stop = threading.Event()
+    daily = kit.weather.daily
+
+    def daily_then_stop(day: date, timeout_s: float) -> object:
+        stop.set()
+        return daily(day, timeout_s)
+
+    monkeypatch.setattr(kit.weather, "daily", daily_then_stop)
+    thread = threading.Thread(target=feature.run, args=(stop,), daemon=True)
+    thread.start()
+
+    assert stop.wait(WAIT_S)
+    thread.join(WAIT_S)
+    assert not thread.is_alive()
+    assert kit.said == []
+    assert not kit.record().done(DAY, TalkKind.NIGHT)  # 次に動いたときに話す
+    kit.assert_released()
+
+
 # --- おしゃべりの回数を数えない（8.7）・モーターを使わない（8.6） ---
 
 

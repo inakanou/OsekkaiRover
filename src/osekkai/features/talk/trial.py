@@ -183,7 +183,7 @@ def make_trial_feature(
             prepared = preparer.take(
                 kind, weather_day(kind, today), today, config.fetch_timeout_seconds
             )
-            flow = TalkFlow(self._ctx, config)
+            flow = TalkFlow(self._ctx, config, stopped=stop.is_set)
             while not stop.is_set():
                 if self._quiet():
                     return FlowOutcome.QUIET

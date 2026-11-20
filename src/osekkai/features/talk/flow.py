@@ -3,8 +3,8 @@
 要件 4.4、6.8、7.1〜7.3、7.5〜7.8、8.1〜8.3。
 
 始まり → 天気の文 → 豆知識 → 終わりの順に文を並べ（7.1）、声と画面だけを待たずに借りて話す。
-借りたら最初の文の前に記録を付ける（4.4）。文ごとに中断の知らせ・取り上げ・静かな状態を
-確かめ、文の切れ目でやめる（8.1、8.3）。声は残さない（6.8）。最後に必ず資源を返す（7.8）。
+借りたら最初の文の前に記録を付ける（4.4）。文ごとに中断の知らせ・取り上げ・静かな状態・
+機能を止める旗を確かめ、文の切れ目でやめる（8.1、8.3）。声は残さない（6.8）。最後に必ず資源を返す（7.8）。
 ログには決まった文言と種類の名前・文の数だけを出す（呼び名・天気・豆知識は出さない）。
 """
 
@@ -55,9 +55,12 @@ class FlowOutcome(Enum):
 
     SPOKEN = "spoken"  # 終わりまで話した
     QUIET = "quiet"  # 静かな状態なので借りなかった（記録していない）
-    BUSY = "busy"  # 借りられなかった・借りた直後に取られた（記録していない。次の秒にやり直す）
+    # 借りられなかった・借りた直後に取られた・止める旗が立っていた（記録していない。
+    # 次の秒（次に動いたとき）にやり直す）
+    BUSY = "busy"
     RECORD_FAILED = "record_failed"  # 記録を書けなかったので話さなかった（4.4）
-    INTERRUPTED = "interrupted"  # 途中で中断・静かな状態になり、文の切れ目でやめた（記録済み）
+    # 途中で中断・静かな状態・止める旗が立ち、文の切れ目でやめた（記録済み）
+    INTERRUPTED = "interrupted"
     FAILED = "failed"  # 話せなかった・画面を使えなかった（記録済み）
 
 
@@ -89,11 +92,17 @@ def compose_lines(prepared: Prepared, config: TalkConfig) -> list[Line]:
 
 
 class TalkFlow:
-    """資源を借りてお話をする流れ。機能のループのスレッドから、1 つずつ呼ぶ。"""
+    """資源を借りてお話をする流れ。機能のループのスレッドから、1 つずつ呼ぶ。
 
-    def __init__(self, ctx: FeatureContext, config: TalkConfig) -> None:
+    `stopped` は機能を止める旗が立ったか（基盤が止めるときに、文の切れ目ですぐやめるため）。
+    """
+
+    def __init__(
+        self, ctx: FeatureContext, config: TalkConfig, *, stopped: Callable[[], bool]
+    ) -> None:
         self._ctx = ctx
         self._config = config
+        self._stopped = stopped
 
     def speak(self, prepared: Prepared, on_started: Callable[[], None]) -> FlowOutcome:
         """用意したものを話す。`on_started` は借りた直後、最初の文の前に呼ぶ（記録。4.4）。
@@ -104,6 +113,9 @@ class TalkFlow:
         if self._ctx.is_quiet:  # 8.2
             logger.info("静かな状態なのでお話をしませんでした: %s", kind_name)
             return FlowOutcome.QUIET
+        if self._stopped():
+            logger.info("止めるのでお話をしませんでした: %s", kind_name)
+            return FlowOutcome.BUSY
         lines = compose_lines(prepared, self._config)
         preempted = threading.Event()
         try:
@@ -130,6 +142,7 @@ class TalkFlow:
                 or lease.preempt_requested.is_set()
                 or not lease.active
                 or self._ctx.is_quiet
+                or self._stopped()
             )
 
         # 借りた直後に止まったら、記録せずに返す（静かな状態か、次の秒にやり直す）

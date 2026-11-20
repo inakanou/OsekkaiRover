@@ -505,3 +505,32 @@ def test_夜の天気の日は次の日_年をまたいでも() -> None:
     bedtime = make_moment(datetime(2026, 12, 31, 20, 30), has_notice=False)
     status = make_status(now, bedtime=bedtime)
     assert decide_kind(NIGHT, now, status) == Speak(NIGHT, date(2027, 1, 1))
+
+
+# ---- 前の日の状況（3.6、4.1） -------------------------------------------------
+
+
+def test_前の日に出した日課の状況では_日付が変わった直後に何もしない() -> None:
+    """日課が前の日の状況を残したまま日付が変わっても、今日の朝を諦めにしない。"""
+    yesterday = datetime(2026, 11, 20, 23, 59, 59)
+    first = make_moment(datetime(2026, 11, 20, 7, 0), ended_at=datetime(2026, 11, 20, 7, 10))
+    status = make_status(yesterday, wake_at=WAKE, first_task=first)
+    now = datetime(2026, 11, 21, 0, 0, 0, 500000)
+    assert decide(now, True, False, status, _never_done, CONFIG) == []
+
+
+def test_前の日の寝るタスクの時刻は見ない() -> None:
+    """状況が今日のものでも、前の日の時刻の寝るタスクで今日の夜を諦めにしない。"""
+    now = datetime(2026, 11, 21, 0, 0, 1)
+    status = make_status(now, bedtime=make_moment(BED_START))
+    assert decide_kind(NIGHT, now, status) == Idle()
+    assert decide(now, True, False, status, _never_done, CONFIG) == []
+
+
+def test_前の日の最初のタスクは見ない() -> None:
+    """状況が今日のものでも、前の日の時刻の最初のタスクで今日の朝を諦めにしない。"""
+    now = datetime(2026, 11, 21, 0, 0, 1)
+    first = make_moment(FIRST_START, ended_at=datetime(2026, 11, 20, 7, 10))
+    status = make_status(now, wake_at=WAKE, first_task=first)
+    assert decide_kind(MORNING, now, status) == Idle()
+    assert decide(now, True, False, status, _never_done, CONFIG) == []
