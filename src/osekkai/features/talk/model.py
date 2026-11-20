@@ -7,10 +7,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
+from decimal import ROUND_HALF_UP, Decimal
 from enum import Enum
-from typing import Protocol
+from types import MappingProxyType
+from typing import Final, Protocol
 
 
 class TalkKind(Enum):
@@ -29,6 +32,31 @@ class Condition(Enum):
     SNOW = "snow"
     THUNDER = "thunder"
     UNKNOWN = "unknown"
+
+
+# WMO の天気のコード（Open-Meteo の weather_code）の分け方。表にないコードは UNKNOWN
+_WMO_CONDITIONS: Final[Mapping[int, Condition]] = MappingProxyType(
+    {
+        **dict.fromkeys((0, 1), Condition.SUNNY),
+        **dict.fromkeys((2, 3, 45, 48), Condition.CLOUDY),
+        **dict.fromkeys((*range(51, 68), *range(80, 83)), Condition.RAIN),
+        **dict.fromkeys((*range(71, 78), 85, 86), Condition.SNOW),
+        **dict.fromkeys(range(95, 100), Condition.THUNDER),
+    }
+)
+
+
+def condition_from_wmo(code: int) -> Condition:
+    """WMO の天気のコードを天気の種類に分ける。表にないコードは分からない（UNKNOWN）。
+
+    天気のアダプタは model だけを読むので、分け方をここに置く。
+    """
+    return _WMO_CONDITIONS.get(code, Condition.UNKNOWN)
+
+
+def round_half_up(value: float) -> int:
+    """気温を四捨五入して整数の度にする（0.5 は 0 から遠い方へ。偶数への丸めにしない）。"""
+    return int(Decimal(str(value)).quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
 
 @dataclass(frozen=True)
