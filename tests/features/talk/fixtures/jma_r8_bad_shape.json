@@ -1,0 +1,9 @@
+{
+ "reportDatetime": "2026-11-20T10:00:00+09:00",
+ "publishingOffice": "気象庁",
+ "headlineText": "見本の旧い形です。",
+ "areaTypes": [
+  {"areas": [{"code": "130010", "warnings": [{"code": "15", "status": "継続"}]}]},
+  {"areas": [{"code": "1311300", "warnings": [{"code": "15", "status": "継続"}]}]}
+ ]
+}

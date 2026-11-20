@@ -1,0 +1,710 @@
+[
+ {
+  "controlDatetime": "2026-11-05T04:45:15Z",
+  "reportDatetime": "2026-11-05T13:45:00+09:00",
+  "infoType": "発表",
+  "publishingOffice": "気象庁",
+  "headlineText": "注意報を解除します。",
+  "warning": {
+   "class10Items": [
+    {
+     "areaCode": "130010",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "130020",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "130030",
+     "kinds": [
+      {
+       "code": "10",
+       "status": "解除"
+      }
+     ]
+    },
+    {
+     "areaCode": "130040",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    }
+   ],
+   "class20Items": [
+    {
+     "areaCode": "1310100",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "1310200",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "1311300",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "1336100",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "1338100",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "1340100",
+     "kinds": [
+      {
+       "code": "10",
+       "status": "解除"
+      }
+     ]
+    },
+    {
+     "areaCode": "1342100",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    }
+   ]
+  },
+  "dataTypeCode": "VPWW55"
+ },
+ {
+  "controlDatetime": "2026-11-17T20:09:07Z",
+  "reportDatetime": "2026-11-18T05:09:00+09:00",
+  "infoType": "発表",
+  "publishingOffice": "気象庁",
+  "headlineText": "注意報を解除します。",
+  "warning": {
+   "class10Items": [
+    {
+     "areaCode": "130010",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "130020",
+     "kinds": [
+      {
+       "code": "29",
+       "status": "解除"
+      }
+     ]
+    },
+    {
+     "areaCode": "130030",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "130040",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    }
+   ],
+   "class20Items": [
+    {
+     "areaCode": "1310100",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "1310200",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "1311300",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "1336100",
+     "kinds": [
+      {
+       "code": "29",
+       "status": "解除"
+      }
+     ]
+    },
+    {
+     "areaCode": "1338100",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "1340100",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "1342100",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    }
+   ]
+  },
+  "offices": [
+   {
+    "type": "補足情報担当",
+    "name": "東京都建設局河川部防災課"
+   },
+   {
+    "type": "気象関係",
+    "name": "気象庁本庁"
+   }
+  ],
+  "dataTypeCode": "VPWW56"
+ },
+ {
+  "controlDatetime": "2026-11-20T01:03:07Z",
+  "reportDatetime": "2026-11-20T10:03:00+09:00",
+  "infoType": "発表",
+  "publishingOffice": "気象庁",
+  "headlineText": "東京地方、伊豆諸島北部、伊豆諸島南部では、強風に注意してください。",
+  "warning": {
+   "class10Items": [
+    {
+     "areaCode": "130010",
+     "kinds": [
+      {
+       "code": "15",
+       "status": "継続"
+      }
+     ]
+    },
+    {
+     "areaCode": "130020",
+     "kinds": [
+      {
+       "code": "15",
+       "status": "継続"
+      }
+     ]
+    },
+    {
+     "areaCode": "130030",
+     "kinds": [
+      {
+       "code": "15",
+       "status": "継続"
+      }
+     ]
+    },
+    {
+     "areaCode": "130040",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    }
+   ],
+   "class20Items": [
+    {
+     "areaCode": "1310100",
+     "kinds": [
+      {
+       "code": "15",
+       "status": "継続",
+       "properties": [
+        {
+         "type": "風危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20"
+           }
+          ]
+         }
+        },
+        {
+         "type": "風"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "areaCode": "1310200",
+     "kinds": [
+      {
+       "code": "15",
+       "status": "継続",
+       "properties": [
+        {
+         "type": "風危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "areaName": "陸上",
+            "code": "20"
+           },
+           {
+            "areaName": "海上",
+            "code": "20"
+           }
+          ]
+         }
+        },
+        {
+         "type": "風"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "areaCode": "1311300",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "1336100",
+     "kinds": [
+      {
+       "code": "15",
+       "status": "継続",
+       "properties": [
+        {
+         "type": "風危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20"
+           }
+          ]
+         }
+        },
+        {
+         "type": "風"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "areaCode": "1338100",
+     "kinds": [
+      {
+       "code": "15",
+       "status": "継続",
+       "properties": [
+        {
+         "type": "風危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20"
+           }
+          ]
+         }
+        },
+        {
+         "type": "風"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "areaCode": "1340100",
+     "kinds": [
+      {
+       "code": "15",
+       "status": "継続",
+       "properties": [
+        {
+         "type": "風危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20"
+           }
+          ]
+         }
+        },
+        {
+         "type": "風"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "areaCode": "1342100",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    }
+   ]
+  },
+  "dataTypeCode": "VPWW58"
+ },
+ {
+  "controlDatetime": "2026-11-20T01:03:07Z",
+  "reportDatetime": "2026-11-20T10:03:00+09:00",
+  "infoType": "発表",
+  "publishingOffice": "気象庁",
+  "headlineText": "東京都では、高波に注意してください。",
+  "warning": {
+   "class10Items": [
+    {
+     "areaCode": "130010",
+     "kinds": [
+      {
+       "code": "16",
+       "status": "継続"
+      }
+     ]
+    },
+    {
+     "areaCode": "130020",
+     "kinds": [
+      {
+       "code": "16",
+       "status": "継続"
+      }
+     ]
+    },
+    {
+     "areaCode": "130030",
+     "kinds": [
+      {
+       "code": "16",
+       "status": "継続"
+      }
+     ]
+    },
+    {
+     "areaCode": "130040",
+     "kinds": [
+      {
+       "code": "16",
+       "status": "発表",
+       "additions": [
+        "うねり"
+       ]
+      }
+     ]
+    }
+   ],
+   "class20Items": [
+    {
+     "areaCode": "1310100",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "1310200",
+     "kinds": [
+      {
+       "code": "16",
+       "status": "継続",
+       "properties": [
+        {
+         "type": "波危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20"
+           }
+          ]
+         }
+        },
+        {
+         "type": "波"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "areaCode": "1311300",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "1336100",
+     "kinds": [
+      {
+       "code": "16",
+       "status": "継続",
+       "properties": [
+        {
+         "type": "波危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20"
+           }
+          ]
+         }
+        },
+        {
+         "type": "波"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "areaCode": "1338100",
+     "kinds": [
+      {
+       "code": "16",
+       "status": "継続",
+       "properties": [
+        {
+         "type": "波危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20"
+           }
+          ]
+         }
+        },
+        {
+         "type": "波"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "areaCode": "1340100",
+     "kinds": [
+      {
+       "code": "16",
+       "status": "継続",
+       "properties": [
+        {
+         "type": "波危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20"
+           }
+          ]
+         }
+        },
+        {
+         "type": "波"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "areaCode": "1342100",
+     "kinds": [
+      {
+       "code": "16",
+       "status": "発表",
+       "additions": [
+        "うねり"
+       ],
+       "properties": [
+        {
+         "type": "波危険度",
+         "significancyPart": {
+          "locals": [
+           {
+            "code": "20",
+            "additions": [
+             "うねり"
+            ]
+           }
+          ]
+         }
+        },
+        {
+         "type": "波"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "dataTypeCode": "VPWW59"
+ },
+ {
+  "controlDatetime": "2026-11-20T03:23:13Z",
+  "reportDatetime": "2026-11-20T12:23:00+09:00",
+  "infoType": "発表",
+  "publishingOffice": "気象庁",
+  "headlineText": "注意報を解除します。",
+  "warning": {
+   "class10Items": [
+    {
+     "areaCode": "130010",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "130020",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "130030",
+     "kinds": [
+      {
+       "code": "14",
+       "status": "解除"
+      }
+     ]
+    },
+    {
+     "areaCode": "130040",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    }
+   ],
+   "class20Items": [
+    {
+     "areaCode": "1310100",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "1310200",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "1311300",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "1336100",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    },
+    {
+     "areaCode": "1338100",
+     "kinds": [
+      {
+       "code": "14",
+       "status": "解除"
+      }
+     ]
+    },
+    {
+     "areaCode": "1340100",
+     "kinds": [
+      {
+       "code": "14",
+       "status": "解除"
+      }
+     ]
+    },
+    {
+     "areaCode": "1342100",
+     "kinds": [
+      {
+       "status": "発表警報・注意報はなし"
+      }
+     ]
+    }
+   ]
+  },
+  "dataTypeCode": "VPWW61"
+ }
+]
