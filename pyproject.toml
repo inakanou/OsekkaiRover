@@ -50,6 +50,7 @@ dev = [
 conversation = "osekkai.features.conversation:ConversationFeature"
 daruma = "osekkai.features.daruma:DarumaFeature"
 remote = "osekkai.features.remote:RemoteFeature"
+talk = "osekkai.features.talk:TalkFeature"
 routine = "osekkai.features.routine:RoutineFeature"
 presence = "osekkai.features.presence:PresenceFeature"
 voice = "osekkai.voice:VoiceGatewayFeature"
