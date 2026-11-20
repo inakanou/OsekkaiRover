@@ -390,8 +390,8 @@ class Location(BaseModel):
     longitude: float = Field(ge=-180, le=180)
 
 class WarningArea(BaseModel):
-    office: str = Field(pattern=r"^\d{6}$")    # 気象庁の府県予報区のコード（例: 130000）
-    city: str = Field(pattern=r"^\d{7}$")      # 市区町村のコード（area.json の class20s。例: 1311300）
+    office: str = Field(pattern=r"^[0-9]{6}$")    # 気象庁の府県予報区のコード（例: 130000）
+    city: str = Field(pattern=r"^[0-9]{7}$")      # 市区町村のコード（area.json の class20s。例: 1311300）
 
 class TalkConfig(FeatureConfig):
     enabled: bool = False
