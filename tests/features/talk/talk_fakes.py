@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -29,8 +30,25 @@ T = TypeVar("T")
 
 MSG_SCRIPT_EMPTY = "偽物の台本が尽きました"
 
+# 用意のスレッド（`talk-*`）の終わりを待つ上限（実際の秒）
+SETTLE_S = 2.0
+
 # 放すまで返さないときの遅れ。放し忘れでもテストが止まり続けないように上限を置く
 HOLD_S = 30.0
+
+
+def settle_preparation(timeout_s: float = SETTLE_S) -> None:
+    """動いている用意のスレッド（名前が `talk-` で始まる）が終わるまで、実際の時間で待つ。
+
+    偽の時計を進める前に呼ぶ。用意のスレッドが動き出す前に時計が進むと、用意の締め切りを
+    偽の時計で過ぎてしまい、取れたはずの天気や豆知識が「間に合わなかった」になるため。
+    放すまで返さない偽物で止めたスレッドは、上限まで待って先に進む。
+    """
+    deadline = time.monotonic() + timeout_s
+    current = threading.current_thread()
+    for thread in threading.enumerate():
+        if thread is not current and thread.name.startswith("talk-"):
+            thread.join(max(0.0, deadline - time.monotonic()))
 
 
 def sunny_forecast(day: date) -> DayForecast:

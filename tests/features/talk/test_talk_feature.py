@@ -24,6 +24,7 @@ from talk_fakes import (
     FakeWeather,
     make_moment,
     make_status,
+    settle_preparation,
 )
 
 import osekkai.features.conversation.api as conversation_api
@@ -196,6 +197,7 @@ def test_予告の前から用意し_予告を言い終えたら_1_回だけ話�
 
     assert kit.weather.called.wait(WAIT_S)
     assert kit.chat.called.wait(WAIT_S)
+    settle_preparation()  # 用意を終えてから時計を進める
     assert kit.said == []
 
     _go(kit, _at(20, 50, 30))
