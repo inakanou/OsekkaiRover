@@ -32,6 +32,8 @@ ENTRY_ALLOWLIST = frozenset(
         "osekkai.features.routine.__main__",
         "osekkai.features.presence.cli",
         "osekkai.features.daruma.cli",
+        "osekkai.features.talk.trial",
+        "osekkai.features.talk.__main__",
     }
 )
 
@@ -51,9 +53,11 @@ FEATURE_ADAPTER_LIBS = {
 }
 
 # 基盤のアダプタのうち、決まったモジュールだけが読んでよいもの（狭い許し）。
-# おしゃべりの本体だけが、端末の偽物が動いているかの判定（typed_input_active）を読む
+# おしゃべりと朝と夜のお話の本体だけが、端末の偽物が動いているかの判定（typed_input_active）を読む
 ADAPTER_ALLOWLIST = {
-    "osekkai.adapters.fake.console": frozenset({"osekkai.features.conversation.feature"}),
+    "osekkai.adapters.fake.console": frozenset(
+        {"osekkai.features.conversation.feature", "osekkai.features.talk.feature"}
+    ),
 }
 
 
@@ -329,3 +333,46 @@ def test_おしゃべりの本体でも端末の偽物のほかの_adapters_は�
         "import osekkai.adapters\n",
     ):
         assert _check(source, CONVERSATION_FEATURE) != [], source
+
+
+TALK_FEATURE = "osekkai.features.talk.feature"
+
+
+def test_朝と夜のお話の試しのコマンドだけは_osekkai___main___を読み込める() -> None:
+    source = "from osekkai.__main__ import build_devices\n"
+    assert _check(source, "osekkai.features.talk.trial") == []
+    assert _check(source, "osekkai.features.talk.__main__") == []
+    # お話のほかのモジュールは断る
+    for module in (
+        TALK_FEATURE,
+        "osekkai.features.talk",
+        "osekkai.features.talk.flow",
+        "osekkai.features.talk.checks",
+        "osekkai.features.talk.adapters.open_meteo",
+    ):
+        assert _check(source, module) != [], module
+
+
+def test_朝と夜のお話の本体だけは端末の偽物の判定を読み込める() -> None:
+    source = "from osekkai.adapters.fake.console import typed_input_active\n"
+    assert _check(source, TALK_FEATURE) == []
+    assert _check("def f():\n    " + source, TALK_FEATURE) == []
+    # お話のほかのモジュールは断る
+    for module in (
+        "osekkai.features.talk",
+        "osekkai.features.talk.flow",
+        "osekkai.features.talk.trial",
+        "osekkai.features.talk.checks",
+        "osekkai.features.talk.adapters.canned",
+    ):
+        assert _check(source, module) != [], module
+
+
+def test_朝と夜のお話の本体でも端末の偽物のほかの_adapters_は断る() -> None:
+    for source in (
+        "from osekkai.adapters.fake.clock import FakeClock\n",
+        "from osekkai.adapters.fake import devices\n",
+        "import osekkai.adapters.pi\n",
+        "import osekkai.adapters\n",
+    ):
+        assert _check(source, TALK_FEATURE) != [], source
